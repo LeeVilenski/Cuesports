@@ -1,102 +1,512 @@
-import { layout, sampleAt, simulate, tableGeometry, type ShotResult } from '@cuesports/physics';
-import { AMERICAN_POOL_9FT as TABLE, Rng } from '@cuesports/shared';
+import { cloneBall, layout, type BallState, type ShotInput, type ShotResult } from '@cuesports/physics';
+import {
+  ACESFilmicToneMapping,
+  Color,
+  Fog,
+  HemisphereLight,
+  PMREMGenerator,
+  Plane,
+  Raycaster,
+  Scene,
+  SpotLight,
+  Vector2,
+  Vector3,
+  WebGLRenderer,
+} from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { registerSW } from 'virtual:pwa-register';
+import { GAMES, powerToSpeed, type GameDef } from './game/games';
+import { computeGuide } from './game/guide';
+import { SimClient } from './game/sim-client';
+import { BallsView } from './render/balls-view';
+import { CameraRig, type CameraMode } from './render/cameras';
+import { physicsGroup, toPhysics } from './render/coords';
+import { CueView } from './render/cue-view';
+import { GuideView } from './render/guide-view';
+import { buildTableView, type TableView } from './render/table-view';
+import { Hud } from './ui/hud';
 
-const COLOURS: Record<string, string> = {
-  cue: '#f6f3ea',
-  '1': '#f4c430',
-  '2': '#2459c9',
-  '3': '#d62f2f',
-  '4': '#6b3fa0',
-  '5': '#f07f1d',
-  '6': '#1f8a4c',
-  '7': '#7a1f1f',
-  '8': '#111111',
-  '9': '#f4c430',
-};
+// ---------------------------------------------------------------------------------------------
+// Renderer and scene
 
-const canvas = document.getElementById('demo') as HTMLCanvasElement;
-const ctx = canvas.getContext('2d')!;
-const geo = tableGeometry(TABLE);
-const hl = TABLE.playfield.length / 2;
-const hw = TABLE.playfield.width / 2;
-const rng = new Rng(Date.now() & 0xffff);
-const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const app = document.getElementById('app')!;
+const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.toneMapping = ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+app.append(renderer.domElement);
+const canvas = renderer.domElement;
+canvas.setAttribute('aria-label', 'Table');
 
-let t = 0;
+const scene = new Scene();
+scene.background = new Color('#0b0e0c');
+scene.fog = new Fog('#0b0e0c', 6, 16);
+const pmrem = new PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.22;
+scene.add(new HemisphereLight('#fff6e8', '#20160e', 0.18));
 
-function newBreak(): ShotResult {
-  const balls = layout(TABLE, 'nine-ball', rng.int(1e6) + 1);
-  const cue = balls.find((b) => b.id === 'cue')!;
-  cue.pos.y = rng.range(-0.25, 0.25);
-  const apex = balls[0]!;
-  const aim = Math.atan2(apex.pos.y - cue.pos.y, apex.pos.x - cue.pos.x) + rng.range(-0.004, 0.004);
-  t = 0;
-  return simulate(TABLE, balls, {
-    ball: 'cue',
-    aim,
-    elevation: 0,
-    tip: { a: 0, b: rng.range(-0.2, 0.2) },
-    speed: 8,
-  });
-}
+const world = physicsGroup();
+scene.add(world);
 
-let result = newBreak();
-
-function render(): void {
-  const rect = canvas.getBoundingClientRect();
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  if (canvas.width !== Math.round(rect.width * dpr)) {
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
+const canopy: SpotLight[] = [];
+function placeCanopy(length: number): void {
+  for (const l of canopy) world.remove(l, l.target);
+  canopy.length = 0;
+  const n = length > 3 ? 3 : 2;
+  for (let i = 0; i < n; i++) {
+    const x = -length / 3 + ((2 * length) / 3) * (i / (n - 1));
+    const l = new SpotLight('#fff3e0', 2.6, 4, 1.05, 0.9, 1.6);
+    l.position.set(x, 0, 1.0);
+    l.target.position.set(x, 0, 0);
+    world.add(l, l.target);
+    canopy.push(l);
   }
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const margin = 0.1;
-  const s = Math.min(rect.width / (2 * (hl + margin)), rect.height / (2 * (hw + margin)));
-  const X = (x: number) => rect.width / 2 + x * s;
-  const Y = (y: number) => rect.height / 2 - y * s;
+}
 
-  ctx.fillStyle = '#4a2f1f';
-  ctx.fillRect(0, 0, rect.width, rect.height);
-  ctx.fillStyle = '#1f6b45';
-  ctx.fillRect(X(-hl), Y(hw), 2 * hl * s, 2 * hw * s);
-  ctx.fillStyle = '#050807';
-  for (const p of geo.pockets) {
-    ctx.beginPath();
-    ctx.arc(X(p.position.x), Y(p.position.y), p.fallRadius * s, 0, Math.PI * 2);
-    ctx.fill();
+// ---------------------------------------------------------------------------------------------
+// Game state
+
+type Phase = 'aim' | 'striking' | 'playing';
+
+const sim = new SimClient();
+const ballsView = new BallsView();
+const cueView = new CueView();
+const guideView = new GuideView();
+world.add(ballsView.group, cueView.group, guideView.group);
+
+let game: GameDef = GAMES[0]!;
+let tableView: TableView | null = null;
+let balls: BallState[] = [];
+let cueStart = { x: 0, y: 0 };
+let phase: Phase = 'aim';
+let shot: ShotInput = { ball: 'cue', aim: 0, elevation: 0, tip: { a: 0, b: 0 }, speed: 3 };
+let pull = 0;
+let strikeT = 0;
+let pending: { result: ShotResult; ms: number } | null = null;
+let playing: ShotResult | null = null;
+let playT = 0;
+let last: { before: BallState[]; shot: ShotInput; result: ShotResult } | null = null;
+let showGuide = true;
+let useOverview = true;
+let placing = false;
+let dirty = true;
+
+const rig = new CameraRig(canvas, game.table);
+
+const cueBall = (): BallState | undefined => balls.find((b) => b.id === 'cue');
+
+function setGame(def: GameDef): void {
+  game = def;
+  if (tableView) {
+    world.remove(tableView.group);
+    tableView.dispose();
   }
-  const f = sampleAt(result, t);
-  result.ids.forEach((id, i) => {
-    if (f.pocketed[i]) return;
-    ctx.fillStyle = COLOURS[id] ?? '#999';
-    ctx.beginPath();
-    ctx.arc(X(f.pos[2 * i]!), Y(f.pos[2 * i + 1]!), TABLE.balls.object.radius * s, 0, Math.PI * 2);
-    ctx.fill();
+  tableView = buildTableView(def.table);
+  world.add(tableView.group);
+  placeCanopy(def.table.playfield.length);
+  rig.setTable(def.table);
+  rerack();
+  hud.setGame(def.id);
+}
+
+function rerack(): void {
+  balls = layout(game.table, game.layout, (Math.random() * 1e6) | 0);
+  const cue = cueBall()!;
+  cueStart = { ...cue.pos };
+  ballsView.setBalls(balls);
+  phase = 'aim';
+  playing = null;
+  last = null;
+  aimAtFirstBall();
+  rig.snap();
+  status();
+  dirty = true;
+}
+
+function aimAtFirstBall(): void {
+  const cue = cueBall();
+  const target = balls.find((b) => b.id !== 'cue' && b.state !== 'pocketed');
+  if (cue && target) shot.aim = Math.atan2(target.pos.y - cue.pos.y, target.pos.x - cue.pos.x);
+}
+
+function status(extra = ''): void {
+  hud.setStatus(extra ? `${game.label} · ${extra}` : game.label);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Shooting
+
+function shoot(p: number): void {
+  if (phase !== 'aim') return;
+  const cue = cueBall();
+  if (!cue || cue.state === 'pocketed') return;
+  placing = false;
+  hud.setPlacing(false);
+  shot = { ...shot, speed: powerToSpeed(p, game.maxSpeed) };
+  const before = balls.map(cloneBall);
+  phase = 'striking';
+  strikeT = 0;
+  pull = p;
+  pending = null;
+  hud.setBusy(true);
+  const s = structuredClone(shot);
+  void sim.run(game.table, before, s).then((r) => {
+    pending = r;
+    last = { before, shot: s, result: r.result };
   });
+  dirty = true;
 }
 
-let last = performance.now();
-function frame(now: number): void {
-  t += Math.min(0.1, (now - last) / 1000);
-  last = now;
-  if (t > result.duration + 1.5) result = newBreak();
-  render();
-  requestAnimationFrame(frame);
+function startPlayback(): void {
+  if (!pending) return;
+  playing = pending.result;
+  playT = 0;
+  phase = 'playing';
+  cueView.group.visible = false;
+  rig.overview = useOverview && rig.mode === 'aim';
+  navigator.vibrate?.(12);
 }
 
-if (reducedMotion) {
-  t = result.duration;
-  render();
-} else {
-  requestAnimationFrame(frame);
+function endPlayback(): void {
+  if (!playing) return;
+  const result = playing;
+  balls = result.final.map(cloneBall);
+  const potted = result.events
+    .filter((e) => e.type === 'pocket')
+    .map((e) => (e.type === 'pocket' ? e.ball : ''));
+  const cue = cueBall();
+  if (cue && cue.state === 'pocketed') respawnCue(cue);
+  ballsView.showState(balls);
+  playing = null;
+  phase = 'aim';
+  rig.overview = false;
+  cueView.group.visible = true;
+  hud.setBusy(false);
+  const ms = pending?.ms;
+  status(
+    [
+      potted.length ? `potted ${potted.join(', ')}` : 'no pot',
+      ms !== undefined ? `sim ${ms.toFixed(0)} ms` : '',
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  );
+  dirty = true;
 }
 
-const offline = document.getElementById('offline')!;
-registerSW({
-  immediate: true,
-  onOfflineReady() {
-    offline.hidden = false;
-    offline.textContent = 'Ready to play offline.';
+/** Puts a potted cue ball back at its starting spot (nudged clear of other balls). Rules come in M3. */
+function respawnCue(cue: BallState): void {
+  cue.state = 'stationary';
+  delete cue.pocket;
+  cue.vel = { x: 0, y: 0 };
+  cue.spin = { x: 0, y: 0, z: 0 };
+  for (let k = 0; k < 40; k++) {
+    const p = { x: cueStart.x, y: cueStart.y + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * cue.radius * 2.2 };
+    if (canPlace(cue, p)) {
+      cue.pos = p;
+      return;
+    }
+  }
+}
+
+function canPlace(cue: BallState, p: { x: number; y: number }): boolean {
+  const hl = game.table.playfield.length / 2 - cue.radius;
+  const hw = game.table.playfield.width / 2 - cue.radius;
+  if (Math.abs(p.x) > hl || Math.abs(p.y) > hw) return false;
+  return balls.every(
+    (b) =>
+      b === cue ||
+      b.state === 'pocketed' ||
+      Math.hypot(b.pos.x - p.x, b.pos.y - p.y) >= b.radius + cue.radius,
+  );
+}
+
+function replay(): void {
+  if (!last || phase !== 'aim') return;
+  balls = last.before.map(cloneBall);
+  ballsView.showState(balls);
+  shot = structuredClone(last.shot);
+  pending = { result: last.result, ms: 0 };
+  hud.setBusy(true);
+  startPlayback();
+}
+
+function undo(): void {
+  if (!last || phase !== 'aim') return;
+  balls = last.before.map(cloneBall);
+  shot = structuredClone(last.shot);
+  ballsView.showState(balls);
+  rig.snap();
+  status('shot undone');
+  dirty = true;
+}
+
+// ---------------------------------------------------------------------------------------------
+// HUD
+
+const hud = new Hud(
+  {
+    onCamera: (mode: CameraMode) => {
+      rig.setMode(mode);
+      hud.setCamera(mode);
+      dirty = true;
+    },
+    onPull: (p) => {
+      pull = p ?? 0;
+      dirty = true;
+    },
+    onShoot: shoot,
+    onFineAim: (dx) => {
+      shot.aim -= dx * 0.00012;
+      rig.followAimInstantly();
+      dirty = true;
+    },
+    onTip: (a, b) => {
+      shot.tip = { a, b };
+      dirty = true;
+    },
+    onElevation: (deg) => {
+      shot.elevation = (deg * Math.PI) / 180;
+      dirty = true;
+    },
+    onPlaceToggle: (on) => {
+      placing = on;
+      if (on && rig.mode === 'aim') {
+        rig.setMode('top');
+        hud.setCamera('top');
+      }
+      dirty = true;
+    },
+    onReplay: replay,
+    onUndo: undo,
+    onGame: (id) => setGame(GAMES.find((g) => g.id === id) ?? GAMES[0]!),
+    onRerack: rerack,
+    onOption: (name, on) => {
+      if (name === 'guide') showGuide = on;
+      else useOverview = on;
+      dirty = true;
+    },
   },
+  GAMES.map((g) => ({ id: g.id, label: g.label })),
+);
+app.append(hud.root);
+hud.setCamera('aim');
+
+// ---------------------------------------------------------------------------------------------
+// Canvas input
+
+const pointers = new Map<number, { x: number; y: number; t: number }>();
+let pinch: { d: number; y: number } | null = null;
+const raycaster = new Raycaster();
+const ndc = new Vector2();
+
+function tablePoint(clientX: number, clientY: number): { x: number; y: number } | null {
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, rig.camera);
+  const R = cueBall()?.radius ?? 0.028;
+  const hit = raycaster.ray.intersectPlane(new Plane(new Vector3(0, 1, 0), -R), new Vector3());
+  if (!hit) return null;
+  const p = toPhysics(hit);
+  return { x: p.x, y: p.y };
+}
+
+function aimAtPoint(p: { x: number; y: number }): void {
+  const cue = cueBall();
+  if (!cue) return;
+  if (Math.hypot(p.x - cue.pos.x, p.y - cue.pos.y) < cue.radius * 1.2) return;
+  shot.aim = Math.atan2(p.y - cue.pos.y, p.x - cue.pos.x);
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (rig.mode === 'free') return;
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: e.timeStamp });
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { d: Math.hypot(a!.x - b!.x, a!.y - b!.y), y: (a!.y + b!.y) / 2 };
+  } else if (phase === 'aim') {
+    const p = tablePoint(e.clientX, e.clientY);
+    if (p && placing) placeCue(p);
+    else if (p && rig.mode === 'top') aimAtPoint(p);
+  }
+  dirty = true;
 });
+
+canvas.addEventListener('pointermove', (e) => {
+  const prev = pointers.get(e.pointerId);
+  if (!prev || rig.mode === 'free') return;
+  const cur = { x: e.clientX, y: e.clientY, t: e.timeStamp };
+  pointers.set(e.pointerId, cur);
+  if (pointers.size >= 2 && pinch) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+    const y = (a!.y + b!.y) / 2;
+    rig.zoom(d / pinch.d);
+    if (rig.mode === 'aim') rig.tilt((y - pinch.y) * 0.15);
+    pinch = { d, y };
+    dirty = true;
+    return;
+  }
+  if (phase !== 'aim') return;
+  if (placing) {
+    const p = tablePoint(e.clientX, e.clientY);
+    if (p) placeCue(p);
+  } else if (rig.mode === 'top') {
+    const p = tablePoint(e.clientX, e.clientY);
+    if (p) aimAtPoint(p);
+  } else {
+    // Aim cam: sideways drag turns the aim. Slow drags are much finer than fast ones.
+    const dx = cur.x - prev.x;
+    const dt = Math.max(1, cur.t - prev.t);
+    const speed = Math.abs(dx) / dt; // px per ms
+    const gain = Math.min(1, Math.max(0.06, speed / 1.2));
+    shot.aim -= dx * 0.0035 * gain;
+    rig.followAimInstantly();
+  }
+  dirty = true;
+});
+
+const endPointer = (e: PointerEvent): void => {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+};
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener(
+  'wheel',
+  (e) => {
+    if (rig.mode === 'free') return;
+    e.preventDefault();
+    if (e.ctrlKey && rig.mode === 'aim') rig.tilt(-e.deltaY * 0.05);
+    else rig.zoom(Math.exp(-e.deltaY * 0.0012));
+    dirty = true;
+  },
+  { passive: false },
+);
+
+function placeCue(p: { x: number; y: number }): void {
+  const cue = cueBall();
+  if (!cue || !canPlace(cue, p)) return;
+  cue.pos = p;
+  cue.state = 'stationary';
+  ballsView.showState(balls);
+  dirty = true;
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+  const step = ((e.shiftKey ? 1 : 0.05) * Math.PI) / 180;
+  if (e.key === 'ArrowLeft') shot.aim += step;
+  else if (e.key === 'ArrowRight') shot.aim -= step;
+  else if (e.key === 'ArrowUp') rig.tilt(2);
+  else if (e.key === 'ArrowDown') rig.tilt(-2);
+  else if (e.key === ' ') {
+    e.preventDefault();
+    shoot(hud.power);
+  } else if (e.key === '1' || e.key === '2' || e.key === '3') {
+    const mode = (['aim', 'top', 'free'] as const)[Number(e.key) - 1]!;
+    rig.setMode(mode);
+    hud.setCamera(mode);
+  } else return;
+  rig.followAimInstantly();
+  dirty = true;
+});
+
+// ---------------------------------------------------------------------------------------------
+// Frame loop: renders only when something changes, and lowers the resolution if frames are slow.
+
+let pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+const maxRatio = pixelRatio;
+let slowFrames = 0;
+let fastFrames = 0;
+
+function resize(): void {
+  const w = app.clientWidth;
+  const h = app.clientHeight;
+  renderer.setPixelRatio(pixelRatio);
+  renderer.setSize(w, h);
+  rig.resize(w / h);
+  rig.snap();
+  dirty = true;
+}
+window.addEventListener('resize', resize);
+
+let lastT = performance.now();
+function frame(now: number): void {
+  const dt = Math.min(0.1, (now - lastT) / 1000);
+  lastT = now;
+  const cue = cueBall();
+
+  if (phase === 'striking') {
+    strikeT += dt;
+    dirty = true;
+    if (strikeT >= 0.09 && pending) startPlayback();
+  }
+  if (phase === 'playing' && playing) {
+    playT += dt;
+    ballsView.showFrame(playing, Math.min(playT, playing.duration));
+    if (playT >= playing.duration) endPlayback();
+    dirty = true;
+  }
+
+  if (cue) {
+    const moving = rig.update(dt, cue.pos, cue.radius, shot.aim);
+    if (moving) dirty = true;
+    if (phase !== 'playing') {
+      // The cue draws back as the power bar is pulled, then drives through during the strike.
+      const back = 0.015 + pull * 0.22;
+      const gap = phase === 'striking' ? Math.max(0, back * (1 - (strikeT / 0.09) ** 2)) : back;
+      cueView.pose(cue.pos.x, cue.pos.y, cue.radius, shot, gap);
+    }
+  }
+  guideView.update(
+    showGuide && phase === 'aim' && !placing ? computeGuide(game.table, balls, 'cue', shot.aim) : null,
+  );
+
+  if (dirty) {
+    const t0 = performance.now();
+    renderer.render(scene, rig.camera);
+    adaptQuality(performance.now() - t0 + (now - lastT));
+    dirty = false;
+  }
+  requestAnimationFrame(frame);
+}
+
+function adaptQuality(ms: number): void {
+  if (ms > 24) slowFrames++;
+  else if (ms < 10) fastFrames++;
+  if (slowFrames > 40 && pixelRatio > 1) {
+    pixelRatio = Math.max(1, pixelRatio - 0.25);
+    slowFrames = fastFrames = 0;
+    resize();
+  } else if (fastFrames > 240 && pixelRatio < maxRatio) {
+    pixelRatio = Math.min(maxRatio, pixelRatio + 0.25);
+    slowFrames = fastFrames = 0;
+    resize();
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Boot
+
+setGame(GAMES[0]!);
+resize();
+requestAnimationFrame(frame);
+
+registerSW({ immediate: true });
+
+// Exposed for automated smoke tests.
+(window as unknown as { __cuesports: unknown }).__cuesports = {
+  shoot,
+  state: () => ({ phase, balls, shot }),
+  /** Jumps to the end of the shot being played. */
+  fastForward: () => {
+    if (playing) playT = playing.duration;
+  },
+  setCamera: (m: CameraMode) => {
+    rig.setMode(m);
+    hud.setCamera(m);
+    dirty = true;
+  },
+};

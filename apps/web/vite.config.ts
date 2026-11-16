@@ -3,6 +3,8 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   server: { host: true },
+  // three.js is most of the bundle; it is precached for offline play.
+  build: { chunkSizeWarningLimit: 900 },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',

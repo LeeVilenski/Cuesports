@@ -16,7 +16,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "golden:update": "UPDATE_GOLDEN=1 vitest run packages/physics/src/golden.test.ts"
+    "golden:update": "UPDATE_GOLDEN=1 vitest run packages/physics/src/golden.test.ts",
+    "e2e": "pnpm --filter @cuesports/web e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
