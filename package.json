@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "pnpm --filter @cuesports/web dev",
     "lab": "pnpm --filter @cuesports/physics-lab dev",
-    "build": "pnpm -r --filter \"./apps/*\" --filter \"./tools/*\" build",
+    "build": "pnpm --filter @cuesports/web build && pnpm --filter @cuesports/physics-lab build:site",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
