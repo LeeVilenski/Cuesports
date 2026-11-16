@@ -21,6 +21,10 @@ export interface GameOption {
   label: string;
 }
 
+/** The tip can go up to just inside the miscue limit (0.55 R in DEFAULT_CUE). */
+const MAX_TIP = 0.52;
+const MISCUE_RING = 0.55;
+
 const h = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
   props: Partial<HTMLElementTagNameMap[K]> & Record<string, unknown> = {},
@@ -154,10 +158,11 @@ export class Hud {
       const r = this.spinBig.getBoundingClientRect();
       let a = ((e.clientX - r.left) / r.width) * 2 - 1;
       let b = -(((e.clientY - r.top) / r.height) * 2 - 1);
+      // Keep the tip just inside the miscue limit (the dashed ring).
       const l = Math.hypot(a, b);
-      if (l > 0.9) {
-        a = (a / l) * 0.9;
-        b = (b / l) * 0.9;
+      if (l > MAX_TIP) {
+        a = (a / l) * MAX_TIP;
+        b = (b / l) * MAX_TIP;
       }
       this.tip = { a: Math.round(a * 50) / 50, b: Math.round(b * 50) / 50 };
       cb.onTip(this.tip.a, this.tip.b);
@@ -299,7 +304,7 @@ export class Hud {
       g.strokeStyle = 'rgba(198,32,38,0.4)';
       g.setLineDash([s / 40, s / 40]);
       g.beginPath();
-      g.arc(s / 2, s / 2, r * 0.55, 0, Math.PI * 2);
+      g.arc(s / 2, s / 2, r * MISCUE_RING, 0, Math.PI * 2);
       g.stroke();
       g.setLineDash([]);
       g.fillStyle = '#2459c9';
