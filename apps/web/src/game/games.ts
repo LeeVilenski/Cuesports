@@ -45,3 +45,21 @@ export function strokeSpeed(
   const loss = (2.5 * (tip.a * tip.a + tip.b * tip.b)) / (1 + ballMass / cueMass);
   return cueSpeed * (1 + STROKE_COMPENSATION * loss);
 }
+
+export type ClothSpeed = 'fast' | 'medium' | 'slow';
+
+/**
+ * Rolling resistance multipliers. The presets are medium (club) cloth; fast is close to a new
+ * tournament cloth, slow to a worn pub table. Sliding friction is unchanged so spin behaves the same.
+ */
+export const CLOTH_SPEEDS: Record<ClothSpeed, { label: string; roll: number }> = {
+  fast: { label: 'Fast (tournament)', roll: 0.8 },
+  medium: { label: 'Medium (club)', roll: 1 },
+  slow: { label: 'Slow (pub)', roll: 1.25 },
+};
+
+export function withClothSpeed(table: TableSpec, speed: ClothSpeed): TableSpec {
+  const t = structuredClone(table);
+  t.cloth.rollFriction *= CLOTH_SPEEDS[speed].roll;
+  return t;
+}

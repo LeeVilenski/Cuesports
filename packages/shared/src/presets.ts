@@ -87,7 +87,7 @@ export const SNOOKER_12FT: TableSpec = {
     friction: 0.2,
     profile: 'snooker',
   },
-  cloth: { slideFriction: 0.17, rollFriction: 0.011, spinFriction: 0.0075 } satisfies ClothSpec,
+  cloth: { slideFriction: 0.17, rollFriction: 0.0125, spinFriction: 0.0075 } satisfies ClothSpec,
   pockets: sixPockets(
     SNOOKER_L,
     SNOOKER_W,
@@ -120,7 +120,7 @@ export const ENGLISH_POOL_7FT: TableSpec = {
     friction: 0.2,
     profile: 'K66',
   } satisfies CushionSpec,
-  cloth: { slideFriction: 0.16, rollFriction: 0.0095, spinFriction: 0.0075 },
+  cloth: { slideFriction: 0.16, rollFriction: 0.014, spinFriction: 0.0075 },
   pockets: sixPockets(
     EP_L,
     EP_W,
@@ -161,7 +161,7 @@ export const AMERICAN_POOL_9FT: TableSpec = {
     friction: 0.2,
     profile: 'K66',
   },
-  cloth: { slideFriction: 0.16, rollFriction: 0.01, spinFriction: 0.0075 },
+  cloth: { slideFriction: 0.16, rollFriction: 0.0125, spinFriction: 0.0075 },
   pockets: sixPockets(
     AP_L,
     AP_W,

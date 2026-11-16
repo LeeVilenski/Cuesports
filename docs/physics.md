@@ -29,6 +29,18 @@ trajectory frames at `sampleRate` Hz, and the final ball states. Rulesets judge 
 | Cushions | Mathavan, Jackson & Parkin (2010): the impulse is integrated in small steps, with friction at both the cushion nose (above the ball's equator) and the slate. Restitution falls with impact speed. |
 | Pockets | Built from `PocketSpec`: rails stop at the jaw tips, a rounded knuckle (jaw radius) turns into a straight facing at the facing angle, and an arc closes the back. A ball drops once its centre has been over the hole long enough to fall one radius, or when it reaches the back. A fast ball can hit a facing first and rattle out. |
 
+## Cloth speed
+
+| Table | Slide μs | Roll μr | 1 m/s roll distance | Lag (head → foot → head) |
+|---|---|---|---|---|
+| American pool 9 ft | 0.16 | 0.0125 | 4.1 m | ~7.6 s |
+| English pool 7 ft | 0.16 | 0.014 | 3.6 m | ~6.2 s |
+| Snooker 12 ft | 0.17 | 0.0125 | 4.1 m | ~8.9 s |
+
+These are medium (club) cloths. pooltool's default μr = 0.01 is closer to a fast tournament cloth. The game's
+cloth-speed setting scales μr by 0.8 (fast), 1 (medium) or 1.25 (slow, pub). Sliding friction sets how long
+spin survives before the ball rolls. It was lowered from 0.2 after playtesting, because draw died too quickly.
+
 ## Integration
 
 A fixed base step (1 ms) is split at the earliest contact, found with swept tests (circle–circle and
