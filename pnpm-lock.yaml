@@ -41,6 +41,19 @@ importers:
 
   packages/shared: {}
 
+  tools/physics-lab:
+    dependencies:
+      '@cuesports/physics':
+        specifier: workspace:*
+        version: link:../../packages/physics
+      '@cuesports/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      vite:
+        specifier: ^8.3.8
+        version: 8.3.8(@types/node@22.20.5)
+
 packages:
 
   '@cacheable/memory@2.2.0':
