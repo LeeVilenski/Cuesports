@@ -13,6 +13,7 @@ export interface HudCallbacks {
   onUndo(): void;
   onGame(id: string): void;
   onRerack(): void;
+  onClothSpeed(speed: 'fast' | 'medium' | 'slow'): void;
   onOption(name: 'guide' | 'overview', on: boolean): void;
 }
 
@@ -62,6 +63,7 @@ export class Hud {
   private elevOut = h('output', {}, '0°');
   private placeBtn = h('button', { className: 'chip' }, 'Move cue ball');
   private gameSelect = h('select', { ariaLabel: 'Game' });
+  private clothSelect = h('select', { ariaLabel: 'Cloth speed' });
   private tip = { a: 0, b: 0 };
   private elevation = 0;
   private placing = false;
@@ -70,8 +72,13 @@ export class Hud {
   constructor(
     private cb: HudCallbacks,
     games: GameOption[],
+    clothSpeeds: GameOption[],
   ) {
     for (const g of games) this.gameSelect.append(h('option', { value: g.id }, g.label));
+    for (const c of clothSpeeds) this.clothSelect.append(h('option', { value: c.id }, c.label));
+    this.clothSelect.addEventListener('change', () =>
+      cb.onClothSpeed(this.clothSelect.value as 'fast' | 'medium' | 'slow'),
+    );
 
     const cams = h('div', { className: 'cams', role: 'group', ariaLabel: 'Camera' });
     for (const [mode, label] of [
@@ -227,6 +234,7 @@ export class Hud {
     this.menu.append(
       h('h2', {}, 'Cuesports prototype'),
       h('div', { className: 'row' }, h('label', {}, 'Game'), this.gameSelect),
+      h('div', { className: 'row' }, h('label', {}, 'Cloth speed'), this.clothSelect),
       h('button', { className: 'chip', onclick: () => cb.onRerack() }, 'Re-rack'),
       check('guide', 'Aiming guide', true),
       check('overview', 'Rise to an overview during the shot', true),
@@ -252,6 +260,10 @@ export class Hud {
 
   setGame(id: string): void {
     this.gameSelect.value = id;
+  }
+
+  setClothSpeed(id: string): void {
+    this.clothSelect.value = id;
   }
 
   setCamera(mode: CameraMode): void {

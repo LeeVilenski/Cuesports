@@ -10,7 +10,13 @@ import type { BallState, Frame, PhysicsEvent, ShotInput, ShotResult, SimOptions 
 const MAX_CONTACTS_PER_STEP = 1000;
 const TOUCH_TOL = 1e-9;
 /** A ball drops once its centre has been over the hole long enough to fall this far (× radius). */
-const DROP_DEPTH = 1;
+const DROP_DEPTH = 0.7;
+/**
+ * Restitution of a jaw facing hit by a ball whose centre is already over the hole. The ball has
+ * started to drop, so it meets the undercut facing (the 12–15° vertical pocket angle) below the
+ * nose, which deadens the hit and pushes the ball down instead of back out.
+ */
+const FALLING_JAW_RESTITUTION = 0.35;
 
 type Contact =
   { kind: 'ball'; t: number; i: number; j: number } | { kind: 'cushion'; t: number; i: number; seg: Segment };
@@ -174,6 +180,12 @@ export function simulate(
     }
   };
 
+  const fallingJaw = {
+    ...table.cushion,
+    restitution: FALLING_JAW_RESTITUTION,
+    minRestitution: FALLING_JAW_RESTITUTION,
+    restitutionSlope: 0,
+  };
   const hl = geo.halfLength;
   const hw = geo.halfWidth;
 
@@ -229,7 +241,13 @@ export function simulate(
         events.push({ type: 'pocket', t, ball: b.id, pocket: c.seg.pocket });
         return;
       }
-      const speed = collideCushion(b, { x: dx / d, y: dy / d }, table.cushion, cloth.slideFriction);
+      const falling = c.seg.kind === 'jaw' && !Number.isNaN(overHole[c.i]!);
+      const speed = collideCushion(
+        b,
+        { x: dx / d, y: dy / d },
+        falling ? fallingJaw : table.cushion,
+        cloth.slideFriction,
+      );
       if (speed > 0) {
         const e: PhysicsEvent = {
           type: 'cushion',

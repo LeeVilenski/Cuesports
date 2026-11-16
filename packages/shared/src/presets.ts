@@ -84,10 +84,11 @@ export const SNOOKER_12FT: TableSpec = {
     restitution: 0.88,
     restitutionSlope: 0.03,
     minRestitution: 0.7,
+    hugSpeed: 0.12,
     friction: 0.2,
     profile: 'snooker',
   },
-  cloth: { slideFriction: 0.17, rollFriction: 0.011, spinFriction: 0.0075 } satisfies ClothSpec,
+  cloth: { slideFriction: 0.17, rollFriction: 0.0125, spinFriction: 0.0075 } satisfies ClothSpec,
   pockets: sixPockets(
     SNOOKER_L,
     SNOOKER_W,
@@ -117,10 +118,11 @@ export const ENGLISH_POOL_7FT: TableSpec = {
     restitution: 0.9,
     restitutionSlope: 0.03,
     minRestitution: 0.7,
+    hugSpeed: 0.12,
     friction: 0.2,
     profile: 'K66',
   } satisfies CushionSpec,
-  cloth: { slideFriction: 0.16, rollFriction: 0.0095, spinFriction: 0.0075 },
+  cloth: { slideFriction: 0.16, rollFriction: 0.014, spinFriction: 0.0075 },
   pockets: sixPockets(
     EP_L,
     EP_W,
@@ -144,7 +146,9 @@ export const ENGLISH_POOL_7FT: TableSpec = {
   },
 };
 
-// --- American pool -------------------------------------------------------------------------------
+// --- American pool -----
+// Pockets follow the WPA tournament specification: corner mouth 4.5" (4.5–4.625"), facing angle
+// 142°, shelf 1–2.25"; side mouth 5.125" (5–5.125"), facing angle 103–104°, shelf 0–0.375".--------------------------------------------------------------------------
 
 const AP_L = 2.54;
 const AP_W = 1.27;
@@ -158,15 +162,16 @@ export const AMERICAN_POOL_9FT: TableSpec = {
     restitution: 0.92,
     restitutionSlope: 0.03,
     minRestitution: 0.7,
+    hugSpeed: 0.12,
     friction: 0.2,
     profile: 'K66',
   },
-  cloth: { slideFriction: 0.16, rollFriction: 0.01, spinFriction: 0.0075 },
+  cloth: { slideFriction: 0.16, rollFriction: 0.0125, spinFriction: 0.0075 },
   pockets: sixPockets(
     AP_L,
     AP_W,
-    { mouthWidth: 0.1143, jawAngle: 142, jawRadius: 0.0127, shelfDepth: 0.02, fallRadius: 0.055 },
-    { mouthWidth: 0.13, jawAngle: 104, jawRadius: 0.0127, shelfDepth: 0.01, fallRadius: 0.06 },
+    { mouthWidth: 0.1143, jawAngle: 142, jawRadius: 0.0127, shelfDepth: 0.0254, fallRadius: 0.055 },
+    { mouthWidth: 0.13, jawAngle: 104, jawRadius: 0.0127, shelfDepth: 0.003, fallRadius: 0.06 },
   ),
   markings: [
     { type: 'line', id: 'head-string', a: { x: -AP_L / 4, y: -AP_W / 2 }, b: { x: -AP_L / 4, y: AP_W / 2 } },

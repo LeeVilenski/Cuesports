@@ -16,7 +16,15 @@ import {
 import { DEFAULT_CUE } from '@cuesports/shared';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { registerSW } from 'virtual:pwa-register';
-import { GAMES, powerToSpeed, strokeSpeed, type GameDef } from './game/games';
+import {
+  CLOTH_SPEEDS,
+  GAMES,
+  powerToSpeed,
+  strokeSpeed,
+  withClothSpeed,
+  type ClothSpeed,
+  type GameDef,
+} from './game/games';
 import { computeGuide } from './game/guide';
 import { SimClient } from './game/sim-client';
 import { BallsView } from './render/balls-view';
@@ -77,6 +85,19 @@ world.add(ballsView.group, cueView.group, guideView.group);
 
 let game: GameDef = GAMES[0]!;
 let tableView: TableView | null = null;
+let clothSpeed: ClothSpeed = loadClothSpeed();
+/** The table the physics runs on: the game's table with the chosen cloth speed. */
+let simTable = withClothSpeed(game.table, clothSpeed);
+
+function loadClothSpeed(): ClothSpeed {
+  try {
+    const v = localStorage.getItem('cuesports.clothSpeed');
+    if (v === 'fast' || v === 'medium' || v === 'slow') return v;
+  } catch {
+    // Storage unavailable: use the default.
+  }
+  return 'medium';
+}
 let balls: BallState[] = [];
 let cueStart = { x: 0, y: 0 };
 let phase: Phase = 'aim';
@@ -98,6 +119,7 @@ const cueBall = (): BallState | undefined => balls.find((b) => b.id === 'cue');
 
 function setGame(def: GameDef): void {
   game = def;
+  simTable = withClothSpeed(def.table, clothSpeed);
   if (tableView) {
     world.remove(tableView.group);
     tableView.dispose();
@@ -154,7 +176,7 @@ function shoot(p: number): void {
   pending = null;
   hud.setBusy(true);
   const s = structuredClone(shot);
-  void sim.run(game.table, before, s).then((r) => {
+  void sim.run(simTable, before, s).then((r) => {
     pending = r;
     last = { before, shot: s, result: r.result };
   });
@@ -287,6 +309,15 @@ const hud = new Hud(
     onUndo: undo,
     onGame: (id) => setGame(GAMES.find((g) => g.id === id) ?? GAMES[0]!),
     onRerack: rerack,
+    onClothSpeed: (speed) => {
+      clothSpeed = speed;
+      simTable = withClothSpeed(game.table, speed);
+      try {
+        localStorage.setItem('cuesports.clothSpeed', speed);
+      } catch {
+        // Not persisted; fine for this session.
+      }
+    },
     onOption: (name, on) => {
       if (name === 'guide') showGuide = on;
       else useOverview = on;
@@ -294,7 +325,9 @@ const hud = new Hud(
     },
   },
   GAMES.map((g) => ({ id: g.id, label: g.label })),
+  Object.entries(CLOTH_SPEEDS).map(([id, c]) => ({ id, label: c.label })),
 );
+hud.setClothSpeed(clothSpeed);
 app.append(hud.root);
 hud.setCamera('aim');
 
