@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#10251b" />
+    <meta name="theme-color" content="#0b0e0c" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta
       name="description"
       content="Snooker, English pool, 9-ball and 10-ball with realistic ball physics."
@@ -14,21 +17,7 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <main class="home">
-      <header>
-        <h1>Cuesports</h1>
-        <p class="tag">Snooker, English pool, 9-ball and 10-ball with realistic ball physics.</p>
-      </header>
-      <canvas id="demo" aria-label="A 9-ball break simulated by the physics engine"></canvas>
-      <p class="caption">
-        A 9-ball break, simulated live by the physics engine. A new rack every few seconds.
-      </p>
-      <section class="status">
-        <p>The game is in early development. The physics core is ready to try in the lab.</p>
-        <p><a class="button" href="/lab/">Open the physics lab</a></p>
-        <p id="offline" class="small" hidden></p>
-      </section>
-    </main>
+    <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
