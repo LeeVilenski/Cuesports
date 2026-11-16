@@ -142,6 +142,39 @@ describe('pockets', () => {
   });
 });
 
+describe('9-ball pockets (WPA spec) take balls cut down the rail', () => {
+  const t = AMERICAN_POOL_9FT;
+  const R = t.balls.object.radius;
+  const hw = t.playfield.width / 2;
+  /** Cuts an object ball 2 mm off the top rail along it, aimed `err` degrees into (+) or away from (−) the rail. */
+  const cutDownRail = (cutDeg: number, speed: number, err = 0) => {
+    const o = { x: 0.3, y: hw - R - 0.002 };
+    const e = (err * Math.PI) / 180;
+    const ghost = { x: o.x - 2 * R * Math.cos(e), y: o.y - 2 * R * Math.sin(e) };
+    const c = (cutDeg * Math.PI) / 180;
+    const cue = { x: ghost.x - 0.6 * Math.cos(c), y: ghost.y - 0.6 * Math.sin(c) };
+    const r = simulate(
+      t,
+      [cueAt(t, cue.x, cue.y), makeBall('1', t.balls.object, o)],
+      shot({ aim: Math.atan2(ghost.y - cue.y, ghost.x - cue.x), speed }),
+      { sampleRate: 0 },
+    );
+    return r.events.some((ev) => ev.type === 'pocket' && ev.ball === '1');
+  };
+
+  it.each([1.2, 2.5, 4])('drops a ball cut dead along the rail at cue speed %s m/s', (speed) => {
+    for (const cut of [20, 40]) expect(cutDownRail(cut, speed), `${cut}°`).toBe(true);
+  });
+
+  it('forgives about a degree either way at a soft pace', () => {
+    for (const err of [-1, -0.5, 0.5, 1]) expect(cutDownRail(20, 1.2, err), `${err}°`).toBe(true);
+  });
+
+  it('still rejects a ball sent well into the far jaw', () => {
+    expect(cutDownRail(20, 2.5, 2)).toBe(false);
+  });
+});
+
 describe('robustness', () => {
   it('never lets a ball tunnel out of the table, even at maximum power', () => {
     const rng = new Rng(3);

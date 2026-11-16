@@ -68,6 +68,16 @@ describe('cushion collisions (Mathavan 2010)', () => {
     expect(out).toBeLessThan(65);
   });
 
+  it('a ball grazing the cushion hugs it instead of bouncing away', () => {
+    const graze = rollingBall(0.05, 1.5);
+    hit(graze);
+    // Barely any speed away from the cushion, so the ball keeps running along it.
+    expect(-graze.vel.x).toBeLessThan(0.02);
+    const firm = rollingBall(1, 1);
+    hit(firm);
+    expect(-firm.vel.x).toBeGreaterThan(0.5);
+  });
+
   it('never adds energy', () => {
     for (const [vx, vy, wz] of [
       [0.5, 0, 0],

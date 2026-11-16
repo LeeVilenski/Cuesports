@@ -43,10 +43,14 @@ export function collideCushion(
   const cosT = Math.sqrt(1 - sinT * sinT);
   const muW = cushion.friction;
   const muS = tableFriction;
-  const e = Math.min(
+  const eHigh = Math.min(
     cushion.restitution,
     Math.max(cushion.minRestitution, cushion.restitution - cushion.restitutionSlope * vn0),
   );
+  // Rail hugging: a ball that only grazes the cushion barely bounces off it (the rubber soaks up
+  // the tiny normal impact), so it runs along the rail instead of drifting away from it.
+  const hug = cushion.hugSpeed;
+  const e = hug > 0 ? (eHigh * vn0) / Math.sqrt(vn0 * vn0 + hug * hug) : eHigh;
 
   // Contact offsets from the centre: I on the cushion, C on the slate.
   const rIy = R * cosT;

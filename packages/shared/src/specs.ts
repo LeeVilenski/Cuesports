@@ -40,6 +40,11 @@ export interface CushionSpec {
   restitutionSlope: number;
   /** Lower bound for restitution at high speed. */
   minRestitution: number;
+  /**
+   * Below roughly this normal impact speed (m/s) the rebound fades out, so a ball grazing the
+   * cushion hugs it. 0 disables it.
+   */
+  hugSpeed: number;
   /** Ball–cushion friction μw. */
   friction: number;
   profile: 'K66' | 'L-shape' | 'snooker' | 'carom';
