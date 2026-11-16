@@ -11,10 +11,11 @@ on desktop.
 | Topic | Decision |
 |---|---|
 | Launch games | Snooker, English Pool (blackball), 9-ball, 10-ball |
-| Later games | English Billiards, 3-Cushion, Balkline, Russian Pyramid (and others via configurable tables/pockets) |
+| Later games | English Billiards, 3-Cushion, Balkline, Russian Pyramid; then national and pub variants: Chinese 8-ball, straight pool, one-pocket, cowboy pool, slosh and more (see §4) |
 | Play modes | Vs AI, local pass-and-play, practice / trick shots. **No online multiplayer at launch** (but architecture should not preclude it) |
 | Single player | Quick match, career / tour mode, character customisation, stats & replays |
-| Rules | Official rulesets by default (WPBSA, WPA, blackball/EPA-style), with configurable house-rule toggles |
+| Rules | Official rulesets by default (WPBSA, WPA; **Ultimate Pool rules** for English pool), with the other rule variants available as toggles |
+| Hosting | Vercel (static PWA build, Git-connected preview and production deployments) |
 | Tech | TypeScript, Three.js rendering, custom deterministic physics engine |
 | Characters | Animated 3D players visible at the table (between shots, cinematic cams, replays) |
 | Controls | Both drag-to-aim + power slider **and** pull-back cue stroke, switchable in settings |
@@ -88,6 +89,11 @@ cuesports/
 - **PWA:** `vite-plugin-pwa` (Workbox) for precaching and offline play
 - **Storage:** IndexedDB (via `idb`) for career saves, stats, replays and settings
 - **Lint/format:** ESLint + Prettier; CI on GitHub Actions (typecheck, lint, test, build)
+- **Hosting:** Vercel, connected to the GitHub repo. Every branch or pull request gets a preview URL, which
+  can be opened on a phone to test. `main` deploys to production. The game is a static Vite build, so no
+  serverless functions are needed. `vercel.json` sets the cache headers: the service worker and
+  `index.html` are never cached long-term, while hashed assets are cached permanently. This stops old
+  versions sticking after an update.
 
 ---
 
@@ -195,10 +201,14 @@ interface Ruleset<S> {
 - **Snooker (WPBSA):** reds/colours sequence, re-spotting (including occupied spots), foul values (min 4),
   **free ball**, **miss rule** with replacement of the balls (with a toggle for the amateur version),
   snookered detection, respotted black on a tie, touching ball, concession logic. Options: 6/10/15 reds.
-- **English Pool / Blackball (WPA / EPA style):** open table, groups assigned on a legal pot, two-visit
-  rule vs. single-shot ball-in-hand (an option), the break requirements, foul behind the baulk line vs.
-  anywhere, the "total snooker" rule, and black-ball win and loss conditions. A preset selector chooses
-  between "World Rules (WPA Blackball)" and "Traditional (two shots)".
+- **English Pool:** the default preset follows the **Ultimate Pool** rulebook. The rules will be transcribed
+  from the current published rulebook during M4 and checked clause by clause in scenario tests. Every
+  point where rulesets differ is a separate toggle, so any combination can be played. These include
+  ball-in-hand anywhere vs. behind the baulk line, single shot vs. two visits after a foul, break
+  requirements, how groups are assigned on an open table, the "total snooker" rule, and black-ball win
+  and loss conditions. Alongside the default there are presets that set these toggles in one go:
+  "WPA Blackball (World Rules)", "EPA", and "Traditional pub (two shots)". The game refers to rulesets by
+  name only, with no organisation logos or branding.
 - **9-ball (WPA):** lowest ball first, push-out after the break, ball in hand anywhere, three-foul rule
   (an option), golden break, plus a break-box option.
 - **10-ball (WPA):** call shot (ball + pocket), push-out, the opponent's option after an uncalled pot,
@@ -212,6 +222,22 @@ re-spotting with fallback spots.
 limits), 3-Cushion, balkline (47/1, 47/2, 71/2 zone limits), Russian Pyramid (Free / Moscow / Nevskaya
 variants). The interface already supports "choices offered" and "any ball as cue ball" (Pyramid), so these
 fit without changes.
+
+**National and pub variants (after M9):** all of these are planned, along with others suggested by
+players:
+
+| Variant | What it needs beyond the launch engine |
+|---|---|
+| Chinese 8-ball (heyball) | A 9 ft table with tight, rounded pockets (a new `TableSpec` preset) and its own break and foul rules |
+| Straight pool (14.1 continuous) | Call shot, point scoring across racks, and re-racking 14 balls mid-frame while the 15th ball and the cue ball stay where they are |
+| One-pocket | Each player is assigned one pocket, chosen at the break. Pots into other pockets are re-spotted |
+| Cowboy pool | Points for pots, cannons and in-offs on a pool table, a fixed finishing sequence, and a final in-off. This reuses the carom scoring from English Billiards |
+| Slosh | A pub game with its own ball values and scoring. Rules will be confirmed from a written source before it is built |
+| Further candidates | Bank pool, 7-ball, 6-ball, rotation, killer (a multi-player elimination game), and American 8-ball |
+
+The `Ruleset` interface needs a few general features to cover these: point scoring per ball and per
+event, an assigned pocket for each player, re-racking mid-frame, and more than two players (for killer).
+These are added to the interface in M3, so the variants only need their own ruleset modules.
 
 **Testing:** each rule gets scenario tests built from synthetic `ShotResult` event lists. These need no
 physics, so they are fast and exact.
@@ -364,7 +390,7 @@ Each milestone ends with something playable or testable.
 
 | # | Milestone | Deliverable |
 |---|---|---|
-| **M0** | Foundations | pnpm workspace, Vite app, TS strict, lint, Vitest, CI, PWA skeleton, deploy previews |
+| **M0** | Foundations | pnpm workspace, Vite app, TS strict, lint, Vitest, CI, PWA skeleton, Vercel project with preview and production deployments |
 | **M1** | Physics core | Ball states, cue strike, ball–ball (with throw), cushions (Han/Mathavan), pocket jaws; `physics-lab` 2D harness; determinism + golden tests |
 | **M2** | 3D table prototype | Three.js scene from `TableSpec`, balls with rotation, aim cam + top-down, drag-aim + slider controls, portrait/landscape. *First "feel" playtest on real phones* |
 | **M3** | First complete game: 9-ball | Rules engine interface + 9-ball, ball-in-hand, HUD, local 2-player. Proves the end-to-end loop |
@@ -373,7 +399,8 @@ Each milestone ends with something playable or testable.
 | **M6** | Characters & cinematics | Placeholder rigged characters, animation set, IK stance & bridge, walk-to-shot, cinematic/follow/replay cameras, pull-back stroke control mode |
 | **M7** | Progression | Quick match flow polish, practice & drills, challenges, career/tour, character customiser, stats, replays (IndexedDB) |
 | **M8** | Polish & release | Audio, quality tiers, performance pass on device matrix, accessibility, offline PWA hardening, onboarding tutorial |
-| **M9+** | Billiards expansion | English Billiards, carom table + 3-Cushion, Balkline, Russian Pyramid (+ pocket-profile tuning), more venues |
+| **M9** | Billiards expansion | English Billiards, carom table + 3-Cushion, Balkline, Russian Pyramid (+ pocket-profile tuning), more venues |
+| **M10+** | National & pub variants | Chinese 8-ball, straight pool, one-pocket, cowboy pool, slosh, then further candidates (§4) |
 | **Later** | Optional | Final art (commissioned or packs), online play (deterministic lockstep or server-validated shots), replay sharing |
 
 **Biggest risks to tackle early:**
@@ -391,7 +418,11 @@ Each milestone ends with something playable or testable.
 ## 13. Open questions (to decide later)
 
 - The final art source: commissioned, asset packs, or in-house. The pipeline in §7 works for any of them.
-- Exact blackball ruleset defaults (WPA vs. EPA vs. "pub" rules) for the default preset.
-- Whether to add national variants (e.g. Chinese 8-ball, straight pool, one-pocket) after M9.
-- Hosting: GitHub Pages, Vercel or Netlify (all fine for a static PWA).
-- Whether replay sharing needs a small backend or can use URL-encoded shot data.
+- Whether replay sharing needs a small backend (a Vercel function) or can use URL-encoded shot data.
+- Which further variants to prioritise after the M10 list.
+
+### Resolved
+
+- **English pool default:** Ultimate Pool rules, with WPA, EPA and pub variants available as toggles and presets.
+- **National variants:** yes. Chinese 8-ball, straight pool, one-pocket, cowboy pool, slosh and others, from M10.
+- **Hosting:** Vercel.
