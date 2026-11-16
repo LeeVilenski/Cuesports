@@ -28,3 +28,20 @@ export const GAMES: GameDef[] = [
 
 /** Maps the power bar (0–1) to cue speed, with finer control at the soft end. */
 export const powerToSpeed = (p: number, max: number): number => 0.25 + (max - 0.25) * Math.pow(p, 1.6);
+
+/**
+ * An off-centre hit gives the ball less speed for the same cue speed (the impulse also has to
+ * spin it). Players stroke a little harder for spin without thinking about it, so the game makes
+ * most of that up: power sets the pace, and spin changes the pace only slightly.
+ */
+export const STROKE_COMPENSATION = 0.7;
+
+export function strokeSpeed(
+  cueSpeed: number,
+  tip: { a: number; b: number },
+  ballMass: number,
+  cueMass: number,
+): number {
+  const loss = (2.5 * (tip.a * tip.a + tip.b * tip.b)) / (1 + ballMass / cueMass);
+  return cueSpeed * (1 + STROKE_COMPENSATION * loss);
+}

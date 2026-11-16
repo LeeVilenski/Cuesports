@@ -1,7 +1,7 @@
-import { makeBall } from '@cuesports/physics';
-import { AMERICAN_POOL_9FT as T } from '@cuesports/shared';
+import { applyStrike, makeBall } from '@cuesports/physics';
+import { AMERICAN_POOL_9FT as T, DEFAULT_CUE } from '@cuesports/shared';
 import { describe, expect, it } from 'vitest';
-import { powerToSpeed } from './games';
+import { powerToSpeed, strokeSpeed } from './games';
 import { computeGuide } from './guide';
 
 describe('aiming guide', () => {
@@ -34,5 +34,33 @@ describe('power curve', () => {
     expect(powerToSpeed(0, 9)).toBeCloseTo(0.25);
     expect(powerToSpeed(1, 9)).toBeCloseTo(9);
     expect(powerToSpeed(0.5, 9)).toBeLessThan(4.6);
+  });
+});
+
+describe('stroke compensation', () => {
+  it('leaves centre-ball hits alone', () => {
+    expect(strokeSpeed(3, { a: 0, b: 0 }, 0.17, DEFAULT_CUE.mass)).toBe(3);
+  });
+
+  it('keeps an off-centre hit within ~15% of the pace of a centre hit', () => {
+    const launch = (tip: { a: number; b: number }) => {
+      const b = makeBall('cue', T.balls.cue, { x: 0, y: 0 });
+      applyStrike(b, {
+        ball: 'cue',
+        aim: 0,
+        elevation: 0,
+        tip,
+        speed: strokeSpeed(3, tip, b.mass, DEFAULT_CUE.mass),
+      });
+      return Math.hypot(b.vel.x, b.vel.y);
+    };
+    const centre = launch({ a: 0, b: 0 });
+    for (const tip of [
+      { a: 0, b: -0.5 },
+      { a: 0, b: 0.45 },
+      { a: 0.35, b: -0.35 },
+    ]) {
+      expect(launch(tip) / centre).toBeGreaterThan(0.85);
+    }
   });
 });

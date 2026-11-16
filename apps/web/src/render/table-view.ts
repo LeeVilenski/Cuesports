@@ -4,7 +4,6 @@ import {
   BackSide,
   BoxGeometry,
   CylinderGeometry,
-  RingGeometry,
   CircleGeometry,
   Color,
   ExtrudeGeometry,
@@ -13,6 +12,7 @@ import {
   MeshStandardMaterial,
   Path,
   PlaneGeometry,
+  ShapeGeometry,
   RepeatWrapping,
   Shape,
 } from 'three';
@@ -42,15 +42,17 @@ function innerOutline(geo: TableGeometry): Vec2[] {
   const pts: Vec2[] = [];
   for (const p of pockets) {
     const jaw = (i: number) => geo.segments.filter((s) => s.id.startsWith(`jaw:${p.id}:${i}:`));
-    const back = geo.segments.filter((s) => s.id.startsWith(`back:${p.id}:`));
     const j0 = jaw(0);
     const j1 = jaw(1);
     if (!j0.length || !j1.length) continue;
-    // Path from tip 0 round the pocket to tip 1.
+    // Path from tip 0 along its jaw, round the far side of the hole (so no cushion shows inside
+    // it), and back out along jaw 1.
+    const end0 = j0[j0.length - 1]!.b;
+    const end1 = j1[j1.length - 1]!.b;
     const path: Vec2[] = [
       ...j0.map((s) => s.a),
-      j0[j0.length - 1]!.b,
-      ...back.map((s) => s.b),
+      end0,
+      ...arcAround(p.position, p.fallRadius + 0.004, end0, end1, p.axis),
       ...[...j1].reverse().map((s) => s.a),
     ];
     // Walk anticlockwise: start from whichever tip comes first going round the table.
@@ -58,6 +60,24 @@ function innerOutline(geo: TableGeometry): Vec2[] {
     const first = wrap(angle(path[0]!) - phi);
     const last = wrap(angle(path[path.length - 1]!) - phi);
     pts.push(...(first < last ? path : path.reverse()));
+  }
+  return pts;
+}
+
+const TAU = Math.PI * 2;
+const mod = (a: number) => ((a % TAU) + TAU) % TAU;
+
+/** Points on a circle from the direction of `from` to the direction of `to`, passing `through`. */
+function arcAround(c: Vec2, r: number, from: Vec2, to: Vec2, through: Vec2, steps = 24): Vec2[] {
+  const a0 = Math.atan2(from.y - c.y, from.x - c.x);
+  const a1 = Math.atan2(to.y - c.y, to.x - c.x);
+  const at = Math.atan2(through.y, through.x);
+  const pos = mod(a1 - a0);
+  const sweep = mod(at - a0) < pos ? pos : pos - TAU;
+  const pts: Vec2[] = [];
+  for (let k = 0; k <= steps; k++) {
+    const a = a0 + (sweep * k) / steps;
+    pts.push({ x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) });
   }
   return pts;
 }
@@ -126,8 +146,25 @@ export function buildTableView(table: TableSpec): TableView {
   // Cloth, slightly larger than the cushion line so it shows inside the pocket mouths.
   const ex = hl + CUSHION_WIDTH + 0.06;
   const ey = hw + CUSHION_WIDTH + 0.06;
+  // Cloth with real holes cut at the pockets, so you can see down into them.
+  const clothShape = toShape([
+    { x: -ex, y: -ey },
+    { x: ex, y: -ey },
+    { x: ex, y: ey },
+    { x: -ex, y: ey },
+  ]);
+  for (const p of table.pockets) {
+    const hole = new Path();
+    hole.absarc(p.position.x, p.position.y, p.fallRadius, 0, TAU, true);
+    clothShape.holes.push(hole);
+  }
+  const clothGeo = new ShapeGeometry(clothShape, 32);
+  const pos = clothGeo.getAttribute('position');
+  const uv = clothGeo.getAttribute('uv');
+  for (let i = 0; i < pos.count; i++)
+    uv.setXY(i, (pos.getX(i) + ex) / (2 * ex), (pos.getY(i) + ey) / (2 * ey));
   const cloth = new Mesh(
-    new PlaneGeometry(2 * ex, 2 * ey),
+    clothGeo,
     new MeshStandardMaterial({ map: clothTexture(table, ex, ey), roughness: 0.92, metalness: 0 }),
   );
   group.add(cloth);
@@ -164,29 +201,60 @@ export function buildTableView(table: TableSpec): TableView {
   ]);
   group.add(rails);
 
-  // Pocket liners: dark rings on the rail around each hole.
-  const linerMat = new MeshStandardMaterial({ color: '#0d0d0d', roughness: 0.55 });
+  // Pockets: a hole dropping below the slate, and a black liner that wraps the rail around the
+  // back of the hole (open towards the table), like the leathers on a real table.
+  const linerMat = new MeshStandardMaterial({ color: '#111111', roughness: 0.5, metalness: 0 });
+  const holeMat = new MeshStandardMaterial({ color: '#040404', roughness: 1, side: BackSide });
   for (const p of table.pockets) {
-    const liner = new Mesh(new RingGeometry(p.fallRadius, p.fallRadius + 0.02, 40), linerMat);
-    liner.position.set(p.position.x, p.position.y, railTop + 0.0006);
-    group.add(liner);
-    // Inside of the hole, visible from low camera angles.
-    const cup = new Mesh(
-      new CylinderGeometry(p.fallRadius, p.fallRadius, railTop + 0.12, 32, 1, true),
-      new MeshStandardMaterial({ color: '#050505', roughness: 1, side: BackSide }),
+    const depth = 0.16;
+    const well = new Mesh(
+      new CylinderGeometry(p.fallRadius, p.fallRadius * 0.9, depth, 32, 1, true),
+      holeMat,
     );
-    cup.rotation.x = Math.PI / 2;
-    cup.position.set(p.position.x, p.position.y, (railTop - 0.12) / 2);
-    group.add(cup);
+    well.rotation.x = Math.PI / 2;
+    well.position.set(p.position.x, p.position.y, -depth / 2);
+    const floor = new Mesh(
+      new CircleGeometry(p.fallRadius, 32),
+      new MeshStandardMaterial({ color: '#020202' }),
+    );
+    floor.position.set(p.position.x, p.position.y, -depth + 0.01);
+    group.add(well, floor);
+
+    const inner = p.fallRadius + 0.002;
+    const outer = p.fallRadius + 0.034;
+    const at = Math.atan2(p.axis.y, p.axis.x);
+    const half = (115 * Math.PI) / 180;
+    const u = new Shape();
+    u.absarc(p.position.x, p.position.y, outer, at - half, at + half, false);
+    u.absarc(p.position.x, p.position.y, inner, at + half, at - half, true);
+    const liner = new Mesh(
+      new ExtrudeGeometry(u, { depth: railTop + 0.003, bevelEnabled: false, curveSegments: 32 }),
+      linerMat,
+    );
+    group.add(liner);
   }
 
-  // Body under the slate.
-  const body = new Mesh(
-    new BoxGeometry(2 * hx, 2 * hy, 0.22),
-    new MeshStandardMaterial({ color: '#2b170c', roughness: 0.6 }),
+  // Body: a wooden apron round the edge down to below the pocket wells, then the base.
+  const bodyMat = new MeshStandardMaterial({ color: '#2b170c', roughness: 0.6 });
+  const apronShape = toShape([
+    { x: -hx, y: -hy },
+    { x: hx, y: -hy },
+    { x: hx, y: hy },
+    { x: -hx, y: hy },
+  ]);
+  apronShape.holes.push(
+    toPath([
+      { x: -hx + 0.012, y: -hy + 0.012 },
+      { x: hx - 0.012, y: -hy + 0.012 },
+      { x: hx - 0.012, y: hy - 0.012 },
+      { x: -hx + 0.012, y: hy - 0.012 },
+    ]),
   );
-  body.position.z = -0.11 - 0.001;
-  group.add(body);
+  const apron = new Mesh(new ExtrudeGeometry(apronShape, { depth: 0.18, bevelEnabled: false }), bodyMat);
+  apron.position.z = -0.18;
+  const base = new Mesh(new BoxGeometry(2 * hx, 2 * hy, 0.2), bodyMat);
+  base.position.z = -0.18 - 0.1;
+  group.add(apron, base);
 
   // Sights (diamonds) on the rails of pool tables.
   if (!table.id.startsWith('snooker')) {

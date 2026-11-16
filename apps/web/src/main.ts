@@ -13,9 +13,10 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
+import { DEFAULT_CUE } from '@cuesports/shared';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { registerSW } from 'virtual:pwa-register';
-import { GAMES, powerToSpeed, type GameDef } from './game/games';
+import { GAMES, powerToSpeed, strokeSpeed, type GameDef } from './game/games';
 import { computeGuide } from './game/guide';
 import { SimClient } from './game/sim-client';
 import { BallsView } from './render/balls-view';
@@ -142,7 +143,10 @@ function shoot(p: number): void {
   if (!cue || cue.state === 'pocketed') return;
   placing = false;
   hud.setPlacing(false);
-  shot = { ...shot, speed: powerToSpeed(p, game.maxSpeed) };
+  shot = {
+    ...shot,
+    speed: strokeSpeed(powerToSpeed(p, game.maxSpeed), shot.tip, cue.mass, DEFAULT_CUE.mass),
+  };
   const before = balls.map(cloneBall);
   phase = 'striking';
   strikeT = 0;
@@ -171,6 +175,7 @@ function endPlayback(): void {
   if (!playing) return;
   const result = playing;
   balls = result.final.map(cloneBall);
+  const miscue = result.events.some((e) => e.type === 'strike' && e.miscue);
   const potted = result.events
     .filter((e) => e.type === 'pocket')
     .map((e) => (e.type === 'pocket' ? e.ball : ''));
@@ -185,6 +190,7 @@ function endPlayback(): void {
   const ms = pending?.ms;
   status(
     [
+      miscue ? 'MISCUE' : '',
       potted.length ? `potted ${potted.join(', ')}` : 'no pot',
       ms !== undefined ? `sim ${ms.toFixed(0)} ms` : '',
     ]
@@ -500,6 +506,15 @@ registerSW({ immediate: true });
 (window as unknown as { __cuesports: unknown }).__cuesports = {
   shoot,
   state: () => ({ phase, balls, shot }),
+  /** Free camera at a physics-space eye position looking at a target (for screenshots). */
+  view: (eye: [number, number, number], target: [number, number, number]) => {
+    rig.setMode('free');
+    hud.setCamera('free');
+    rig.persp.position.set(eye[0], eye[2], -eye[1]);
+    rig.orbit.target.set(target[0], target[2], -target[1]);
+    rig.orbit.update();
+    dirty = true;
+  },
   /** Jumps to the end of the shot being played. */
   fastForward: () => {
     if (playing) playT = playing.duration;
