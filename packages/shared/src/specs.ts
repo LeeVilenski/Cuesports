@@ -1,0 +1,98 @@
+import type { Vec2 } from './math';
+
+/** All lengths in metres, masses in kg, speeds in m/s, angles in degrees unless stated. */
+
+export interface BallSpec {
+  radius: number;
+  mass: number;
+}
+
+export interface BallFrictionSpec {
+  /** Ball–ball friction μ(v) = a + b·e^(−c·v), v = relative sliding speed (Alciatore's fit). */
+  a: number;
+  b: number;
+  c: number;
+}
+
+export interface BallSetSpec {
+  object: BallSpec;
+  cue: BallSpec;
+  /** Ball–ball coefficient of restitution. */
+  restitution: number;
+  friction: BallFrictionSpec;
+}
+
+export interface ClothSpec {
+  /** Sliding friction μs between ball and cloth. */
+  slideFriction: number;
+  /** Rolling resistance μr. */
+  rollFriction: number;
+  /** Spin (about the vertical axis) friction μsp. */
+  spinFriction: number;
+}
+
+export interface CushionSpec {
+  /** Height of the cushion nose (contact point) above the slate. */
+  noseHeight: number;
+  /** Restitution at low impact speed. */
+  restitution: number;
+  /** Restitution loss per m/s of normal impact speed. */
+  restitutionSlope: number;
+  /** Lower bound for restitution at high speed. */
+  minRestitution: number;
+  /** Ball–cushion friction μw. */
+  friction: number;
+  profile: 'K66' | 'L-shape' | 'snooker' | 'carom';
+}
+
+export interface PocketSpec {
+  id: string;
+  kind: 'corner' | 'side';
+  /** Centre of the fall circle. A ball whose centre enters the circle drops. */
+  position: Vec2;
+  /** Unit vector from the mouth into the pocket. */
+  axis: Vec2;
+  /** Distance between the jaw tips (where the cushion noses would meet). */
+  mouthWidth: number;
+  /** Facing angle between the cushion nose line and the jaw facing (142° typical pool corner). */
+  jawAngle: number;
+  /** Radius of the rounded knuckle where the cushion nose turns into the jaw facing. */
+  jawRadius: number;
+  /** Distance from the mouth line to the edge of the drop. */
+  shelfDepth: number;
+  fallRadius: number;
+}
+
+export type MarkingSpec =
+  | { type: 'line'; id: string; a: Vec2; b: Vec2 }
+  | { type: 'arc'; id: string; centre: Vec2; radius: number; startDeg: number; endDeg: number }
+  | { type: 'spot'; id: string; position: Vec2 };
+
+export interface TableSpec {
+  id: string;
+  name: string;
+  /** Playfield measured between cushion noses. The table centre is the origin, x along the length. */
+  playfield: { length: number; width: number };
+  cushion: CushionSpec;
+  cloth: ClothSpec;
+  pockets: PocketSpec[];
+  markings: MarkingSpec[];
+  balls: BallSetSpec;
+}
+
+export interface CueSpec {
+  mass: number;
+  /** Effective end mass of the shaft, which sets the amount of squirt. */
+  endMass: number;
+  /** Tip–ball restitution. */
+  tipRestitution: number;
+  /** Tip offsets beyond this fraction of the ball radius miscue. */
+  miscueLimit: number;
+}
+
+export const DEFAULT_CUE: CueSpec = {
+  mass: 0.54,
+  endMass: 0.008,
+  tipRestitution: 0.75,
+  miscueLimit: 0.55,
+};

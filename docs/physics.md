@@ -1,0 +1,63 @@
+# Physics engine
+
+The engine lives in `packages/physics`. It is headless (no DOM, no Three.js) and deterministic.
+
+## Conventions
+
+- SI units: metres, kilograms, seconds, radians.
+- The table centre is the origin. x runs along the length, y across, z up. The playfield edges are the
+  cushion nose lines at x = ±length/2 and y = ±width/2.
+- Ball positions are centres on the table plane. Spin is a full 3D angular velocity.
+
+## Entry point
+
+```ts
+simulate(table: TableSpec, balls: BallState[], shot: ShotInput | null, opts?): ShotResult
+```
+
+`ShotInput` is the struck ball, aim angle, cue elevation, tip offset (fractions of the radius) and cue speed.
+`ShotResult` holds the event timeline (strike, ball–ball, cushion, pocket, off-table, motion-state changes),
+trajectory frames at `sampleRate` Hz, and the final ball states. Rulesets judge a shot from the events alone.
+
+## Model
+
+| Part | Model |
+|---|---|
+| Free motion | Closed-form sliding, rolling and spinning states with μs, μr and μsp. Each step is split at state transitions. |
+| Cue strike | Impulse along the cue axis at the tip contact point, sized by an elastic cue/ball collision with tip restitution. Squirt uses Alciatore's end-mass formula. Elevation tilts the spin axis, giving swerve and masse. Offsets beyond the miscue limit miscue. |
+| Ball–ball | Impulse with restitution plus friction, using Alciatore's speed-dependent μ(v) = a + b·e^(−c·v). This gives cut-induced and spin-induced throw, capped at the gearing (no-slip) limit. Works with unequal balls (the smaller English pool cue ball). |
+| Cushions | Mathavan, Jackson & Parkin (2010): the impulse is integrated in small steps, with friction at both the cushion nose (above the ball's equator) and the slate. Restitution falls with impact speed. |
+| Pockets | Built from `PocketSpec`: rails stop at the jaw tips, a rounded knuckle (jaw radius) turns into a straight facing at the facing angle, and an arc closes the back. A ball drops once its centre has been over the hole long enough to fall one radius, or when it reaches the back. A fast ball can hit a facing first and rattle out. |
+
+## Integration
+
+A fixed base step (1 ms) is split at the earliest contact, found with swept tests (circle–circle and
+circle–capsule) using each ball's velocity at the start of the step. Balls are advanced exactly to that time,
+the contact is resolved, and the search repeats. Balls can't tunnel at any speed, and a rack of touching balls
+resolves as a sequence of contacts. Racks get seeded jitter of up to 0.1 mm so a break is never perfectly
+symmetric.
+
+## Determinism
+
+- No `Math.random`: use `Rng` from `@cuesports/shared`, seeded.
+- No `Math.sin`, `Math.cos`, `Math.exp` or `Math.atan2` in simulation code. Their results can differ between
+  JavaScript engines. `detSin`, `detCos` and `detExp` use only exactly rounded operations. ESLint enforces this
+  for `packages/shared` and `packages/physics`.
+- Golden tests (`golden.test.ts`) check that a fixed set of shots gives bit-identical end states and event
+  timelines.
+
+## Known limitations and tuning to do
+
+These are for tuning in the lab and for playtests in M2:
+
+- **Pocket pace sensitivity is weak.** Off-line balls correctly rattle out of tight pockets, but a ball rolled
+  down the rail into a corner drops at almost any pace. Real tight pockets reject fast rail shots more often.
+  The drop depth (`DROP_DEPTH` in `simulate.ts`), shelf depth and facing angles are the levers.
+- **Check side has a smaller effect than running side** off a cushion. This follows from the Mathavan model
+  (cushion friction is already saturated for most impacts without side). Cushion friction μw is the lever if it
+  feels wrong.
+- **No vertical motion yet.** Balls never leave the slate: no jump shots, and no ball rising on a hard cushion
+  hit. The data model leaves room for it.
+- **No cloth nap.** Snooker nap drift is not modelled.
+- **Cross-engine determinism has only been verified in Node (V8).** The golden tests should also run in
+  WebKit and Firefox once Playwright tests are added in M2.

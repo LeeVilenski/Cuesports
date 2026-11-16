@@ -1,0 +1,6 @@
+pnpm-lock.yaml
+dist/
+dev-dist/
+coverage/
+packages/physics/src/__golden__/
+*.md
