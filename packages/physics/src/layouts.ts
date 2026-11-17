@@ -93,7 +93,10 @@ export function layout(table: TableSpec, id: LayoutId, seed = 1): BallState[] {
           ? ['1', '9', '2', '10', '8', '3', '11', '4', '12', '5', '13', '6', '14', '7', '15']
           : ['r1', 'y1', 'r2', 'r3', '8', 'y2', 'y3', 'r4', 'y4', 'r5', 'y5', 'r6', 'y6', 'y7', 'r7'];
       const balls = rackRows(ids, obj, foot, [1, 2, 3, 4, 5], { rng });
-      balls.push(cueBall({ x: -hl / 2, y: 0.05 }));
+      // English pool breaks from baulk (the cue ball's centre behind the baulk line).
+      const baulk = table.markings.find((m) => m.type === 'line' && m.id === 'baulk');
+      const x = id === 'blackball' && baulk?.type === 'line' ? baulk.a.x - 0.12 : -hl / 2;
+      balls.push(cueBall({ x, y: 0.05 }));
       return balls;
     }
     case 'nine-ball': {

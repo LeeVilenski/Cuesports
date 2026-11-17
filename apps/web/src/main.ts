@@ -140,6 +140,8 @@ function setGame(def: GameDef): void {
   matchHud.setPushAvailable(false);
   matchHud.showDecision(null);
   matchHud.showResult(null);
+  // Practice has no calls or nominations: clear any chip left over from a match.
+  matchHud.showCall(null, false, (p) => p, false);
   setTable(def);
   rerack();
   hud.setGame(def.id);

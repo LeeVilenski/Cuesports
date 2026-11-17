@@ -41,7 +41,7 @@ const CASES: GoldenCase[] = [
     table: ENGLISH_POOL_7FT,
     layout: 'blackball',
     seed: 3,
-    shot: { ball: 'cue', aim: -0.1, elevation: 0, tip: { a: -0.1, b: 0 }, speed: 7 },
+    shot: { ball: 'cue', aim: -0.06, elevation: 0, tip: { a: -0.1, b: 0 }, speed: 7 },
   },
   {
     name: 'snooker break-off',
