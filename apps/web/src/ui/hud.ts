@@ -13,6 +13,7 @@ export interface HudCallbacks {
   onUndo(): void;
   onGame(id: string): void;
   onRerack(): void;
+  onNewMatch(): void;
   onClothSpeed(speed: 'fast' | 'medium' | 'slow'): void;
   onOption(name: 'guide' | 'squirt' | 'overview', on: boolean): void;
 }
@@ -233,7 +234,18 @@ export class Hud {
     this.gameSelect.addEventListener('change', () => cb.onGame(this.gameSelect.value));
     this.menu.append(
       h('h2', {}, 'Cuesports prototype'),
-      h('div', { className: 'row' }, h('label', {}, 'Game'), this.gameSelect),
+      h(
+        'button',
+        {
+          className: 'chip on',
+          onclick: () => {
+            this.toggle(this.menu);
+            cb.onNewMatch();
+          },
+        },
+        'New 9-ball match',
+      ),
+      h('div', { className: 'row' }, h('label', {}, 'Practice'), this.gameSelect),
       h('div', { className: 'row' }, h('label', {}, 'Cloth speed'), this.clothSelect),
       h('button', { className: 'chip', onclick: () => cb.onRerack() }, 'Re-rack'),
       check('guide', 'Aiming guide', true),
@@ -278,6 +290,11 @@ export class Hud {
   setPlacing(on: boolean): void {
     this.placing = on;
     this.placeBtn.classList.toggle('on', on);
+  }
+
+  /** Enables or disables the Move cue ball button (in a match, only with ball in hand). */
+  setPlacingAllowed(allowed: boolean): void {
+    this.placeBtn.disabled = !allowed;
   }
 
   setBusy(busy: boolean): void {

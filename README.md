@@ -15,7 +15,11 @@ physics engine works.
 - **M1 Physics core:** done, ready for tuning. Deterministic engine, `physics-lab` harness, golden tests.
 - **M2 3D table prototype:** ready for phone playtesting. Three.js table built from `TableSpec`, rotating balls,
   aim / top-down / free cameras, drag-to-aim with a pull-down power bar, spin and elevation, portrait and
-  landscape. Every game is free practice until the rules arrive in M3.
+  landscape.
+- **M3 First complete game (9-ball):** playable. A `rules` package with a general ruleset interface and WPA
+  9-ball (legal break, push out, ball in hand, three-foul rule, spotting the 9, golden break), a local
+  two-player match (race to N, alternate or winner breaks), scoreboard, foul messages and ball-in-hand
+  placement. The other tables are still free practice.
 
 ## Playing the prototype
 
@@ -24,7 +28,10 @@ physics engine works.
 - **Shoot:** pull the power bar on the right down and let go. Drag it back to the top to cancel.
 - **Spin and elevation:** tap the small cue ball in the corner.
 - **Camera:** Aim, Top and Free buttons. Pinch or scroll to zoom; drag two fingers up or down to tilt the aim cam.
-- **Practice tools:** Move cue ball, Replay and Undo. The menu switches between 9-ball, 8-ball, 10-ball,
+- **9-ball match:** the start screen (or the menu's New 9-ball match) sets up names, race length, who breaks
+  and the three-foul rule. With ball in hand, drag the cue ball (behind the head string on the break). After
+  a legal break the next shooter can tap Push out; the opponent then chooses to play or pass it back.
+- **Practice tools:** Move cue ball, Replay and Undo. The menu's Practice list has 9-ball, 8-ball, 10-ball,
   English pool, snooker and a two-ball practice table.
 - **Keyboard:** ← → aim (Shift for bigger steps), ↑ ↓ tilt, Space shoots at the last power, 1/2/3 cameras.
 
@@ -51,6 +58,7 @@ diff in `packages/physics/src/__golden__/shots.json`.
 apps/web/            game app (Vite, PWA): src/render (Three.js), src/game (shot flow, worker), src/ui (HUD)
 packages/shared/     math, deterministic trig/exp, seeded RNG, table/ball specs and presets
 packages/physics/    simulation engine and tests
+packages/rules/      rulesets (9-ball so far) judged from the physics event timeline, with scenario tests
 tools/physics-lab/   2D top-down harness for tuning the physics
 ```
 
