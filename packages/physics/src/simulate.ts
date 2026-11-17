@@ -1,7 +1,7 @@
-import { DEFAULT_CUE, type PocketSpec, type TableSpec, type Vec2 } from '@cuesports/shared';
+import { DEFAULT_CUE, type TableSpec, type Vec2 } from '@cuesports/shared';
 import { collideBalls } from './ball-collision';
 import { collideCushion } from './cushion';
-import { tableGeometry, type Segment } from './geometry';
+import { overDrop, tableGeometry, type Segment } from './geometry';
 import { advanceBall } from './motion';
 import { applyStrike } from './strike';
 import type { BallState, Frame, PhysicsEvent, ShotInput, ShotResult, SimOptions } from './types';
@@ -290,7 +290,8 @@ export function simulate(
       if (b.state === 'pocketed') return;
       let over: string | null = null;
       for (const p of geo.pockets) {
-        if (overDrop(b.pos, p)) {
+        const edge = geo.drops.get(p.id);
+        if (edge && overDrop(b.pos, p, edge)) {
           over = p.id;
           break;
         }
@@ -338,22 +339,6 @@ export function simulate(
   if (sampleRate > 0 && frames[frames.length - 1]?.t !== t) record();
 
   return { ids, events, frames, final: state, duration: t, truncated };
-}
-
-/**
- * True when a ball's centre is past the edge of the slate in a pocket. The slate is cut back
- * along the whole shelf line between the facings, so a ball is over the drop once its centre is
- * more than `shelfDepth` behind the mouth line, wherever it is across the mouth. (Only the pocket
- * corridor reaches that far: on the table, the cushions keep every ball in front of it.)
- */
-function overDrop(pos: Vec2, p: PocketSpec): boolean {
-  const dx = pos.x - p.position.x;
-  const dy = pos.y - p.position.y;
-  const reach = p.fallRadius + p.mouthWidth;
-  if (dx * dx + dy * dy > reach * reach) return false;
-  // Depth behind the mouth line, measured from the fall-circle centre (shelf + fall radius back).
-  const depth = dx * p.axis.x + dy * p.axis.y + p.fallRadius;
-  return depth >= 0;
 }
 
 function pocketBall(b: BallState): void {
