@@ -26,8 +26,11 @@ export const GAMES: GameDef[] = [
   },
 ];
 
-/** Maps the power bar (0–1) to cue speed, with finer control at the soft end. */
-export const powerToSpeed = (p: number, max: number): number => 0.25 + (max - 0.25) * Math.pow(p, 1.6);
+/**
+ * Maps the power bar (0–1) to cue speed, with fine control at the soft end. Halfway is a medium
+ * shot (about 3 m/s off the tip, Alciatore's "medium" speed); the top of the bar is a break.
+ */
+export const powerToSpeed = (p: number, max: number): number => 0.25 + (max - 0.25) * p * p;
 
 /**
  * An off-centre hit gives the ball less speed for the same cue speed (the impulse also has to
