@@ -66,6 +66,10 @@ symmetric.
 
 These are for tuning in the lab and for playtests in M2:
 
+- **Snooker and English pool pockets are too forgiving (playtest, to fix later).** They currently share the
+  pool pocket model (straight facings, rounded knuckles, the same drop logic) with snooker and English pool
+  dimensions. Real snooker and English pockets are rounded "cut" pockets with a different shape and play much
+  tighter. The 9-ball (American) tables are being tuned first.
 - **Pocket pace sensitivity is weak.** Off-line balls correctly rattle out of tight pockets, but a ball rolled
   down the rail into a corner drops at almost any pace. Real tight pockets reject fast rail shots more often.
   The drop depth (`DROP_DEPTH` in `simulate.ts`), shelf depth and facing angles are the levers.
