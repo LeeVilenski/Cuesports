@@ -104,16 +104,83 @@ const describePocket = (id: string) =>
     .replace('side', 'side pocket')
     .replace(/(left|right)$/, '$1 corner');
 
-/** Candidate positions for the cue ball when it can be placed. */
+interface Contact {
+  place: Vec2;
+  aim: number;
+  target: BallState;
+}
+
+/**
+ * Ball in hand: places to put the cue ball from which it can reach a free contact point on a ball on,
+ * even when that ball sits in a cluster and cannot be hit full in the face.
+ */
+function contactSpots(input: AiInput, rulesTable: TableSpec, max = 12): Contact[] {
+  const zone = input.turn.ballInHand;
+  if (zone === 'none') return [];
+  const cue = input.balls.find((b) => b.id === 'cue')!;
+  const live = input.balls.filter((b) => b.state !== 'pocketed' && b.id !== 'cue');
+  const ids = input.turn.targets.length ? input.turn.targets : live.map((b) => b.id);
+  const out: Contact[] = [];
+  const N = 24;
+  for (const t of live.filter((b) => ids.includes(b.id)).slice(0, 3)) {
+    const D = cue.radius + t.radius;
+    for (let k = 0; k < N; k++) {
+      const th = (k / N) * 2 * Math.PI;
+      const ghost = { x: t.pos.x + Math.cos(th) * D, y: t.pos.y + Math.sin(th) * D };
+      // The cue ball must fit at the contact point.
+      if (live.some((o) => o !== t && len(sub(o.pos, ghost)) < cue.radius + o.radius - 1e-6)) continue;
+      for (const phi of [0, 0.6, -0.6, 1.1, -1.1])
+        for (const L of [0.35, 0.7]) {
+          const place = {
+            x: ghost.x + Math.cos(th + phi) * L,
+            y: ghost.y + Math.sin(th + phi) * L,
+          };
+          if (!canPlaceCueBall(rulesTable, input.balls, zone, place)) continue;
+          if (!pathClear(input.balls, place, ghost, cue.radius, [cue.id, t.id])) continue;
+          // The cue ball must meet this ball before grazing it anywhere else on the way in.
+          const toT = len(sub(t.pos, place));
+          const dir = unit(sub(ghost, place));
+          const along = (t.pos.x - place.x) * dir.x + (t.pos.y - place.y) * dir.y;
+          if (toT < D || along <= 0) continue;
+          out.push({ place, aim: Math.atan2(ghost.y - place.y, ghost.x - place.x), target: t });
+          break;
+        }
+    }
+  }
+  // Spread the picks around the ball rather than taking neighbours.
+  if (out.length <= max) return out;
+  const step = out.length / max;
+  return Array.from({ length: max }, (_, i) => out[Math.floor(i * step)]!);
+}
+
+/**
+ * Candidate positions for the cue ball when it can be placed: first spots with a pot on, then spots
+ * with a clear line to a ball on (for safeties and kicks), so there is always a legal shot to find.
+ */
 function placements(
   input: AiInput,
   rulesTable: TableSpec,
   lines: { target: BallState; pocket: string }[],
 ): Vec2[] {
   const zone = input.turn.ballInHand;
-  const out: Vec2[] = [];
   const cue = input.balls.find((b) => b.id === 'cue')!;
   const ok = (p: Vec2) => canPlaceCueBall(rulesTable, input.balls, zone, p);
+  const live = input.balls.filter((b) => b.state !== 'pocketed' && b.id !== 'cue');
+  const targetIds = input.turn.targets.length ? input.turn.targets : live.map((b) => b.id);
+  const targetBalls = live.filter((b) => targetIds.includes(b.id));
+  const ballsWith = (p: Vec2) => input.balls.map((b) => (b.id === 'cue' ? { ...b, pos: p } : b));
+  const potsFrom = (p: Vec2) => {
+    const balls = ballsWith(p);
+    const c = { ...cue, pos: p };
+    return lines.some(({ target, pocket }) => {
+      const pk = rulesTable.pockets.find((x) => x.id === pocket)!;
+      return potLine(rulesTable, balls, c, target, pk) !== null;
+    });
+  };
+  const clearTo = (p: Vec2) =>
+    targetBalls.some((t) => pathClear(input.balls, p, t.pos, cue.radius, [cue.id, t.id]));
+
+  const raw: Vec2[] = [];
   if (zone === 'anywhere') {
     for (const { target, pocket } of lines) {
       const p = rulesTable.pockets.find((x) => x.id === pocket)!;
@@ -123,11 +190,10 @@ function placements(
           const c = Math.cos(turn);
           const s = Math.sin(turn);
           const d = { x: dir.x * c - dir.y * s, y: dir.x * s + dir.y * c };
-          const pos = {
+          raw.push({
             x: target.pos.x - d.x * (back + 2 * cue.radius),
             y: target.pos.y - d.y * (back + 2 * cue.radius),
-          };
-          if (ok(pos)) out.push(pos);
+          });
         }
       }
     }
@@ -139,13 +205,19 @@ function placements(
       ? [d.centre.x - 0.02, d.centre.x - d.radius * 0.5]
       : [-rulesTable.playfield.length / 2 + 0.25, -rulesTable.playfield.length / 3];
     const span = d ? d.radius * 0.9 : hw * 0.8;
-    for (const x of xs)
-      for (const f of [-1, -0.5, 0, 0.5, 1]) {
-        const pos = { x, y: f * span };
-        if (ok(pos)) out.push(pos);
-      }
+    for (const x of xs) for (const f of [-1, -0.5, 0, 0.5, 1]) raw.push({ x, y: f * span });
   }
-  if (out.length === 0) out.push({ ...cue.pos });
+  raw.push(...contactSpots(input, rulesTable).map((c) => c.place));
+  const legal = raw.filter(ok);
+  const potting = legal.filter(potsFrom);
+  const clear = legal.filter((p) => !potting.includes(p) && clearTo(p));
+  const rest = legal.filter((p) => !potting.includes(p) && !clear.includes(p));
+  // Pot spots first; keep a few clear-line spots even then, for safeties and kicks.
+  const out =
+    zone === 'anywhere'
+      ? [...potting.slice(0, 9), ...clear.slice(0, 12 - Math.min(9, potting.length))]
+      : [...potting, ...clear, ...rest];
+  if (out.length === 0) out.push(...(rest.length ? rest.slice(0, 1) : [{ ...cue.pos }]));
   return out.slice(0, 12);
 }
 
@@ -330,12 +402,23 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
     }
   }
 
+  // Ball in hand with the ball on tied up in a cluster: hit a free contact point on it, at a pace that
+  // gets something to a cushion.
+  for (const c of contactSpots(input, rulesTable))
+    for (const speed of [1.6, 2.6, 3.8])
+      cands.push({
+        shot: { ball: 'cue', aim: c.aim, elevation: 0, tip: { a: 0, b: 0 }, speed },
+        decl: declFor(input, c.target.id, null, true),
+        place: c.place,
+        label: `play safe off the ${ballName(c.target.id)}`,
+      });
+
   // Safeties: soft contacts across the ball on (and any shot that hits it, as a fallback).
   const nearest = [...targetBalls]
     .sort((a, b) => len(sub(a.pos, cue.pos)) - len(sub(b.pos, cue.pos)))
     .slice(0, 4);
   const fractions = sk.safeties ? [-0.85, -0.5, 0, 0.5, 0.85] : [0];
-  const speeds = sk.safeties ? [1.2, 2] : [1.6];
+  const speeds = sk.safeties ? [1.2, 2, 3.2] : [1.6, 3];
   for (const spot of spots.slice(0, 3))
     for (const t of nearest) {
       const dist = len(sub(t.pos, spot));
