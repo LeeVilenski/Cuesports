@@ -330,6 +330,15 @@ export class Hud {
     this.powerLabel.textContent = p > 0 ? `${Math.round(p * 100)}%` : 'Pull down';
   }
 
+  /** Shows a tip position and elevation on the spin widget (e.g. back to centre, or the AI's choice). */
+  showSpin(tip: { a: number; b: number }, elevationDeg: number): void {
+    this.tip = { ...tip };
+    this.elevation = Math.round(elevationDeg * 2) / 2;
+    this.elevInput.value = String(this.elevation);
+    this.elevOut.textContent = `${this.elevation}°`;
+    this.drawSpin();
+  }
+
   private drawSpin(): void {
     for (const c of [this.spinMini, this.spinBig]) {
       const g = c.getContext('2d')!;
