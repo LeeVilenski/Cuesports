@@ -35,13 +35,15 @@ trajectory frames at `sampleRate` Hz, and the final ball states. Rulesets judge 
 
 | Table | Slide μs | Roll μr | 1 m/s roll distance | Lag (head → foot → head) |
 |---|---|---|---|---|
-| American pool 9 ft | 0.16 | 0.0125 | 4.1 m | ~7.6 s |
-| English pool 7 ft | 0.16 | 0.014 | 3.6 m | ~6.2 s |
-| Snooker 12 ft | 0.17 | 0.0125 | 4.1 m | ~8.9 s |
+| American pool 9 ft | 0.18 | 0.0125 | 4.1 m | ~7.6 s |
+| English pool 7 ft | 0.18 | 0.014 | 3.6 m | ~6.2 s |
+| Snooker 12 ft | 0.18 | 0.0125 | 4.1 m | ~8.9 s |
 
 These are medium (club) cloths. pooltool's default μr = 0.01 is closer to a fast tournament cloth. The game's
 cloth-speed setting scales μr by 0.8 (fast), 1 (medium) or 1.25 (slow, pub). Sliding friction sets how long
-spin survives before the ball rolls. It was lowered from 0.2 after playtesting, because draw died too quickly.
+spin survives before the ball rolls. Playtesting moved it from 0.2 to 0.16 (draw died too quickly) and then to
+0.18 (strong spin carried too far). The game also tops up off-centre hits by a third of the pace the strike
+loses (`STROKE_COMPENSATION`).
 
 ## Integration
 

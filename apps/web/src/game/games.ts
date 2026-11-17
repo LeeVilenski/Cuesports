@@ -28,16 +28,16 @@ export const GAMES: GameDef[] = [
 
 /**
  * Maps the power bar (0–1) to cue speed, with fine control at the soft end. Halfway is a medium
- * shot (about 3 m/s off the tip, Alciatore's "medium" speed); the top of the bar is a break.
+ * shot (a cue ball of about 2.9 m/s); the top of the bar is a break.
  */
-export const powerToSpeed = (p: number, max: number): number => 0.25 + (max - 0.25) * p * p;
+export const powerToSpeed = (p: number, max: number): number => 0.25 + (max - 0.25) * Math.pow(p, 2.2);
 
 /**
  * An off-centre hit gives the ball less speed for the same cue speed (the impulse also has to
  * spin it). Players stroke a little harder for spin without thinking about it, so the game makes
- * most of that up: power sets the pace, and spin changes the pace only slightly.
+ * up about a third of that. More than that made spin shots carry too far in playtesting.
  */
-export const STROKE_COMPENSATION = 0.7;
+export const STROKE_COMPENSATION = 0.35;
 
 export function strokeSpeed(
   cueSpeed: number,
