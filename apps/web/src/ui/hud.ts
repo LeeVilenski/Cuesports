@@ -243,7 +243,7 @@ export class Hud {
             cb.onNewMatch();
           },
         },
-        'New 9-ball match',
+        'New match',
       ),
       h('div', { className: 'row' }, h('label', {}, 'Practice'), this.gameSelect),
       h('div', { className: 'row' }, h('label', {}, 'Cloth speed'), this.clothSelect),

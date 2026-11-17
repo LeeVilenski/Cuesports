@@ -23,7 +23,11 @@ Shared helpers: `shotFacts()` (first contact, rail after contact, pots, scratche
 cushion), `spotBall()` (on a spot, or as close as possible behind it on the long string), and
 `canPlaceCueBall()`.
 
-## 9-ball (WPA)
+## 9-ball and 10-ball (WPA)
+
+Both are built from one rotation ruleset (`rotation.ts`).
+
+### 9-ball
 
 - Rack: the 1 on the foot spot at the apex, the 9 in the middle, the rest at random.
 - Break from behind the head string. A legal break hits the 1 first and either pots a ball or drives at
@@ -36,6 +40,19 @@ cushion), `spotBall()` (on a spot, or as close as possible behind it on the long
   table, is spotted. No other ball is ever spotted.
 - Three consecutive fouls by the same player lose the rack (an option, on by default), with a warning after
   the second.
+
+### 10-ball
+
+- Rack: ten balls in a triangle, the 1 on the foot spot at the apex, the 10 in the middle of the third row.
+- Same break, push out, foul and three-foul rules as 9-ball.
+- Every shot after the break is called (ball and pocket) or declared a safety. The game calls automatically
+  from the aim (the ball the guide hits and the pocket it is heading for); the player can override it.
+- A called ball in its called pocket keeps the shooter at the table, even if other balls drop too.
+- A ball potted without being called, or in the wrong pocket, is not a foul: the turn passes and the
+  incoming player chooses to play from there or pass the shot back. Those balls stay down.
+- A declared safety: any balls potted stay down and the turn passes, with no option.
+- The 10 wins only when called and potted on a legal shot (combinations count). On the break, or uncalled,
+  it is spotted.
 
 The match layer (`apps/web/src/game/match.ts`) adds players, a race to N racks and who breaks next
 (alternate, or the winner).

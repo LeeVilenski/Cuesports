@@ -49,7 +49,7 @@ test('switches games and cameras from the menu', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   await practice(page);
   await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByLabel('Game').selectOption('snooker');
+  await page.getByLabel('Game', { exact: true }).selectOption('snooker');
   await page.getByRole('button', { name: 'Close' }).click();
   await expect(page.locator('.status')).toContainText('Snooker');
   for (const name of ['Top', 'Free', 'Aim']) await page.getByRole('button', { name, exact: true }).click();
@@ -90,5 +90,31 @@ test('plays a 9-ball match: setup, break, then the rules decide whose turn it is
   expect(after.turn.isBreak).toBe(false);
   expect(after.message).not.toMatch(/\{p\d\}/);
   await expect(page.locator('.toast')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('plays 10-ball: after the break the shot is called automatically from the aim', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.getByLabel('Game type').selectOption('ten-ball');
+  await page.getByRole('button', { name: 'Start' }).click();
+  const balls = await page.evaluate(() => window.__cuesports.state().balls.filter((b) => b.id !== 'cue'));
+  expect(balls).toHaveLength(10);
+
+  await page.evaluate(() => window.__cuesports.shoot(0.9));
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'playing', null, { timeout: 30_000 });
+  await page.evaluate(() => window.__cuesports.fastForward());
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'aim', null, { timeout: 30_000 });
+  const m = await page.evaluate(() => window.__cuesports.state().match!);
+  expect(m.turn.isBreak).toBe(false);
+  // Unless the break fouled (ball in hand) the next shot must be called, and the chip shows the call.
+  if (m.turn.ballInHand === 'none') {
+    await expect(page.getByRole('button', { name: 'Called shot' })).toBeVisible();
+    await page.getByRole('button', { name: 'Called shot' }).click();
+    await expect(page.getByRole('heading', { name: 'Call your shot' })).toBeVisible();
+    await page.getByRole('button', { name: 'Safety' }).click();
+    await expect(page.getByRole('button', { name: 'Called shot' })).toHaveText('Call: safety');
+  }
   expect(errors).toEqual([]);
 });

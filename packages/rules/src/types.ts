@@ -31,6 +31,8 @@ export interface Turn {
   targets: string[];
   /** The player may declare a push out for this shot. */
   canPushOut: boolean;
+  /** The shot must be called (ball and pocket) or declared a safety. */
+  mustCall: boolean;
   /** A choice the player must make before anyone shoots (e.g. after a push out). */
   decision: Decision | null;
   isBreak: boolean;
@@ -43,6 +45,8 @@ export interface ShotDeclaration {
   pushOut?: boolean;
   /** Called ball and pocket, for call-shot games (10-ball, straight pool). */
   call?: { ball: string; pocket: string };
+  /** A declared safety in a call-shot game: balls potted stay down and the turn passes. */
+  safety?: boolean;
 }
 
 export interface Foul {

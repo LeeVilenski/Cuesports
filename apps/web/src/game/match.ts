@@ -1,37 +1,48 @@
 import type { BallState, ShotResult } from '@cuesports/physics';
 import {
   NINE_BALL,
+  TEN_BALL,
   type Judgement,
-  type NineBallOptions,
-  type NineBallState,
+  type Ruleset,
+  type RotationOptions,
+  type RotationState,
   type ShotDeclaration,
   type Turn,
 } from '@cuesports/rules';
 import { Rng } from '@cuesports/shared';
 
+export type MatchGame = 'nine-ball' | 'ten-ball';
+
+export const MATCH_GAMES: Record<MatchGame, Ruleset<RotationState, RotationOptions>> = {
+  'nine-ball': NINE_BALL,
+  'ten-ball': TEN_BALL,
+};
+
 export interface MatchConfig {
+  game: MatchGame;
   players: [string, string];
   /** Racks needed to win the match. */
   raceTo: number;
   /** Who breaks the next rack. */
   breaks: 'winner' | 'alternate';
-  rules: NineBallOptions;
+  rules: RotationOptions;
 }
 
 export const DEFAULT_MATCH: MatchConfig = {
+  game: 'nine-ball',
   players: ['Player 1', 'Player 2'],
   raceTo: 3,
   breaks: 'alternate',
   rules: NINE_BALL.defaults,
 };
 
-/** A local two-player 9-ball match: racks, scores and turns. The ruleset does the judging. */
+/** A local two-player 9-ball or 10-ball match: racks, scores and turns. The ruleset does the judging. */
 export class Match {
-  readonly ruleset = NINE_BALL;
+  readonly ruleset: Ruleset<RotationState, RotationOptions>;
   score: [number, number] = [0, 0];
   rack = 0;
   breaker = 0;
-  state!: NineBallState;
+  state!: RotationState;
   turn!: Turn;
   balls: BallState[] = [];
   /** Message about the last shot or decision, with names filled in. */
@@ -47,6 +58,7 @@ export class Match {
     seed = 1,
   ) {
     this.rng = new Rng(seed);
+    this.ruleset = MATCH_GAMES[config.game];
     this.startRack();
   }
 
@@ -69,7 +81,7 @@ export class Match {
     this.message = `Rack ${this.rack}: ${this.config.players[this.breaker]} to break.`;
   }
 
-  judge(decl: ShotDeclaration, before: BallState[], result: ShotResult): Judgement<NineBallState> {
+  judge(decl: ShotDeclaration, before: BallState[], result: ShotResult): Judgement<RotationState> {
     const j = this.ruleset.judge(this.state, decl, before, result, this.config.rules);
     this.apply(j);
     if (j.frame) {
@@ -81,13 +93,13 @@ export class Match {
     return j;
   }
 
-  decide(choice: string): Judgement<NineBallState> {
+  decide(choice: string): Judgement<RotationState> {
     const j = this.ruleset.decide(this.state, choice, this.balls, this.config.rules);
     this.apply(j);
     return j;
   }
 
-  private apply(j: Judgement<NineBallState>): void {
+  private apply(j: Judgement<RotationState>): void {
     this.state = j.state;
     this.turn = j.turn;
     this.balls = j.balls;

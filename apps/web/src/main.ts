@@ -25,7 +25,7 @@ import {
   type ClothSpeed,
   type GameDef,
 } from './game/games';
-import { computeGuide, launchDirection } from './game/guide';
+import { computeGuide, launchDirection, pocketAhead } from './game/guide';
 import { SimClient } from './game/sim-client';
 import { BallsView } from './render/balls-view';
 import { CameraRig, type CameraMode } from './render/cameras';
@@ -34,9 +34,9 @@ import { CueView } from './render/cue-view';
 import { GuideView } from './render/guide-view';
 import { buildTableView, WELL_DEPTH, type TableView } from './render/table-view';
 import { Hud } from './ui/hud';
-import { MatchHud } from './ui/match-hud';
+import { MatchHud, type CallChoice } from './ui/match-hud';
 import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
-import { canPlaceCueBall, type ShotDeclaration } from '@cuesports/rules';
+import { canPlaceCueBall, numberedOnTable, pocketName, type ShotDeclaration } from '@cuesports/rules';
 
 // ---------------------------------------------------------------------------------------------
 // Renderer and scene
@@ -120,6 +120,9 @@ let dirty = true;
 /** The 9-ball match being played, or null in practice. */
 let match: Match | null = null;
 let decl: ShotDeclaration = {};
+/** The player's own call (10-ball); null means call automatically from the aim. */
+let manualCall: CallChoice = null;
+let autoCall: CallChoice = null;
 let replaying = false;
 /** Playback frozen at a fixed time (test hook). */
 let frozen = false;
@@ -157,7 +160,7 @@ function setTable(def: GameDef): void {
 // Match play
 
 function startMatch(config: MatchConfig): void {
-  setTable(GAMES.find((g) => g.id === 'nine-ball')!);
+  setTable(GAMES.find((g) => g.id === config.game) ?? GAMES[0]!);
   match = new Match(config, (Math.random() * 1e9) | 0);
   matchHud.showResult(null);
   loadRack();
@@ -178,6 +181,7 @@ function loadRack(): void {
 function syncTurn(): void {
   if (!match) return;
   const t = match.turn;
+  manualCall = null;
   matchHud.showBoard({
     players: match.config.players,
     score: match.score,
@@ -246,7 +250,15 @@ function shoot(p: number): void {
   if (match && (match.turn.decision || match.rackResult)) return;
   const cue = cueBall();
   if (!cue || cue.state === 'pocketed') return;
-  decl = match ? { pushOut: matchHud.pushOut } : {};
+  decl = {};
+  if (match) {
+    if (matchHud.pushOut) decl = { pushOut: true };
+    else if (match.turn.mustCall) {
+      const call = manualCall ?? autoCall;
+      if (call === 'safety') decl = { safety: true };
+      else if (call) decl = { call };
+    }
+  }
   hud.setPlacingAllowed(!match);
   placing = false;
   hud.setPlacing(false);
@@ -447,6 +459,10 @@ app.append(hud.root);
 
 const matchHud: MatchHud = new MatchHud({
   onPushOut: () => undefined,
+  onCall: (c) => {
+    manualCall = c;
+    dirty = true;
+  },
   onDecision: (choice) => {
     if (!match) return;
     match.decide(choice);
@@ -464,6 +480,12 @@ const matchHud: MatchHud = new MatchHud({
   onPractice: () => setGame(GAMES[0]!),
 });
 app.append(matchHud.root);
+matchHud.onCallClick(() =>
+  matchHud.openCallPicker(
+    numberedOnTable(balls),
+    game.table.pockets.map((p) => ({ id: p.id, label: pocketName(p.id) })),
+  ),
+);
 hud.setCamera('aim');
 
 // ---------------------------------------------------------------------------------------------
@@ -634,11 +656,17 @@ function frame(now: number): void {
       cueView.pose(cue.pos.x, cue.pos.y, cue.radius, shot, gap);
     }
   }
-  guideView.update(
-    showGuide && phase === 'aim' && !placing && cue
+  const guide =
+    phase === 'aim' && cue
       ? computeGuide(game.table, balls, 'cue', guideSquirt ? launchDirection(cue, shot) : shot.aim)
-      : null,
-  );
+      : null;
+  guideView.update(showGuide && !placing ? guide : null);
+  if (match && phase === 'aim') {
+    const pocket = guide?.object ? pocketAhead(game.table, guide.object.from, guide.object.dir) : null;
+    autoCall = guide?.object && pocket ? { ball: guide.object.id, pocket } : null;
+    const needsCall = match.turn.mustCall && !matchHud.pushOut && !match.turn.decision && !match.rackResult;
+    matchHud.showCall(manualCall ?? autoCall, manualCall !== null, pocketName, needsCall);
+  }
 
   if (dirty) {
     const t0 = performance.now();

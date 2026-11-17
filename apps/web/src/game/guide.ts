@@ -7,7 +7,7 @@ export interface Guide {
   end: Vec2;
   ghost: Vec2 | null;
   radius: number;
-  object: { from: Vec2; dir: Vec2 } | null;
+  object: { id: string; from: Vec2; dir: Vec2 } | null;
   /** Stun-shot cue-ball direction after contact (the tangent line). */
   tangent: Vec2 | null;
 }
@@ -58,7 +58,7 @@ export function computeGuide(
       end: ghost,
       ghost,
       radius: cue.radius,
-      object: { from: hit.pos, dir: od },
+      object: { id: hit.id, from: hit.pos, dir: od },
       tangent,
     };
   }
@@ -77,4 +77,25 @@ export function launchDirection(ball: BallState, shot: ShotInput, cue: CueSpec =
   const probe = { ...ball, pos: { ...ball.pos }, vel: { x: 0, y: 0 }, spin: { x: 0, y: 0, z: 0 } };
   const out = applyStrike(probe, shot, cue);
   return shot.aim + out.squirt;
+}
+
+/** The pocket an object ball is heading for, if its path points into one (for auto-calling shots). */
+export function pocketAhead(table: TableSpec, from: Vec2, dir: Vec2): string | null {
+  let best: string | null = null;
+  let bestErr = Infinity;
+  for (const p of table.pockets) {
+    const dx = p.position.x - from.x;
+    const dy = p.position.y - from.y;
+    const d = Math.hypot(dx, dy);
+    // Sideways miss distance at the pocket, compared with the size of the mouth.
+    const along = dx * dir.x + dy * dir.y;
+    if (along <= 0) continue;
+    const miss = Math.abs(dx * dir.y - dy * dir.x);
+    const err = miss / p.mouthWidth + d * 0.01;
+    if (miss < p.mouthWidth * 1.5 && err < bestErr) {
+      bestErr = err;
+      best = p.id;
+    }
+  }
+  return best;
 }
