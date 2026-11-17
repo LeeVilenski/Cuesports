@@ -127,6 +127,34 @@ describe('AI shot choice', () => {
     expect(canPlaceCueBall(nineTable, balls, 'anywhere', ai.place!)).toBe(true);
   });
 
+  it('with ball in hand, finds a legal hit on a ball on tied up in a cluster', () => {
+    // After a scratch on the break: the 1 sits in what is left of the rack, blocked from every pot.
+    const balls = position({
+      '1': [0.696, 0],
+      '5': [0.646, 0.028],
+      '6': [0.696, 0.057],
+      '2': [0.746, 0.028],
+      '3': [0.773, -0.022],
+      '9': [0.75, -0.075],
+      '8': [0.729, -0.199],
+      '4': [-0.674, 0.343],
+      cue: [-0.3, -0.3],
+    });
+    const state = rotationState({ ballInHand: 'anywhere' });
+    for (const seed of [1, 2, 3]) {
+      const ai = chooseShot({
+        ...nineInput(balls, 4, seed),
+        state,
+        turn: { ...nineInput(balls, 4, seed).turn, ballInHand: 'anywhere' },
+        perfect: true,
+      });
+      const before = balls.map((b) => (b.id === 'cue' ? { ...b, pos: ai.place! } : b));
+      const r = simulate(nineTable, before, ai.shot, { sampleRate: 0 });
+      const j = NINE_BALL.judge(state, ai.decl, before, r, NINE_BALL.defaults);
+      expect(j.fouls).toEqual([]);
+    }
+  }, 20000);
+
   it('respects its thinking budget', () => {
     const { balls, state, turn } = NINE_BALL.newFrame(NINE_BALL.defaults, new Rng(3), 1);
     const t0 = Date.now();
