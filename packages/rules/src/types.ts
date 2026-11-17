@@ -37,6 +37,8 @@ export interface Turn {
   mustNominate?: boolean;
   /** A free ball has been awarded: any ball may be nominated as the ball on. */
   freeBall?: boolean;
+  /** Visits the player has (English pool: two after a foul under WEPF rules). */
+  visits?: number;
   /** A choice the player must make before anyone shoots (e.g. after a push out). */
   decision: Decision | null;
   isBreak: boolean;
@@ -88,6 +90,8 @@ export interface Judgement<S> {
   message: string;
   /** Points per player, for scoring games (unused by 9-ball). */
   points?: number[];
+  /** The balls are re-racked and the frame restarted (no score) with this player breaking. */
+  rerack?: { breaker: number };
 }
 
 export interface Ruleset<S, O> {

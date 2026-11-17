@@ -144,3 +144,22 @@ test('plays snooker: break-off from the D, then the scoreboard shows points and 
   expect(after.message).not.toMatch(/\{p\d\}/);
   expect(errors).toEqual([]);
 });
+
+test('plays English pool: International rules break from baulk', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.getByLabel('Game type').selectOption('english');
+  await expect(page.getByLabel('Rules')).toBeVisible();
+  await page.getByRole('button', { name: 'Start' }).click();
+  const balls = await page.evaluate(() => window.__cuesports.state().balls.map((b) => b.id));
+  expect(balls).toContain('8');
+  expect(balls.filter((id) => id.startsWith('r'))).toHaveLength(7);
+  await page.evaluate(() => window.__cuesports.shoot(0.9));
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'playing', null, { timeout: 30_000 });
+  await page.evaluate(() => window.__cuesports.fastForward());
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'aim', null, { timeout: 30_000 });
+  const after = await page.evaluate(() => window.__cuesports.state().match!);
+  expect(after.message).not.toMatch(/\{p\d\}/);
+  expect(errors).toEqual([]);
+});

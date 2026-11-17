@@ -207,7 +207,9 @@ function syncTurn(): void {
   if (target && cue) shot.aim = Math.atan2(target.pos.y - cue.pos.y, target.pos.x - cue.pos.x);
   const hand =
     t.ballInHand === 'behind-head-string'
-      ? ' Ball in hand behind the head string: drag the cue ball.'
+      ? match.config.game === 'english'
+        ? ' Ball in hand in baulk: drag the cue ball.'
+        : ' Ball in hand behind the head string: drag the cue ball.'
       : t.ballInHand === 'in-d'
         ? ' Ball in hand in the D: drag the cue ball.'
         : t.ballInHand === 'anywhere'
@@ -307,8 +309,11 @@ function endPlayback(): void {
     if (match && !replaying && last) match.judge(decl, last.before, result);
     replaying = false;
     balls = match ? match.balls.map(cloneBall) : result.final.map(cloneBall);
-    ballsView.commit(result);
-    ballsView.showState(balls);
+    if (match?.reracked) ballsView.setBalls(balls);
+    else {
+      ballsView.commit(result);
+      ballsView.showState(balls);
+    }
     playing = null;
     phase = 'aim';
     rig.overview = false;
@@ -482,7 +487,8 @@ const matchHud: MatchHud = new MatchHud({
     if (!match) return;
     match.decide(choice);
     balls = match.balls.map(cloneBall);
-    ballsView.showState(balls);
+    if (match.reracked) ballsView.setBalls(balls);
+    else ballsView.showState(balls);
     syncTurn();
   },
   onNextRack: () => {
@@ -755,7 +761,8 @@ registerSW({ immediate: true });
     if (!match) return;
     match.decide(choice);
     balls = match.balls.map(cloneBall);
-    ballsView.showState(balls);
+    if (match.reracked) ballsView.setBalls(balls);
+    else ballsView.showState(balls);
     syncTurn();
   },
   /** Free camera at a physics-space eye position looking at a target (for screenshots). */

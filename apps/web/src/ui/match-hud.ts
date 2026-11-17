@@ -115,7 +115,13 @@ export class MatchHud {
           ),
           h('small', {}, `${frame.remaining} left`),
         )
-      : h('div', { className: 'mid' }, h('small', {}, `race to ${raceTo}`), on);
+      : h(
+          'div',
+          { className: 'mid' },
+          h('small', {}, `race to ${raceTo}`),
+          on,
+          (turn.visits ?? 1) > 1 ? h('small', {}, `${turn.visits} visits`) : '',
+        );
     this.board.replaceChildren(side(0), mid, side(1));
   }
 
@@ -308,7 +314,15 @@ export class MatchHud {
       h('option', { value: 'nine-ball' }, '9-ball'),
       h('option', { value: 'ten-ball' }, '10-ball (call shot)'),
       h('option', { value: 'snooker' }, 'Snooker'),
+      h('option', { value: 'english' }, 'English pool'),
     );
+    const preset = h('select', { ariaLabel: 'Rules' });
+    preset.append(
+      h('option', { value: 'international' }, 'International / Ultimate Pool'),
+      h('option', { value: 'wepf' }, 'World Eightball (WEPF / EPA)'),
+    );
+    const englishOpts = h('div', { hidden: true });
+    englishOpts.append(h('div', { className: 'row' }, h('label', {}, 'Rules'), preset));
     const reds = h('select', { ariaLabel: 'Reds' });
     for (const n of [15, 10, 6]) reds.append(h('option', { value: String(n) }, `${n} reds`));
     const missRule = h('input', { type: 'checkbox', checked: true });
@@ -322,6 +336,7 @@ export class MatchHud {
           reds: Number(reds.value) as 15 | 10 | 6,
           missRule: missRule.checked,
         },
+        english: preset.value as MatchConfig['english'],
         game: game.value as MatchConfig['game'],
         players: [name1.value.trim() || 'Player 1', name2.value.trim() || 'Player 2'],
         raceTo: Number(race.value),
@@ -345,8 +360,9 @@ export class MatchHud {
     const raceLabel = h('label', {}, 'Race to');
     game.addEventListener('change', () => {
       const snooker = game.value === 'snooker';
-      poolOpts.hidden = snooker;
+      poolOpts.hidden = snooker || game.value === 'english';
       snookerOpts.hidden = !snooker;
+      englishOpts.hidden = game.value !== 'english';
       raceLabel.textContent = snooker ? 'Frames to win' : 'Race to';
     });
     this.setup.append(
@@ -357,10 +373,11 @@ export class MatchHud {
       h('div', { className: 'row' }, raceLabel, race),
       poolOpts,
       snookerOpts,
+      englishOpts,
       h(
         'p',
         { className: 'help' },
-        'WPA rules. Two players on this device: pass it over when the turn changes.',
+        'Rules: WPA (9-ball, 10-ball), WPBSA (snooker), International or WEPF (English pool). Two players on this device: pass it over when the turn changes.',
       ),
       h(
         'div',

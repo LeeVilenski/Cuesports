@@ -83,3 +83,30 @@ Not yet: the break box option, and fouls that need ball tracking in the hand (to
 
 Not yet: an "angled" cue ball in the pocket jaws (counts as snookered), and the refinements to the miss
 rule when a player needs snookers.
+
+## English pool
+
+`packages/rules/src/english.ts`. Reds, yellows and the 8, on the 7 ft English table. Two presets, each
+transcribed from its rulebook, with every difference as an option (`EnglishOptions`):
+
+| | International / Ultimate Pool (default) | World Eightball (WEPF / EPA) |
+|---|---|---|
+| Source | International Eightball Pool Rules v2d, Jan 2026 | WEPF rules, abridged, Jan 2020 |
+| Legal break | 3 points: 1 per ball potted, 1 per ball wholly past the centre line (4f) | a colour potted or 4 balls to a cushion (F4a) |
+| Illegal break | re-rack; the opponent breaks or gives it back (4g) | re-rack; the opponent breaks (F4b) |
+| 8 on the break | re-spotted; play on (4i) | re-rack, same breaker (F5) |
+| In-off on the break | loss of turn, incoming plays from baulk (4j) | turn passes (F4c) |
+| Foul | one visit, ball in hand anywhere (6e) | two visits, cue ball where it lies (from baulk if it went in or off) (K) |
+| Opponent's ball potted | loss of turn (6d) | standard foul (K3) |
+| Open table | the group struck first is the call (6a) | potting both colours (or colours on the break) means choosing (H) |
+| Total snooker | not used (stalemate instead, 6g) | only the first contact is required (G3b) |
+| Foul snooker | not used | may nominate an opponent's ball or the 8 (P) |
+
+Both: a legal shot hits a ball on first, then pots a ball or sends any ball to a cushion (6p, G1). The frame
+is lost by fouling while potting the 8, potting it before the group is cleared, or potting it with the last
+group ball (6f, M). Balls forced off the table are re-spotted on the 8-ball spot line (6m, S).
+
+Not implemented (they need a referee or real-world events): the lag, shot clock, frozen-ball rule (6h),
+stalemate (6g, W), push shots and double hits, conduct fouls. The WEPF two visits after re-breaking an
+illegal break are not given. WPA Blackball and a traditional pub preset can be added once we have their
+rulebooks.

@@ -1,5 +1,7 @@
 import type { BallState, ShotResult } from '@cuesports/physics';
 import {
+  ENGLISH_POOL,
+  ENGLISH_PRESETS,
   NINE_BALL,
   pointsRemaining,
   SNOOKER,
@@ -14,7 +16,8 @@ import {
 } from '@cuesports/rules';
 import { Rng } from '@cuesports/shared';
 
-export type MatchGame = 'nine-ball' | 'ten-ball' | 'snooker';
+export type MatchGame = 'nine-ball' | 'ten-ball' | 'snooker' | 'english';
+export type EnglishPreset = keyof typeof ENGLISH_PRESETS;
 
 export interface MatchConfig {
   game: MatchGame;
@@ -25,6 +28,8 @@ export interface MatchConfig {
   breaks: 'winner' | 'alternate';
   rules: RotationOptions;
   snooker: SnookerOptions;
+  /** English pool rulebook preset. */
+  english: EnglishPreset;
 }
 
 export const DEFAULT_MATCH: MatchConfig = {
@@ -34,6 +39,7 @@ export const DEFAULT_MATCH: MatchConfig = {
   breaks: 'alternate',
   rules: NINE_BALL.defaults,
   snooker: SNOOKER.defaults,
+  english: 'international',
 };
 
 /** Frame points, current break and points remaining (snooker). */
@@ -66,6 +72,8 @@ export class Match {
   rackResult: { winner: number; reason: string } | null = null;
   /** Set when the match is over. */
   winner: number | null = null;
+  /** Set when the last shot or decision re-racked the balls (an illegal break, say). */
+  reracked = false;
   private rng: Rng;
 
   constructor(
@@ -77,6 +85,7 @@ export class Match {
       'nine-ball': [NINE_BALL as AnyRuleset, config.rules],
       'ten-ball': [TEN_BALL as AnyRuleset, config.rules],
       snooker: [SNOOKER as AnyRuleset, config.snooker],
+      english: [ENGLISH_POOL as AnyRuleset, ENGLISH_PRESETS[config.english].options],
     };
     [this.ruleset, this.options] = games[config.game];
     this.startRack();
@@ -133,6 +142,16 @@ export class Match {
     return j;
   }
 
+  /** Re-racks without scoring (illegal break, 8 on the break), keeping the ruleset's message. */
+  private rerack(breaker: number): void {
+    const message = this.message;
+    this.breaker = breaker;
+    this.rack--;
+    this.startRack();
+    this.message = `${message} ${this.message}`;
+    this.reracked = true;
+  }
+
   /** The player at the table concedes the rack or frame. */
   concede(): void {
     if (this.rackResult || this.winner !== null) return;
@@ -152,9 +171,11 @@ export class Match {
   }
 
   private apply(j: Judgement<unknown>): void {
+    this.reracked = false;
     this.state = j.state;
     this.turn = j.turn;
     this.balls = j.balls;
     this.message = this.names(j.message);
+    if (j.rerack) this.rerack(j.rerack.breaker);
   }
 }

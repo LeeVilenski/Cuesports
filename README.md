@@ -20,9 +20,9 @@ physics engine works.
   9-ball (legal break, push out, ball in hand, three-foul rule, spotting the 9, golden break), a local
   two-player match (race to N, alternate or winner breaks), scoreboard, foul messages and ball-in-hand
   placement.
-- **M4 All launch games:** in progress. 10-ball (WPA, called shots) and snooker (WPBSA, with free ball and
-  the miss rule) are playable as matches; snooker and English pool pockets are tighter and pace-sensitive.
-  English pool (International 8-Ball / Ultimate Pool default, with other presets) is next.
+- **M4 All launch games:** playable. 10-ball (WPA, called shots), snooker (WPBSA, with free ball and the
+  miss rule) and English pool (International / Ultimate Pool by default, or WEPF / EPA) as two-player
+  matches. Snooker and English pool pockets are tighter and pace-sensitive.
 
 ## Playing the prototype
 

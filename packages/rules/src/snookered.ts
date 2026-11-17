@@ -55,3 +55,44 @@ function segmentDistance(ax: number, ay: number, bx: number, by: number, px: num
   u = u < 0 ? 0 : u > 1 ? 1 : u;
   return Math.hypot(ax + ex * u - px, ay + ey * u - py);
 }
+
+/**
+ * Whether any part of any of the given balls can be hit with a straight-line shot (English pool
+ * "total snooker" when false). Tests lines to the centre and across the ball to both edges.
+ */
+export function anyPartHittable(
+  balls: readonly BallState[],
+  cueId: string,
+  targets: readonly string[],
+): boolean {
+  const cue = balls.find((b) => b.id === cueId && b.state !== 'pocketed');
+  if (!cue) return true;
+  for (const id of targets) {
+    const t = balls.find((b) => b.id === id && b.state !== 'pocketed');
+    if (!t) continue;
+    const dx = t.pos.x - cue.pos.x;
+    const dy = t.pos.y - cue.pos.y;
+    const d = Math.hypot(dx, dy);
+    const D = cue.radius + t.radius;
+    if (d <= D + 1e-6) return true;
+    const theta = Math.atan2(dy, dx);
+    const half = Math.asin(D / d);
+    for (const f of [0, -0.5, 0.5, -0.95, 0.95]) {
+      const a = theta + f * half;
+      // Distance along the line to first contact with the target.
+      const off = d * Math.sin(Math.abs(a - theta));
+      const along = d * Math.cos(a - theta) - Math.sqrt(Math.max(0, D * D - off * off));
+      const gx = cue.pos.x + Math.cos(a) * along;
+      const gy = cue.pos.y + Math.sin(a) * along;
+      const blocked = balls.some(
+        (b) =>
+          b !== cue &&
+          b !== t &&
+          b.state !== 'pocketed' &&
+          segmentDistance(cue.pos.x, cue.pos.y, gx, gy, b.pos.x, b.pos.y) < cue.radius + b.radius - 1e-9,
+      );
+      if (!blocked) return true;
+    }
+  }
+  return false;
+}
