@@ -199,3 +199,37 @@ export function tableGeometry(table: TableSpec): TableGeometry {
   }
   return g;
 }
+
+/**
+ * Outline of a pocket's drop: the area past the shelf line, between the jaws, closed by the back of
+ * the pocket. A ball whose centre is inside it is over the hole (see `overDrop` in simulate.ts).
+ * The renderer cuts exactly this shape out of the cloth, so what you see matches the physics.
+ */
+export function dropOutline(geo: TableGeometry, pocketId: string): Vec2[] {
+  const p = geo.pockets.find((x) => x.id === pocketId);
+  if (!p) return [];
+  const mouth = {
+    x: p.position.x - p.axis.x * (p.shelfDepth + p.fallRadius),
+    y: p.position.y - p.axis.y * (p.shelfDepth + p.fallRadius),
+  };
+  const depth = (q: Vec2) => (q.x - mouth.x) * p.axis.x + (q.y - mouth.y) * p.axis.y - p.shelfDepth;
+  /** Jaw i as a polyline from its tip into the pocket, cut where it crosses the shelf line. */
+  const jaw = (i: number): Vec2[] => {
+    const segs = geo.segments.filter((s) => s.id.startsWith(`jaw:${p.id}:${i}:`));
+    const pts = [...segs.map((s) => s.a), segs[segs.length - 1]!.b];
+    for (let k = 1; k < pts.length; k++) {
+      const a = pts[k - 1]!;
+      const b = pts[k]!;
+      const da = depth(a);
+      const db = depth(b);
+      if (da < 0 && db >= 0) {
+        const f = -da / (db - da);
+        return [{ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }, ...pts.slice(k)];
+      }
+      if (da >= 0) return pts.slice(k - 1);
+    }
+    return [pts[pts.length - 1]!];
+  };
+  const back = geo.segments.filter((s) => s.id.startsWith(`back:${p.id}:`)).map((s) => s.b);
+  return [...jaw(0), ...back.slice(0, -1), ...jaw(1).reverse()];
+}

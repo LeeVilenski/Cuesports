@@ -1,14 +1,14 @@
-import { tableGeometry, type TableGeometry } from '@cuesports/physics';
+import { dropOutline, tableGeometry, type TableGeometry } from '@cuesports/physics';
 import type { TableSpec, Vec2 } from '@cuesports/shared';
 import {
   BackSide,
   BoxGeometry,
-  CylinderGeometry,
   CircleGeometry,
   Color,
   ExtrudeGeometry,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Path,
   PlaneGeometry,
@@ -26,6 +26,8 @@ export interface TableView {
   group: Group;
   /** Height of the top of the wooden rail. */
   railTop: number;
+  /** Where potted balls come to rest at the bottom of each pocket's well. */
+  pocketRest: Map<string, Vec2>;
   outer: { hx: number; hy: number };
   dispose(): void;
 }
@@ -52,7 +54,7 @@ function innerOutline(geo: TableGeometry): Vec2[] {
     const path: Vec2[] = [
       ...j0.map((s) => s.a),
       end0,
-      ...arcAround(p.position, p.fallRadius + 0.004, end0, end1, p.axis),
+      ...arcAround(p.position, backRadius(geo, p.id) + 0.001, end0, end1, p.axis),
       ...[...j1].reverse().map((s) => s.a),
     ];
     // Walk anticlockwise: start from whichever tip comes first going round the table.
@@ -65,6 +67,33 @@ function innerOutline(geo: TableGeometry): Vec2[] {
 }
 
 const TAU = Math.PI * 2;
+
+/** Depth of the pocket wells below the slate. */
+export const WELL_DEPTH = 0.16;
+
+/** Radius of the back of the pocket (the physics closes the pocket with an arc this far from its centre). */
+function backRadius(geo: TableGeometry, pocketId: string): number {
+  const p = geo.pockets.find((x) => x.id === pocketId)!;
+  const back = geo.segments.filter((s) => s.id.startsWith(`back:${pocketId}:`));
+  const q = back[0]?.a ?? p.position;
+  return Math.hypot(q.x - p.position.x, q.y - p.position.y) || p.fallRadius;
+}
+
+/** Centre of a polygon's area (where potted balls come to rest in the well). */
+function centroid(pts: Vec2[]): Vec2 {
+  let a = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]!;
+    const q = pts[(i + 1) % pts.length]!;
+    const c = p.x * q.y - q.x * p.y;
+    a += c;
+    cx += (p.x + q.x) * c;
+    cy += (p.y + q.y) * c;
+  }
+  return a === 0 ? pts[0]! : { x: cx / (3 * a), y: cy / (3 * a) };
+}
 const mod = (a: number) => ((a % TAU) + TAU) % TAU;
 
 /** Points on a circle from the direction of `from` to the direction of `to`, passing `through`. */
@@ -153,11 +182,9 @@ export function buildTableView(table: TableSpec): TableView {
     { x: ex, y: ey },
     { x: -ex, y: ey },
   ]);
-  for (const p of table.pockets) {
-    const hole = new Path();
-    hole.absarc(p.position.x, p.position.y, p.fallRadius, 0, TAU, true);
-    clothShape.holes.push(hole);
-  }
+  // The holes are exactly the physics drop areas: a ball over one of these falls.
+  const drops = new Map(table.pockets.map((p) => [p.id, dropOutline(geo, p.id)]));
+  for (const outline of drops.values()) clothShape.holes.push(toPath(outline));
   const clothGeo = new ShapeGeometry(clothShape, 32);
   const pos = clothGeo.getAttribute('position');
   const uv = clothGeo.getAttribute('uv');
@@ -204,24 +231,27 @@ export function buildTableView(table: TableSpec): TableView {
   // Pockets: a hole dropping below the slate, and a black liner that wraps the rail around the
   // back of the hole (open towards the table), like the leathers on a real table.
   const linerMat = new MeshStandardMaterial({ color: '#111111', roughness: 0.5, metalness: 0 });
-  const holeMat = new MeshStandardMaterial({ color: '#040404', roughness: 1, side: BackSide });
+  const wallMat = new MeshStandardMaterial({ color: '#0b0b0b', roughness: 0.9, side: BackSide });
+  const floorMat = new MeshStandardMaterial({ color: '#151210', roughness: 1 });
+  const hidden = new MeshBasicMaterial({ visible: false });
+  const rest = new Map<string, Vec2>();
   for (const p of table.pockets) {
-    const depth = 0.16;
-    const well = new Mesh(
-      new CylinderGeometry(p.fallRadius, p.fallRadius * 0.9, depth, 32, 1, true),
-      holeMat,
-    );
-    well.rotation.x = Math.PI / 2;
-    well.position.set(p.position.x, p.position.y, -depth / 2);
-    const floor = new Mesh(
-      new CircleGeometry(p.fallRadius, 32),
-      new MeshStandardMaterial({ color: '#020202' }),
-    );
-    floor.position.set(p.position.x, p.position.y, -depth + 0.01);
+    const outline = drops.get(p.id)!;
+    rest.set(p.id, centroid(outline));
+    // Well: the drop outline extruded down below the slate, seen from inside.
+    const wellShape = toShape(outline);
+    const well = new Mesh(new ExtrudeGeometry(wellShape, { depth: WELL_DEPTH, bevelEnabled: false }), [
+      hidden,
+      wallMat,
+    ]);
+    well.position.z = -WELL_DEPTH;
+    const floor = new Mesh(new ShapeGeometry(wellShape), floorMat);
+    floor.position.z = -WELL_DEPTH + 0.001;
     group.add(well, floor);
 
-    const inner = p.fallRadius + 0.002;
-    const outer = p.fallRadius + 0.034;
+    // Liner: wraps the rail round the back of the hole, open towards the table.
+    const inner = backRadius(geo, p.id);
+    const outer = Math.max(inner + 0.032, p.fallRadius + 0.02);
     const at = Math.atan2(p.axis.y, p.axis.x);
     const half = (115 * Math.PI) / 180;
     const u = new Shape();
@@ -291,6 +321,7 @@ export function buildTableView(table: TableSpec): TableView {
   return {
     group,
     railTop,
+    pocketRest: rest,
     outer: { hx, hy },
     dispose() {
       group.traverse((o) => {

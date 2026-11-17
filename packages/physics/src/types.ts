@@ -55,6 +55,8 @@ export interface Frame {
   orient: Float64Array;
   /** 1 if the ball is pocketed (or off the table). */
   pocketed: Uint8Array;
+  /** How far each ball has sunk below the slate (metres, ≤ 0) while it is over a pocket's drop. */
+  drop: Float64Array;
 }
 
 export interface ShotResult {
