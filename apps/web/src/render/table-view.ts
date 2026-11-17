@@ -1,4 +1,10 @@
-import { dropEdgePoints, dropOutline, tableGeometry, type TableGeometry } from '@cuesports/physics';
+import {
+  dropEdgePoints,
+  dropOutline,
+  TABLE_TRIM,
+  tableGeometry,
+  type TableGeometry,
+} from '@cuesports/physics';
 import type { TableSpec, Vec2 } from '@cuesports/shared';
 import {
   BackSide,
@@ -22,8 +28,8 @@ import {
 import { clothColour, clothTexture, woodTexture } from './textures';
 
 /** Visual dimensions of the table around the playfield (metres). */
-export const CUSHION_WIDTH = 0.05;
-export const RAIL_WIDTH = 0.1;
+export const CUSHION_WIDTH = TABLE_TRIM.cushionWidth;
+export const RAIL_WIDTH = TABLE_TRIM.railWidth;
 
 export interface TableView {
   group: Group;
@@ -205,8 +211,8 @@ export function buildTableView(table: TableSpec): TableView {
   const group = new Group();
   const hl = table.playfield.length / 2;
   const hw = table.playfield.width / 2;
-  const cushionTop = table.cushion.noseHeight + 0.007;
-  const railTop = cushionTop + 0.006;
+  const cushionTop = table.cushion.noseHeight + TABLE_TRIM.cushionTopAboveNose;
+  const railTop = table.cushion.noseHeight + TABLE_TRIM.railTopAboveNose;
   const hx = hl + CUSHION_WIDTH + RAIL_WIDTH;
   const hy = hw + CUSHION_WIDTH + RAIL_WIDTH;
 

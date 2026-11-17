@@ -6,3 +6,4 @@ export * from './ball-collision';
 export * from './cushion';
 export * from './simulate';
 export * from './layouts';
+export * from './cue-clearance';

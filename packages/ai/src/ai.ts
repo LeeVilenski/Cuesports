@@ -1,4 +1,4 @@
-import { cloneBall, simulate, type BallState, type ShotInput } from '@cuesports/physics';
+import { cloneBall, cueClearElevation, simulate, type BallState, type ShotInput } from '@cuesports/physics';
 import {
   canPlaceCueBall,
   theD,
@@ -393,7 +393,9 @@ function evaluate(input: AiInput, c: Candidate, sk: SkillProfile, rng: Rng | nul
     cue.state = 'stationary';
     delete cue.pocket;
   }
-  const shot = rng ? withErrors(c.shot, sk, rng) : c.shot;
+  const aimed = rng ? withErrors(c.shot, sk, rng) : c.shot;
+  // The cue rides up over a cushion or ball in the way, as it will in the game.
+  const shot = { ...aimed, elevation: cueClearElevation(simTable, before, aimed) };
   const result = simulate(simTable, before, shot, { sampleRate: 0, maxTime: 40 });
   let j: Judgement<unknown>;
   try {

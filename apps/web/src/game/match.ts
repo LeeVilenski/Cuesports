@@ -71,6 +71,11 @@ export class Match {
   balls: BallState[] = [];
   /** Message about the last shot or decision, with names filled in. */
   message = '';
+  /**
+   * Whether the latest message needs the player's attention (a foul, ball in hand, a decision, a push
+   * out, a new or finished rack). Routine results ("potted the 8 and plays again") are not shown.
+   */
+  notable = true;
   /** Set when a rack or frame ends: who won it and why. */
   rackResult: { winner: number; reason: string } | null = null;
   /** Set when the match is over. */
@@ -140,6 +145,7 @@ export class Match {
       ? `Frame ${this.rack}: ${this.config.players[this.breaker]} to break off.`
       : `Rack ${this.rack}: ${this.config.players[this.breaker]} to break.`;
     this.message = what;
+    this.notable = true;
   }
 
   judge(decl: ShotDeclaration, before: BallState[], result: ShotResult): Judgement<unknown> {
@@ -170,6 +176,7 @@ export class Match {
     if (this.rackResult || this.winner !== null) return;
     const loser = this.turn.player;
     this.message = `${this.config.players[loser]} concedes the ${this.unit}.`;
+    this.notable = true;
     this.endRack({ winner: 1 - loser, reason: 'conceded' });
   }
 
@@ -189,6 +196,15 @@ export class Match {
     this.turn = j.turn;
     this.balls = j.balls;
     this.message = this.names(j.message);
+    const t = j.turn;
+    this.notable =
+      j.fouls.length > 0 ||
+      !!j.frame ||
+      !!j.rerack ||
+      !!t.decision ||
+      t.ballInHand !== 'none' ||
+      !!t.freeBall ||
+      t.canPushOut;
     if (j.rerack) this.rerack(j.rerack.breaker);
   }
 }

@@ -83,3 +83,13 @@ These are for tuning in the lab and for playtests in M2:
 - **No cloth nap.** Snooker nap drift is not modelled.
 - **Cross-engine determinism has only been verified in Node (V8).** The golden tests should also run in
   WebKit and Firefox once Playwright tests are added in M2.
+
+## Cue clearance
+
+The cue can't pass through the cushion, the rail or another ball (`cue-clearance.ts`). Before a shot,
+the cue's elevation is raised to the lowest angle at which its tapered shaft clears the cushion top,
+the rail top and every ball along its length, measured from where the tip meets the cue ball, so
+hitting higher (follow) needs less lift than hitting low. A real cue always has a few degrees of
+natural lift over the rail; the game's 0° stands for that, so only elevation beyond about 3° is forced.
+The game shows the forced angle in red on the spin widget ("raised to clear" in the spin sheet), and
+the AI simulates its shots with the same raised cue.
