@@ -322,6 +322,23 @@ export class MatchHud {
       h('option', { value: 'international' }, 'International / Ultimate Pool'),
       h('option', { value: 'wepf' }, 'World Eightball (WEPF / EPA)'),
     );
+    const opponent = h('select', { ariaLabel: 'Opponent' });
+    opponent.append(h('option', { value: '' }, 'Human (pass the device)'));
+    for (const [lvl, label] of [
+      [1, 'Beginner'],
+      [2, 'Amateur'],
+      [3, 'Club'],
+      [4, 'Semi-pro'],
+      [5, 'Pro'],
+    ] as const) {
+      opponent.append(h('option', { value: String(lvl) }, `Computer: ${label}`));
+    }
+    opponent.addEventListener('change', () => {
+      const label = opponent.selectedOptions[0]?.textContent ?? '';
+      if (opponent.value && (name2.value === 'Player 2' || name2.value.startsWith('CPU'))) {
+        name2.value = `CPU (${label.replace('Computer: ', '')})`;
+      } else if (!opponent.value && name2.value.startsWith('CPU')) name2.value = 'Player 2';
+    });
     const englishOpts = h('div', { hidden: true });
     englishOpts.append(h('div', { className: 'row' }, h('label', {}, 'Rules'), preset));
     const reds = h('select', { ariaLabel: 'Reds' });
@@ -338,6 +355,7 @@ export class MatchHud {
           missRule: missRule.checked,
         },
         english: preset.value as MatchConfig['english'],
+        ai: opponent.value ? Number(opponent.value) : null,
         game: game.value as MatchConfig['game'],
         players: [name1.value.trim() || 'Player 1', name2.value.trim() || 'Player 2'],
         raceTo: Number(race.value),
@@ -370,6 +388,7 @@ export class MatchHud {
       h('h2', {}, 'New match'),
       h('div', { className: 'row' }, h('label', {}, 'Game'), game),
       h('div', { className: 'row' }, h('label', {}, 'Player 1'), name1),
+      h('div', { className: 'row' }, h('label', {}, 'Opponent'), opponent),
       h('div', { className: 'row' }, h('label', {}, 'Player 2'), name2),
       h('div', { className: 'row' }, raceLabel, race),
       poolOpts,

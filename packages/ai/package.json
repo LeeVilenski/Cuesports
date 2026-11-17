@@ -1,0 +1,17 @@
+{
+  "name": "@cuesports/ai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cuesports/physics": "workspace:*",
+    "@cuesports/rules": "workspace:*",
+    "@cuesports/shared": "workspace:*"
+  }
+}

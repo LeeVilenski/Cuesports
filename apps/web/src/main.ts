@@ -35,6 +35,8 @@ import { GuideView } from './render/guide-view';
 import { buildTableView, WELL_DEPTH, type TableView } from './render/table-view';
 import { Hud } from './ui/hud';
 import { MatchHud, type CallChoice } from './ui/match-hud';
+import { chooseDecision } from '@cuesports/ai';
+import { AiClient } from './game/ai-client';
 import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
 import { canPlaceCueBall, numberedOnTable, pocketName, type ShotDeclaration } from '@cuesports/rules';
 
@@ -120,6 +122,12 @@ let dirty = true;
 /** The 9-ball match being played, or null in practice. */
 let match: Match | null = null;
 let decl: ShotDeclaration = {};
+const aiClient = new AiClient();
+/** The computer is thinking or playing its shot. */
+let aiBusy = false;
+/** The player at the table is the computer (inputs are ignored). */
+const aiTurn = (): boolean =>
+  !!match && match.isAi(match.turn.player) && !match.rackResult && match.winner === null;
 /** The player's own call (10-ball); null means call automatically from the aim. */
 let manualCall: CallChoice = null;
 let autoCall: CallChoice = null;
@@ -195,7 +203,7 @@ function syncTurn(): void {
   });
   matchHud.setPushAvailable(t.canPushOut && !match.rackResult);
   matchHud.showDecision(
-    t.decision ? match.names(t.decision.prompt) : null,
+    t.decision && !match.isAi(t.player) ? match.names(t.decision.prompt) : null,
     (t.decision?.choices ?? []).map((c) => ({ ...c, label: match!.names(c.label) })),
   );
   placing = t.ballInHand !== 'none' && !match.rackResult;
@@ -220,6 +228,7 @@ function syncTurn(): void {
           : '';
   matchHud.say(match.message + hand, hand ? 5000 : 3500);
   status(`${match.config.players[t.player]} to play`);
+  window.setTimeout(maybeAiTurn, 400);
   if (match.rackResult) {
     const w = match.config.players[match.rackResult.winner]!;
     const score = `${match.config.players[0]} ${match.score[0]} – ${match.score[1]} ${match.config.players[1]}`;
@@ -258,7 +267,7 @@ function status(extra = ''): void {
 // Shooting
 
 function shoot(p: number): void {
-  if (phase !== 'aim') return;
+  if (phase !== 'aim' || aiTurn()) return;
   if (match && (match.turn.decision || match.rackResult)) return;
   const cue = cueBall();
   if (!cue || cue.state === 'pocketed') return;
@@ -274,17 +283,24 @@ function shoot(p: number): void {
       else if (call) decl = { call };
     }
   }
+  strike(
+    { ...shot, speed: strokeSpeed(powerToSpeed(p, game.maxSpeed), shot.tip, cue.mass, DEFAULT_CUE.mass) },
+    decl,
+    p,
+  );
+}
+
+/** Takes a shot exactly as given (used by the player's stroke and by the AI). */
+function strike(input: ShotInput, declaration: ShotDeclaration, pullVisual: number): void {
+  decl = declaration;
   hud.setPlacingAllowed(!match);
   placing = false;
   hud.setPlacing(false);
-  shot = {
-    ...shot,
-    speed: strokeSpeed(powerToSpeed(p, game.maxSpeed), shot.tip, cue.mass, DEFAULT_CUE.mass),
-  };
+  shot = { ...input };
   const before = balls.map(cloneBall);
   phase = 'striking';
   strikeT = 0;
-  pull = p;
+  pull = pullVisual;
   pending = null;
   hud.setBusy(true);
   const s = structuredClone(shot);
@@ -351,6 +367,77 @@ function endPlayback(): void {
       .join(' · '),
   );
   dirty = true;
+}
+
+/** Lets the computer take its turn: answer a decision, or think, place the cue ball and play. */
+function maybeAiTurn(): void {
+  if (!match || aiBusy || phase !== 'aim' || !aiTurn()) return;
+  const m = match;
+  const t = m.turn;
+  aiBusy = true;
+  hud.setBusy(true);
+  placing = false;
+  hud.setPlacing(false);
+  const input = {
+    game: m.config.game,
+    options: m.ruleOptions,
+    state: m.state,
+    turn: t,
+    balls: balls.map(cloneBall),
+    me: t.player,
+    level: m.config.ai ?? 3,
+    seed: (Math.random() * 2 ** 31) | 0,
+    simTable,
+    budgetMs: 1500,
+  };
+  if (t.decision) {
+    const choice = chooseDecision({
+      ruleset: m.ruleset,
+      options: m.ruleOptions,
+      state: m.state,
+      turn: t,
+      balls,
+      me: t.player,
+      level: input.level,
+      seed: input.seed,
+    });
+    const label = t.decision.choices.find((c) => c.id === choice)?.label ?? choice;
+    matchHud.say(`${m.config.players[t.player]}: ${m.names(label)}`);
+    window.setTimeout(() => {
+      aiBusy = false;
+      if (match !== m) return;
+      m.decide(choice);
+      balls = m.balls.map(cloneBall);
+      if (m.reracked) ballsView.setBalls(balls);
+      else ballsView.showState(balls);
+      hud.setBusy(false);
+      syncTurn();
+    }, 1100);
+    return;
+  }
+  status(`${m.config.players[t.player]} is thinking…`);
+  const started = performance.now();
+  void aiClient.choose(input).then(({ ai }) => {
+    if (match !== m || phase !== 'aim') {
+      aiBusy = false;
+      return;
+    }
+    // Show the decision for a moment: place the cue ball, line up, then strike.
+    const wait = Math.max(0, 700 - (performance.now() - started));
+    window.setTimeout(() => {
+      if (match !== m) return;
+      if (ai.place) placeCue(ai.place, true);
+      shot = { ...ai.shot };
+      rig.followAimInstantly();
+      status(`${m.config.players[t.player]}: ${ai.label}`);
+      dirty = true;
+      window.setTimeout(() => {
+        if (match !== m) return;
+        aiBusy = false;
+        strike(ai.shot, ai.decl, 0.5);
+      }, 900);
+    }, wait);
+  });
 }
 
 /** Puts a potted cue ball back at its starting spot (nudged clear of other balls). Rules come in M3. */
@@ -548,7 +635,7 @@ function aimAtPoint(p: { x: number; y: number }): void {
 }
 
 canvas.addEventListener('pointerdown', (e) => {
-  if (rig.mode === 'free') return;
+  if (rig.mode === 'free' || aiTurn()) return;
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: e.timeStamp });
   if (pointers.size === 2) {
@@ -565,6 +652,10 @@ canvas.addEventListener('pointerdown', (e) => {
 canvas.addEventListener('pointermove', (e) => {
   const prev = pointers.get(e.pointerId);
   if (!prev || rig.mode === 'free') return;
+  if (aiTurn()) {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: e.timeStamp });
+    return;
+  }
   const cur = { x: e.clientX, y: e.clientY, t: e.timeStamp };
   pointers.set(e.pointerId, cur);
   if (pointers.size >= 2 && pinch) {
@@ -614,9 +705,9 @@ canvas.addEventListener(
   { passive: false },
 );
 
-function placeCue(p: { x: number; y: number }): void {
+function placeCue(p: { x: number; y: number }, force = false): void {
   const cue = cueBall();
-  if (!cue || !canPlace(cue, p)) return;
+  if (!cue || (!force && !canPlace(cue, p))) return;
   cue.pos = p;
   cue.state = 'stationary';
   ballsView.showState(balls);
@@ -697,7 +788,7 @@ function frame(now: number): void {
   if (match && phase === 'aim') {
     const pocket = guide?.object ? pocketAhead(game.table, guide.object.from, guide.object.dir) : null;
     autoCall = guide?.object && pocket ? { ball: guide.object.id, pocket } : null;
-    const free = !match.turn.decision && !match.rackResult;
+    const free = !match.turn.decision && !match.rackResult && !aiTurn();
     if (match.turn.mustNominate) {
       const aimed = guide?.object?.id ?? null;
       autoNominate = aimed && match.turn.targets.includes(aimed) ? aimed : null;

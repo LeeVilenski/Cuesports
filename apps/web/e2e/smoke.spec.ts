@@ -163,3 +163,36 @@ test('plays English pool: International rules break from baulk', async ({ page }
   expect(after.message).not.toMatch(/\{p\d\}/);
   expect(errors).toEqual([]);
 });
+
+test('plays against the computer: it thinks in a worker and takes its own shots', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.getByLabel('Opponent').selectOption('3');
+  await expect(page.getByLabel('Player 2 name')).toHaveValue('CPU (Club)');
+  await page.getByRole('button', { name: 'Start' }).click();
+  // The human breaks.
+  await page.evaluate(() => window.__cuesports.shoot(0.9));
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'playing', null, { timeout: 30_000 });
+  await page.evaluate(() => window.__cuesports.fastForward());
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'aim', null, { timeout: 30_000 });
+  // Keep playing until the computer has taken a shot: when it is the computer's turn it must shoot on
+  // its own; on the human's turn, play a soft shot.
+  let aiShots = 0;
+  for (let i = 0; i < 6 && aiShots === 0; i++) {
+    const m = await page.evaluate(() => window.__cuesports.state().match!);
+    if (m.turn.player === 1) {
+      await page.waitForFunction(() => window.__cuesports.state().phase !== 'aim', null, { timeout: 30_000 });
+      aiShots++;
+    } else {
+      await page.evaluate(() => window.__cuesports.shoot(0.3));
+    }
+    await page.waitForFunction(() => window.__cuesports.state().phase === 'playing', null, {
+      timeout: 30_000,
+    });
+    await page.evaluate(() => window.__cuesports.fastForward());
+    await page.waitForFunction(() => window.__cuesports.state().phase === 'aim', null, { timeout: 30_000 });
+  }
+  expect(aiShots).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});

@@ -30,6 +30,8 @@ export interface MatchConfig {
   snooker: SnookerOptions;
   /** English pool rulebook preset. */
   english: EnglishPreset;
+  /** Skill level (1–5) of the computer playing as player 2, or null for a second human. */
+  ai: number | null;
 }
 
 export const DEFAULT_MATCH: MatchConfig = {
@@ -40,6 +42,7 @@ export const DEFAULT_MATCH: MatchConfig = {
   rules: NINE_BALL.defaults,
   snooker: SNOOKER.defaults,
   english: 'international',
+  ai: null,
 };
 
 /** Frame points, current break and points remaining (snooker). */
@@ -93,6 +96,16 @@ export class Match {
 
   get table() {
     return this.ruleset.table;
+  }
+
+  /** The ruleset's options for this match (passed to the AI). */
+  get ruleOptions(): unknown {
+    return this.options;
+  }
+
+  /** Whether the given player is the computer. */
+  isAi(player: number): boolean {
+    return this.config.ai !== null && player === 1;
   }
 
   get isSnooker(): boolean {

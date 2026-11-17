@@ -35,6 +35,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@cuesports/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@cuesports/physics':
         specifier: workspace:*
         version: link:../../packages/physics
@@ -63,6 +66,18 @@ importers:
       workbox-window:
         specifier: ^7.4.1
         version: 7.4.1
+
+  packages/ai:
+    dependencies:
+      '@cuesports/physics':
+        specifier: workspace:*
+        version: link:../physics
+      '@cuesports/rules':
+        specifier: workspace:*
+        version: link:../rules
+      '@cuesports/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/physics:
     dependencies:
