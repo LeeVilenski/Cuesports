@@ -24,7 +24,7 @@ trajectory frames at `sampleRate` Hz, and the final ball states. Rulesets judge 
 | Part | Model |
 |---|---|
 | Free motion | Closed-form sliding, rolling and spinning states with μs, μr and μsp. Each step is split at state transitions. |
-| Cue strike | Impulse along the cue axis at the tip contact point, sized by an elastic cue/ball collision with tip restitution. Squirt uses Alciatore's end-mass formula. Elevation tilts the spin axis, giving swerve and masse. Offsets beyond the miscue limit miscue. |
+| Cue strike | Impulse along the cue axis at the tip contact point, sized by an elastic cue/ball collision with tip restitution. Squirt uses Alciatore's end-mass formula; the default cue is a low-deflection shaft (4.5 g end mass, about 1.5° of squirt at half-ball side). The aiming guide can follow the squirted launch direction. Elevation tilts the spin axis, giving swerve and masse. Offsets beyond the miscue limit miscue. |
 | Ball–ball | Impulse with restitution plus friction, using Alciatore's speed-dependent μ(v) = a + b·e^(−c·v). This gives cut-induced and spin-induced throw, capped at the gearing (no-slip) limit. Works with unequal balls (the smaller English pool cue ball). |
 | Cushions (values) | Restitution 0.85 at low speed for pool (pooltool's default), 0.8 for snooker, falling by 0.04 per m/s of impact speed. It was 0.92 at first, which made cue balls too lively after the first cushion. |
 | Cushions | Mathavan, Jackson & Parkin (2010): the impulse is integrated in small steps, with friction at both the cushion nose (above the ball's equator) and the slate. Restitution falls with impact speed. |

@@ -2,7 +2,7 @@ import { applyStrike, makeBall } from '@cuesports/physics';
 import { AMERICAN_POOL_9FT as T, DEFAULT_CUE } from '@cuesports/shared';
 import { describe, expect, it } from 'vitest';
 import { powerToSpeed, strokeSpeed } from './games';
-import { computeGuide } from './guide';
+import { computeGuide, launchDirection } from './guide';
 
 describe('aiming guide', () => {
   const cue = makeBall('cue', T.balls.cue, { x: -0.5, y: 0 });
@@ -62,5 +62,28 @@ describe('stroke compensation', () => {
     ]) {
       expect(launch(tip) / centre).toBeGreaterThan(0.75);
     }
+  });
+});
+
+describe('launch direction (guide with squirt)', () => {
+  const cue = makeBall('cue', T.balls.cue, { x: 0, y: 0 });
+  const shotWith = (a: number) => ({ ball: 'cue', aim: 0.3, elevation: 0, tip: { a, b: 0 }, speed: 2 });
+
+  it('is the aim for a centre-ball hit', () => {
+    expect(launchDirection(cue, shotWith(0))).toBeCloseTo(0.3, 12);
+  });
+
+  it('turns left for right-hand side and right for left-hand side, by a degree or two at most', () => {
+    const right = launchDirection(cue, shotWith(0.4)) - 0.3;
+    const left = launchDirection(cue, shotWith(-0.4)) - 0.3;
+    expect(right).toBeGreaterThan(0);
+    expect(left).toBeCloseTo(-right, 12);
+    expect((right * 180) / Math.PI).toBeLessThan(2);
+  });
+
+  it('matches where the cue ball really goes', () => {
+    const b = { ...cue, pos: { ...cue.pos } };
+    applyStrike(b, shotWith(0.3));
+    expect(Math.atan2(b.vel.y, b.vel.x)).toBeCloseTo(launchDirection(cue, shotWith(0.3)), 12);
   });
 });

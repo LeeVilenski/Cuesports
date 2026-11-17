@@ -14,7 +14,7 @@ export interface HudCallbacks {
   onGame(id: string): void;
   onRerack(): void;
   onClothSpeed(speed: 'fast' | 'medium' | 'slow'): void;
-  onOption(name: 'guide' | 'overview', on: boolean): void;
+  onOption(name: 'guide' | 'squirt' | 'overview', on: boolean): void;
 }
 
 export interface GameOption {
@@ -225,7 +225,7 @@ export class Hud {
       h('button', { className: 'chip', onclick: () => cb.onUndo() }, 'Undo'),
     );
 
-    const check = (name: 'guide' | 'overview', label: string, on: boolean) => {
+    const check = (name: 'guide' | 'squirt' | 'overview', label: string, on: boolean) => {
       const input = h('input', { type: 'checkbox', checked: on });
       input.addEventListener('change', () => cb.onOption(name, input.checked));
       return h('label', { className: 'check' }, input, ' ', label);
@@ -237,6 +237,7 @@ export class Hud {
       h('div', { className: 'row' }, h('label', {}, 'Cloth speed'), this.clothSelect),
       h('button', { className: 'chip', onclick: () => cb.onRerack() }, 'Re-rack'),
       check('guide', 'Aiming guide', true),
+      check('squirt', 'Guide shows squirt from side (off = aim for it yourself)', true),
       check('overview', 'Rise to an overview during the shot', true),
       h(
         'p',

@@ -102,7 +102,9 @@ export interface CueSpec {
 
 export const DEFAULT_CUE: CueSpec = {
   mass: 0.54,
-  endMass: 0.008,
+  // A low-deflection shaft: about 1.5° of squirt at half-ball side (a standard shaft, ~8 g, gives
+  // about 2.5°). Even a little side squirts the cue ball enough to matter over a metre.
+  endMass: 0.0045,
   tipRestitution: 0.75,
   miscueLimit: 0.55,
 };
