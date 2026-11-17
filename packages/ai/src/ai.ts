@@ -326,6 +326,54 @@ export function withErrors(shot: ShotInput, sk: SkillProfile, rng: Rng): ShotInp
   };
 }
 
+/**
+ * Second stage of the search: the best few pots are retried with a range of follow and draw at two
+ * paces, and (Semi-pro and up) the best of those with side, so the cue ball is sent where the next
+ * shot is easiest. Results are merged into `scored`, best first.
+ */
+function refineSpin(
+  input: AiInput,
+  sk: SkillProfile,
+  scored: { c: Candidate; s: number }[],
+  outOfTime: () => boolean,
+): void {
+  const seen = new Set<string>();
+  const bases: Candidate[] = [];
+  for (const e of scored) {
+    if (!e.c.label.startsWith('pot') || seen.has(e.c.label)) continue;
+    seen.add(e.c.label);
+    bases.push(e.c);
+    if (bases.length >= 3) break;
+  }
+  const add = (c: Candidate) => {
+    scored.push({ c, s: evaluate(input, c, sk, null) });
+  };
+  const variant = (c: Candidate, tip: { a: number; b: number }, pace: number): Candidate => ({
+    ...c,
+    shot: { ...c.shot, tip, speed: clamp(c.shot.speed * pace, MIN_CUE, MAX_CUE) },
+  });
+  for (const base of bases) {
+    for (const b of [-0.45, -0.25, 0.1, 0.25, 0.42]) {
+      for (const pace of [0.9, 1.2]) {
+        if (outOfTime()) break;
+        add(variant(base, { a: 0, b }, pace));
+      }
+    }
+  }
+  scored.sort((x, y) => y.s - x.s);
+  const best = scored[0];
+  if (sk.level >= 4 && best && best.c.label.startsWith('pot')) {
+    for (const a of [-0.35, -0.2, 0.2, 0.35]) {
+      if (outOfTime()) break;
+      const b = best.c.shot.tip.b;
+      const l = Math.hypot(a, b);
+      const k = l > 0.5 ? 0.5 / l : 1;
+      add(variant(best.c, { a: a * k, b: b * k }, 1));
+    }
+    scored.sort((x, y) => y.s - x.s);
+  }
+}
+
 /** Picks and returns the shot to play, with the player's errors already applied. */
 export function chooseShot(input: AiInput): AiShot {
   const sk = skillFor(input.level);
@@ -344,6 +392,7 @@ export function chooseShot(input: AiInput): AiShot {
     if (now() - start > budget * 0.75 && scored.length >= 8) break;
   }
   scored.sort((a, b) => b.s - a.s);
+  if (sk.level >= 3) refineSpin(input, sk, scored, () => now() - start > budget * 0.85);
   // Robustness: re-run the best few with errors and average.
   if (sk.robustness > 0) {
     for (const entry of scored.slice(0, 5)) {

@@ -242,3 +242,15 @@ describe('AI labels', () => {
     expect(ai.label).toMatch(/the 1 /);
   });
 });
+
+describe('AI spin choice', () => {
+  it('does not follow in-off on a straight pot near the corner (stun or draw instead)', () => {
+    // The 1 a short way from the top-right corner on the diagonal; the cue ball straight behind it.
+    const balls = position({ cue: [0.82, 0.185], '1': [1.07, 0.435], '2': [-0.5, 0.2], '9': [-0.9, -0.4] });
+    for (const seed of [1, 2, 3]) {
+      const ai = chooseShot({ ...nineInput(balls, 5, seed), budgetMs: 3000 });
+      expect(ai.label).toMatch(/pot the 1/);
+      expect(ai.shot.tip.b).toBeLessThan(0.15);
+    }
+  });
+});

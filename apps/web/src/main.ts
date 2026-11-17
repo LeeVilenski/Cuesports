@@ -323,9 +323,16 @@ function startPlayback(): void {
   navigator.vibrate?.(12);
 }
 
+/** Every shot starts from a centre-ball hit with a level cue. */
+function resetSpin(): void {
+  shot = { ...shot, tip: { a: 0, b: 0 }, elevation: 0 };
+  hud.showSpin(shot.tip, 0);
+}
+
 function endPlayback(): void {
   if (!playing) return;
   const result = playing;
+  resetSpin();
   if (replaying || match) {
     if (match && !replaying && last) match.judge(decl, last.before, result);
     replaying = false;
@@ -430,6 +437,7 @@ function maybeAiTurn(): void {
       if (match !== m) return;
       if (ai.place) placeCue(ai.place, true);
       shot = { ...ai.shot };
+      hud.showSpin(ai.shot.tip, (ai.shot.elevation * 180) / Math.PI);
       rig.followAimInstantly();
       status(`${m.config.players[t.player]}: ${ai.label}`);
       dirty = true;

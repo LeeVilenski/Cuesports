@@ -18,9 +18,13 @@
    Scores: winning or losing the frame dominates; fouls cost a lot; snooker points count; keeping the
    table is worth more with an easy next pot (straighter, shorter, unobstructed); handing over the table
    costs according to how easy the opponent's best pot is.
-3. **Robustness.** Stronger players re-run their best few shots with their own errors applied and
+3. **Spin refinement** (Club and up). The best three pots are retried with a range of follow and draw
+   (from firm draw to firm follow) at two paces; Semi-pro and Pro then try the best of those with left
+   and right side. Every variant is simulated and scored on where the cue ball ends up, so the AI
+   chooses stun, follow, draw or side for position (and avoids following in-off).
+4. **Robustness.** Stronger players re-run their best few shots with their own errors applied and
    average, so they prefer shots that still work when slightly mis-hit.
-4. **Execution.** The chosen shot is played with the player's aim, power and spin errors.
+5. **Execution.** The chosen shot is played with the player's aim, power and spin errors.
 
 The AI calls 10-ball shots, nominates snooker colours and free balls, and answers decisions: push-out
 replies and 10-ball options (play if there is a reasonable pot), snooker after a foul (play on with a
