@@ -1,5 +1,5 @@
-import type { BallState } from '@cuesports/physics';
-import type { TableSpec, Vec2 } from '@cuesports/shared';
+import { applyStrike, type BallState, type ShotInput } from '@cuesports/physics';
+import { DEFAULT_CUE, type CueSpec, type TableSpec, type Vec2 } from '@cuesports/shared';
 
 export interface Guide {
   from: Vec2;
@@ -70,4 +70,11 @@ export function computeGuide(
     object: null,
     tangent: null,
   };
+}
+
+/** Direction the cue ball actually leaves the tip: the aim turned by squirt (left for right-hand side). */
+export function launchDirection(ball: BallState, shot: ShotInput, cue: CueSpec = DEFAULT_CUE): number {
+  const probe = { ...ball, pos: { ...ball.pos }, vel: { x: 0, y: 0 }, spin: { x: 0, y: 0, z: 0 } };
+  const out = applyStrike(probe, shot, cue);
+  return shot.aim + out.squirt;
 }

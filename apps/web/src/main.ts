@@ -25,7 +25,7 @@ import {
   type ClothSpeed,
   type GameDef,
 } from './game/games';
-import { computeGuide } from './game/guide';
+import { computeGuide, launchDirection } from './game/guide';
 import { SimClient } from './game/sim-client';
 import { BallsView } from './render/balls-view';
 import { CameraRig, type CameraMode } from './render/cameras';
@@ -109,6 +109,8 @@ let playing: ShotResult | null = null;
 let playT = 0;
 let last: { before: BallState[]; shot: ShotInput; result: ShotResult } | null = null;
 let showGuide = true;
+/** The guide follows the cue ball's real launch direction, including squirt from side. */
+let guideSquirt = true;
 let useOverview = true;
 let placing = false;
 let dirty = true;
@@ -324,6 +326,7 @@ const hud = new Hud(
     },
     onOption: (name, on) => {
       if (name === 'guide') showGuide = on;
+      else if (name === 'squirt') guideSquirt = on;
       else useOverview = on;
       dirty = true;
     },
@@ -504,7 +507,9 @@ function frame(now: number): void {
     }
   }
   guideView.update(
-    showGuide && phase === 'aim' && !placing ? computeGuide(game.table, balls, 'cue', shot.aim) : null,
+    showGuide && phase === 'aim' && !placing && cue
+      ? computeGuide(game.table, balls, 'cue', guideSquirt ? launchDirection(cue, shot) : shot.aim)
+      : null,
   );
 
   if (dirty) {
