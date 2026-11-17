@@ -7,7 +7,7 @@ import type { Rng, TableSpec } from '@cuesports/shared';
  */
 
 /** Where the incoming player may place the cue ball. */
-export type BallInHand = 'none' | 'anywhere' | 'behind-head-string';
+export type BallInHand = 'none' | 'anywhere' | 'behind-head-string' | 'in-d';
 
 export interface RuleOption {
   id: string;
@@ -33,6 +33,10 @@ export interface Turn {
   canPushOut: boolean;
   /** The shot must be called (ball and pocket) or declared a safety. */
   mustCall: boolean;
+  /** The player must nominate a ball (snooker: a colour after a red, or a free ball). */
+  mustNominate?: boolean;
+  /** A free ball has been awarded: any ball may be nominated as the ball on. */
+  freeBall?: boolean;
   /** A choice the player must make before anyone shoots (e.g. after a push out). */
   decision: Decision | null;
   isBreak: boolean;
@@ -47,11 +51,22 @@ export interface ShotDeclaration {
   call?: { ball: string; pocket: string };
   /** A declared safety in a call-shot game: balls potted stay down and the turn passes. */
   safety?: boolean;
+  /** Nominated ball (snooker: the colour after a red, or the free ball). */
+  nominate?: string;
 }
 
 export interface Foul {
   code:
-    'scratch' | 'no-contact' | 'wrong-ball-first' | 'no-rail' | 'off-table' | 'illegal-break' | 'three-fouls';
+    | 'scratch'
+    | 'no-contact'
+    | 'wrong-ball-first'
+    | 'no-rail'
+    | 'off-table'
+    | 'illegal-break'
+    | 'three-fouls'
+    | 'wrong-ball-potted'
+    | 'no-nomination'
+    | 'three-misses';
   message: string;
 }
 

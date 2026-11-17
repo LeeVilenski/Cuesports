@@ -14,6 +14,7 @@ export interface HudCallbacks {
   onGame(id: string): void;
   onRerack(): void;
   onNewMatch(): void;
+  onConcede(): void;
   onClothSpeed(speed: 'fast' | 'medium' | 'slow'): void;
   onOption(name: 'guide' | 'squirt' | 'overview', on: boolean): void;
 }
@@ -244,6 +245,17 @@ export class Hud {
           },
         },
         'New match',
+      ),
+      h(
+        'button',
+        {
+          className: 'chip',
+          onclick: () => {
+            this.toggle(this.menu);
+            cb.onConcede();
+          },
+        },
+        'Concede rack / frame',
       ),
       h('div', { className: 'row' }, h('label', {}, 'Practice'), this.gameSelect),
       h('div', { className: 'row' }, h('label', {}, 'Cloth speed'), this.clothSelect),

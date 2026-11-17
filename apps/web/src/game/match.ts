@@ -1,31 +1,30 @@
 import type { BallState, ShotResult } from '@cuesports/physics';
 import {
   NINE_BALL,
+  pointsRemaining,
+  SNOOKER,
   TEN_BALL,
   type Judgement,
-  type Ruleset,
   type RotationOptions,
-  type RotationState,
+  type Ruleset,
   type ShotDeclaration,
+  type SnookerOptions,
+  type SnookerState,
   type Turn,
 } from '@cuesports/rules';
 import { Rng } from '@cuesports/shared';
 
-export type MatchGame = 'nine-ball' | 'ten-ball';
-
-export const MATCH_GAMES: Record<MatchGame, Ruleset<RotationState, RotationOptions>> = {
-  'nine-ball': NINE_BALL,
-  'ten-ball': TEN_BALL,
-};
+export type MatchGame = 'nine-ball' | 'ten-ball' | 'snooker';
 
 export interface MatchConfig {
   game: MatchGame;
   players: [string, string];
-  /** Racks needed to win the match. */
+  /** Racks (or frames) needed to win the match. */
   raceTo: number;
-  /** Who breaks the next rack. */
+  /** Who breaks the next rack. (Snooker alternates the break-off.) */
   breaks: 'winner' | 'alternate';
   rules: RotationOptions;
+  snooker: SnookerOptions;
 }
 
 export const DEFAULT_MATCH: MatchConfig = {
@@ -34,20 +33,36 @@ export const DEFAULT_MATCH: MatchConfig = {
   raceTo: 3,
   breaks: 'alternate',
   rules: NINE_BALL.defaults,
+  snooker: SNOOKER.defaults,
 };
 
-/** A local two-player 9-ball or 10-ball match: racks, scores and turns. The ruleset does the judging. */
+/** Frame points, current break and points remaining (snooker). */
+export interface FramePoints {
+  points: [number, number];
+  break: number;
+  remaining: number;
+}
+
+// The match only needs the common ruleset interface; each game's state stays inside its ruleset.
+type AnyRuleset = Ruleset<unknown, unknown>;
+
+/**
+ * A local two-player match of 9-ball, 10-ball or snooker: racks or frames, scores and turns. The
+ * ruleset does the judging.
+ */
 export class Match {
-  readonly ruleset: Ruleset<RotationState, RotationOptions>;
+  readonly ruleset: AnyRuleset;
+  private readonly options: unknown;
+  /** Racks or frames won. */
   score: [number, number] = [0, 0];
   rack = 0;
   breaker = 0;
-  state!: RotationState;
+  state: unknown;
   turn!: Turn;
   balls: BallState[] = [];
   /** Message about the last shot or decision, with names filled in. */
   message = '';
-  /** Set when a rack ends: who won it and why. */
+  /** Set when a rack or frame ends: who won it and why. */
   rackResult: { winner: number; reason: string } | null = null;
   /** Set when the match is over. */
   winner: number | null = null;
@@ -58,12 +73,33 @@ export class Match {
     seed = 1,
   ) {
     this.rng = new Rng(seed);
-    this.ruleset = MATCH_GAMES[config.game];
+    const games: Record<MatchGame, [AnyRuleset, unknown]> = {
+      'nine-ball': [NINE_BALL as AnyRuleset, config.rules],
+      'ten-ball': [TEN_BALL as AnyRuleset, config.rules],
+      snooker: [SNOOKER as AnyRuleset, config.snooker],
+    };
+    [this.ruleset, this.options] = games[config.game];
     this.startRack();
   }
 
   get table() {
     return this.ruleset.table;
+  }
+
+  get isSnooker(): boolean {
+    return this.config.game === 'snooker';
+  }
+
+  /** "rack" or "frame". */
+  get unit(): string {
+    return this.isSnooker ? 'frame' : 'rack';
+  }
+
+  /** Snooker frame points, break and points remaining, or null for pool. */
+  get framePoints(): FramePoints | null {
+    if (!this.isSnooker) return null;
+    const s = this.state as SnookerState;
+    return { points: s.scores, break: s.break, remaining: pointsRemaining(s, this.balls) };
   }
 
   /** Fills in player names in a ruleset message. */
@@ -74,32 +110,48 @@ export class Match {
   startRack(): void {
     this.rack++;
     this.rackResult = null;
-    const f = this.ruleset.newFrame(this.config.rules, this.rng, this.breaker);
+    const f = this.ruleset.newFrame(this.options, this.rng, this.breaker);
     this.state = f.state;
     this.turn = f.turn;
     this.balls = f.balls;
-    this.message = `Rack ${this.rack}: ${this.config.players[this.breaker]} to break.`;
+    const what = this.isSnooker
+      ? `Frame ${this.rack}: ${this.config.players[this.breaker]} to break off.`
+      : `Rack ${this.rack}: ${this.config.players[this.breaker]} to break.`;
+    this.message = what;
   }
 
-  judge(decl: ShotDeclaration, before: BallState[], result: ShotResult): Judgement<RotationState> {
-    const j = this.ruleset.judge(this.state, decl, before, result, this.config.rules);
+  judge(decl: ShotDeclaration, before: BallState[], result: ShotResult): Judgement<unknown> {
+    const j = this.ruleset.judge(this.state, decl, before, result, this.options);
     this.apply(j);
-    if (j.frame) {
-      this.score[j.frame.winner] = (this.score[j.frame.winner] ?? 0) + 1;
-      this.rackResult = j.frame;
-      if ((this.score[j.frame.winner] ?? 0) >= this.config.raceTo) this.winner = j.frame.winner;
-      else this.breaker = this.config.breaks === 'winner' ? j.frame.winner : 1 - this.breaker;
+    if (j.frame) this.endRack(j.frame);
+    return j;
+  }
+
+  decide(choice: string): Judgement<unknown> {
+    const j = this.ruleset.decide(this.state, choice, this.balls, this.options);
+    this.apply(j);
+    return j;
+  }
+
+  /** The player at the table concedes the rack or frame. */
+  concede(): void {
+    if (this.rackResult || this.winner !== null) return;
+    const loser = this.turn.player;
+    this.message = `${this.config.players[loser]} concedes the ${this.unit}.`;
+    this.endRack({ winner: 1 - loser, reason: 'conceded' });
+  }
+
+  private endRack(frame: { winner: number; reason: string }): void {
+    this.score[frame.winner] = (this.score[frame.winner] ?? 0) + 1;
+    this.rackResult = frame;
+    if ((this.score[frame.winner] ?? 0) >= this.config.raceTo) this.winner = frame.winner;
+    else {
+      const alternate = this.isSnooker || this.config.breaks === 'alternate';
+      this.breaker = alternate ? 1 - this.breaker : frame.winner;
     }
-    return j;
   }
 
-  decide(choice: string): Judgement<RotationState> {
-    const j = this.ruleset.decide(this.state, choice, this.balls, this.config.rules);
-    this.apply(j);
-    return j;
-  }
-
-  private apply(j: Judgement<RotationState>): void {
+  private apply(j: Judgement<unknown>): void {
     this.state = j.state;
     this.turn = j.turn;
     this.balls = j.balls;

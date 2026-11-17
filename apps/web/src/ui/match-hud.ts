@@ -25,6 +25,13 @@ const h = <K extends keyof HTMLElementTagNameMap>(
   return e;
 };
 
+/** What a snooker player is on, in words. */
+function onLabel(turn: Turn): string {
+  if (turn.mustNominate) return 'a colour';
+  if (turn.targets.length > 1 && turn.targets.every((t) => t.startsWith('red'))) return 'red';
+  return turn.targets[0] ?? '';
+}
+
 /** Scoreboard, shot messages and the match sheets (setup, push-out decision, rack result). */
 export class MatchHud {
   readonly root = h('div', { className: 'match-hud' });
@@ -65,17 +72,20 @@ export class MatchHud {
       score: [number, number];
       raceTo: number;
       turn: Turn;
+      /** Snooker: points in the frame, current break, points remaining. */
+      frame?: { points: [number, number]; break: number; remaining: number } | null;
     } | null,
   ): void {
     this.board.hidden = info === null;
     if (!info) return;
-    const { players, score, raceTo, turn } = info;
+    const { players, score, raceTo, turn, frame } = info;
     const side = (i: number) =>
       h(
         'div',
         { className: `side${turn.player === i ? ' active' : ''}` },
         h('span', { className: 'name' }, players[i]!),
-        h('span', { className: 'score' }, String(score[i])),
+        frame ? h('span', { className: 'frames', title: 'Frames' }, `(${score[i]})`) : '',
+        h('span', { className: 'score' }, String(frame ? frame.points[i] : score[i])),
         turn.player === i && turn.fouls > 0
           ? h('span', { className: 'fouls', title: 'Fouls in a row' }, '●'.repeat(turn.fouls))
           : '',
@@ -93,11 +103,20 @@ export class MatchHud {
           })(),
         )
       : '';
-    this.board.replaceChildren(
-      side(0),
-      h('div', { className: 'mid' }, h('small', {}, `race to ${raceTo}`), on),
-      side(1),
-    );
+    const mid = frame
+      ? h(
+          'div',
+          { className: 'mid' },
+          h('small', {}, `best of ${raceTo * 2 - 1}`),
+          h(
+            'small',
+            {},
+            frame.break > 0 ? `break ${frame.break}` : turn.freeBall ? 'free ball' : `on: ${onLabel(turn)}`,
+          ),
+          h('small', {}, `${frame.remaining} left`),
+        )
+      : h('div', { className: 'mid' }, h('small', {}, `race to ${raceTo}`), on);
+    this.board.replaceChildren(side(0), mid, side(1));
   }
 
   setPushAvailable(can: boolean): void {
@@ -119,6 +138,37 @@ export class MatchHud {
           ? `Call: ${call.ball} → ${label(call.pocket)}${manual ? '' : ' (auto)'}`
           : 'Call a shot';
     this.callBtn.classList.toggle('on', manual);
+  }
+
+  /** Shows the nominated ball (snooker) on the call chip. */
+  showNomination(ball: string | null, manual: boolean, visible: boolean): void {
+    this.callBtn.hidden = !visible;
+    if (!visible) return;
+    this.callBtn.textContent = ball ? `Nominate: ${ball}${manual ? '' : ' (auto)'}` : 'Nominate a ball';
+    this.callBtn.classList.toggle('on', manual);
+  }
+
+  /** Lets the player nominate a ball (snooker). */
+  openNominatePicker(balls: string[], onPick: (ball: string | null) => void): void {
+    const done = (b: string | null) => {
+      this.picker.hidden = true;
+      onPick(b);
+    };
+    this.picker.replaceChildren(
+      h('h2', {}, 'Nominate a ball'),
+      h(
+        'div',
+        { className: 'row wrap' },
+        ...balls.map((b) => h('button', { className: 'chip', onclick: () => done(b) }, b)),
+      ),
+      h(
+        'div',
+        { className: 'row' },
+        h('button', { className: 'chip', onclick: () => done(null) }, 'Auto from aim'),
+        h('button', { className: 'chip', onclick: () => (this.picker.hidden = true) }, 'Cancel'),
+      ),
+    );
+    this.picker.hidden = false;
   }
 
   /** Lets the player pick a ball and pocket, or a safety. */
@@ -257,10 +307,21 @@ export class MatchHud {
     game.append(
       h('option', { value: 'nine-ball' }, '9-ball'),
       h('option', { value: 'ten-ball' }, '10-ball (call shot)'),
+      h('option', { value: 'snooker' }, 'Snooker'),
     );
+    const reds = h('select', { ariaLabel: 'Reds' });
+    for (const n of [15, 10, 6]) reds.append(h('option', { value: String(n) }, `${n} reds`));
+    const missRule = h('input', { type: 'checkbox', checked: true });
+    const poolOpts = h('div');
+    const snookerOpts = h('div', { hidden: true });
     const start = () => {
       this.setup.hidden = true;
       this.cb.onStart({
+        snooker: {
+          ...DEFAULT_MATCH.snooker,
+          reds: Number(reds.value) as 15 | 10 | 6,
+          missRule: missRule.checked,
+        },
         game: game.value as MatchConfig['game'],
         players: [name1.value.trim() || 'Player 1', name2.value.trim() || 'Player 2'],
         raceTo: Number(race.value),
@@ -268,14 +329,34 @@ export class MatchHud {
         rules: { ...DEFAULT_MATCH.rules, threeFoulRule: threeFoul.checked },
       });
     };
+    poolOpts.append(
+      h('div', { className: 'row' }, h('label', {}, 'Break'), breaks),
+      h('label', { className: 'check' }, threeFoul, ' Three fouls in a row lose the rack'),
+    );
+    snookerOpts.append(
+      h('div', { className: 'row' }, h('label', {}, 'Reds'), reds),
+      h(
+        'label',
+        { className: 'check' },
+        missRule,
+        ' Miss rule (pro): always call a miss when the ball on is not hit',
+      ),
+    );
+    const raceLabel = h('label', {}, 'Race to');
+    game.addEventListener('change', () => {
+      const snooker = game.value === 'snooker';
+      poolOpts.hidden = snooker;
+      snookerOpts.hidden = !snooker;
+      raceLabel.textContent = snooker ? 'Frames to win' : 'Race to';
+    });
     this.setup.append(
       h('h2', {}, 'New match'),
       h('div', { className: 'row' }, h('label', {}, 'Game'), game),
       h('div', { className: 'row' }, h('label', {}, 'Player 1'), name1),
       h('div', { className: 'row' }, h('label', {}, 'Player 2'), name2),
-      h('div', { className: 'row' }, h('label', {}, 'Race to'), race),
-      h('div', { className: 'row' }, h('label', {}, 'Break'), breaks),
-      h('label', { className: 'check' }, threeFoul, ' Three fouls in a row lose the rack'),
+      h('div', { className: 'row' }, raceLabel, race),
+      poolOpts,
+      snookerOpts,
       h(
         'p',
         { className: 'help' },

@@ -123,6 +123,8 @@ function describeFoul(f: Foul['code'], facts: ShotFacts, lowest: string | undefi
       return 'illegal break: nothing potted and fewer than four balls reached a cushion';
     case 'three-fouls':
       return 'three fouls in a row';
+    default:
+      return f;
   }
 }
 

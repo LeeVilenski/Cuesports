@@ -470,3 +470,8 @@ input {
     bottom: calc(112px + var(--safe-b));
   }
 }
+
+.scoreboard .frames {
+  font-size: 11px;
+  color: var(--muted);
+}

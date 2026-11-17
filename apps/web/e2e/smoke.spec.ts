@@ -118,3 +118,29 @@ test('plays 10-ball: after the break the shot is called automatically from the a
   }
   expect(errors).toEqual([]);
 });
+
+test('plays snooker: break-off from the D, then the scoreboard shows points and what is on', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.getByLabel('Game type').selectOption('snooker');
+  await page.getByLabel('Reds').selectOption('6');
+  await page.getByRole('button', { name: 'Start' }).click();
+  const balls = await page.evaluate(() =>
+    window.__cuesports.state().balls.filter((b) => b.id.startsWith('red')),
+  );
+  expect(balls).toHaveLength(6);
+  await expect(page.locator('.scoreboard')).toContainText('left');
+  const start = await page.evaluate(() => window.__cuesports.state().match!);
+  expect(start.turn.ballInHand).toBe('in-d');
+
+  await page.evaluate(() => window.__cuesports.shoot(0.4));
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'playing', null, { timeout: 30_000 });
+  await page.evaluate(() => window.__cuesports.fastForward());
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'aim', null, { timeout: 30_000 });
+  const after = await page.evaluate(() => window.__cuesports.state().match!);
+  expect(after.message).not.toMatch(/\{p\d\}/);
+  expect(errors).toEqual([]);
+});

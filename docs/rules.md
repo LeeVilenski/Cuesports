@@ -58,3 +58,28 @@ The match layer (`apps/web/src/game/match.ts`) adds players, a race to N racks a
 (alternate, or the winner).
 
 Not yet: the break box option, and fouls that need ball tracking in the hand (touching a ball, double hits).
+
+## Snooker (WPBSA)
+
+`packages/rules/src/snooker.ts`, with the snooker check in `snookered.ts`.
+
+- Reds 1, yellow 2, green 3, brown 4, blue 5, pink 6, black 7. 15 reds by default (10 or 6 as options).
+- Break-off from the D. While reds remain the player must hit a red; after potting one they nominate a
+  colour (the game nominates the colour you are aiming at; tap the chip to choose another), and the colour
+  is re-spotted. Once the reds are gone the colours are taken in order and stay down.
+- Re-spotting: own spot, else the highest-value free spot, else as near as possible to its own spot towards
+  the top cushion.
+- Fouls score the opponent 4, or the value of the ball on, the ball hit first, or a ball wrongly potted or
+  forced off the table, whichever is highest. An in-off gives ball in hand in the D.
+- After a foul the next player plays from where the balls lie or makes the offender play again. If the
+  offender failed to hit a ball on it is a miss (pro rule by default; the amateur option only calls it
+  when the striker was not snookered), and the next player may also have the balls replaced.
+- Three misses in a row with a clear view of a ball on lose the frame, with a warning after the second.
+- Snookered: no ball on can be hit on both extreme edges in a straight line. After a foul that leaves the
+  next player snookered they get a free ball: any ball nominated counts as the ball on.
+- Touching ball: playing away from a ball on that the cue ball rests against counts as hitting it.
+- A tie after the last black re-spots it; the player to go first is drawn by lot, and the next score or
+  foul ends the frame. Either player may concede.
+
+Not yet: an "angled" cue ball in the pocket jaws (counts as snookered), and the refinements to the miss
+rule when a player needs snookers.
