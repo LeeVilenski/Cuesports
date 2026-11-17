@@ -23,6 +23,8 @@ physics engine works.
 - **M4 All launch games:** playable. 10-ball (WPA, called shots), snooker (WPBSA, with free ball and the
   miss rule) and English pool (International / Ultimate Pool by default, or WEPF / EPA) as two-player
   matches. Snooker and English pool pockets are tighter and pace-sensitive.
+- **M5 AI:** play against the computer at five levels (Beginner to Pro) in every game. Shot search with the
+  real physics and rules, run in a Web Worker. See [docs/ai.md](docs/ai.md).
 
 ## Playing the prototype
 
@@ -61,6 +63,7 @@ diff in `packages/physics/src/__golden__/shots.json`.
 apps/web/            game app (Vite, PWA): src/render (Three.js), src/game (shot flow, worker), src/ui (HUD)
 packages/shared/     math, deterministic trig/exp, seeded RNG, table/ball specs and presets
 packages/physics/    simulation engine and tests
+packages/ai/         AI opponents: shot search over physics and rules, skill levels
 packages/rules/      rulesets (9-ball so far) judged from the physics event timeline, with scenario tests
 tools/physics-lab/   2D top-down harness for tuning the physics
 ```

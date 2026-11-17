@@ -14,7 +14,8 @@
     "@cuesports/physics": "workspace:*",
     "@cuesports/shared": "workspace:*",
     "three": "0.187.0",
-    "@cuesports/rules": "workspace:*"
+    "@cuesports/rules": "workspace:*",
+    "@cuesports/ai": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

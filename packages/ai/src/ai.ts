@@ -92,6 +92,10 @@ function declFor(input: AiInput, target: string, pocket: string | null, safety: 
   return {};
 }
 
+/** "red3" → "red", "y2" → "yellow", "7" → "7". */
+const ballName = (id: string): string =>
+  /^red\d+$/.test(id) ? 'red' : /^r\d+$/.test(id) ? 'red' : /^y\d+$/.test(id) ? 'yellow' : id;
+
 const describePocket = (id: string) =>
   id
     .replace('-', ' ')
@@ -229,7 +233,7 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
               shot: { ball: 'cue', aim, elevation: 0, tip, speed: clamp(base * m, MIN_CUE, MAX_CUE) },
               decl: declFor(input, t.id, p.id, false),
               ...(input.turn.ballInHand !== 'none' ? { place: spot } : {}),
-              label: `pot the ${t.id.replace(/\d+$/, '')} in the ${describePocket(p.id)}`,
+              label: `pot the ${ballName(t.id)} in the ${describePocket(p.id)}`,
             });
           }
       }
@@ -252,7 +256,7 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
             shot: { ball: 'cue', aim: base + f * half, elevation: 0, tip: { a: 0, b: 0 }, speed },
             decl: declFor(input, t.id, null, true),
             ...(input.turn.ballInHand !== 'none' ? { place: spot } : {}),
-            label: `play safe off the ${t.id.replace(/\d+$/, '')}`,
+            label: `play safe off the ${ballName(t.id)}`,
           });
         }
     }
@@ -351,8 +355,12 @@ export function chooseShot(input: AiInput): AiShot {
     scored.sort((a, b) => b.s - a.s);
   }
   let pick = scored[0];
-  if (pick && scored.length > 1 && rng.next() < sk.sloppiness)
-    pick = scored[1 + rng.int(Math.min(3, scored.length - 1))];
+  if (pick && rng.next() < sk.sloppiness) {
+    // A weaker player sometimes picks a lesser shot, but not one it can see is a foul.
+    const best = pick.s;
+    const alternatives = scored.slice(1, 5).filter((e) => e.s > -250 && e.s >= best - 400);
+    if (alternatives.length) pick = alternatives[rng.int(alternatives.length)];
+  }
   if (!pick) {
     const cue = input.balls.find((b) => b.id === 'cue')!;
     return {

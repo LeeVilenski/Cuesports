@@ -234,3 +234,11 @@ describe('AI decisions', () => {
     expect(chooseDecision(base(['play', 'again', 'replace'], { freeBall: true }))).toBe('play');
   });
 });
+
+describe('AI labels', () => {
+  it('names numbered balls by number and snooker/English balls by colour', () => {
+    const balls = position({ cue: [0.3, 0.1], '1': [0.9, 0.35], '9': [-0.8, -0.3] });
+    const ai = chooseShot(nineInput(balls, 5, 3));
+    expect(ai.label).toMatch(/the 1 /);
+  });
+});

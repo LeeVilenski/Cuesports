@@ -22,8 +22,8 @@ export const SKILLS: readonly SkillProfile[] = [
   {
     level: 1,
     name: 'Beginner',
-    aimSigma: 1.6,
-    powerSigma: 0.18,
+    aimSigma: 1.0,
+    powerSigma: 0.14,
     tipSigma: 0.08,
     position: 0,
     robustness: 0,
@@ -33,8 +33,8 @@ export const SKILLS: readonly SkillProfile[] = [
   {
     level: 2,
     name: 'Amateur',
-    aimSigma: 0.8,
-    powerSigma: 0.12,
+    aimSigma: 0.6,
+    powerSigma: 0.1,
     tipSigma: 0.05,
     position: 0.3,
     robustness: 0,
