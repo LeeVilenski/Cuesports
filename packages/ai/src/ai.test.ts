@@ -254,3 +254,38 @@ describe('AI spin choice', () => {
     }
   });
 });
+
+describe('AI plants and kicks', () => {
+  it('plays a plant when the ball on is lined up with another ball and a pocket', () => {
+    // The 1 directly behind the 5, both on the line to the top-right corner.
+    const balls = position({ cue: [0.2, 0.08], '1': [0.68, 0.31], '5': [0.95, 0.44], '9': [-0.8, -0.4] });
+    const ai = chooseShot({ ...nineInput(balls, 4, 2), budgetMs: 3000 });
+    // Either the explicit plant or a contact on the 1 that it has found pots the 5.
+    expect(ai.label).toMatch(/plant the 1 into the 5|play off the 1 to pot/);
+    const r = simulate(nineTable, balls, ai.shot, { sampleRate: 0 });
+    expect(shotFacts(r).firstContact).toBe('1');
+    expect(r.events.some((e) => e.type === 'pocket' && e.ball === '5')).toBe(true);
+  });
+
+  it('kicks off a cushion when snookered instead of running into the ball in front', () => {
+    // A wall of balls between the cue ball and the 1.
+    const balls = position({
+      cue: [-0.8, 0],
+      '1': [0.7, 0],
+      '2': [0, 0],
+      '3': [0, 0.058],
+      '4': [0, -0.058],
+      '5': [0, 0.116],
+      '6': [0, -0.116],
+      '9': [0.9, -0.4],
+    });
+    const ai = chooseShot({ ...nineInput(balls, 3, 5), budgetMs: 3000 });
+    expect(ai.label).toMatch(/kick/);
+    let hits = 0;
+    for (const seed of [1, 2, 3]) {
+      const shot = chooseShot({ ...nineInput(balls, 3, seed), budgetMs: 3000 }).shot;
+      if (shotFacts(simulate(nineTable, balls, shot, { sampleRate: 0 })).firstContact === '1') hits++;
+    }
+    expect(hits).toBeGreaterThanOrEqual(2);
+  });
+});

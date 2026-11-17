@@ -8,7 +8,7 @@ import {
   type Turn,
 } from '@cuesports/rules';
 import { Rng, type TableSpec, type Vec2 } from '@cuesports/shared';
-import { bestPotEase, len, potLine, sub, unit, type PotLine } from './geometry';
+import { bestPotEase, len, pathClear, potLine, sub, unit, type PotLine } from './geometry';
 import { skill as skillFor, type SkillProfile } from './skill';
 
 /**
@@ -32,6 +32,8 @@ export interface AiInput<S = unknown, O = unknown> {
   simTable?: TableSpec;
   /** Thinking budget in milliseconds. */
   budgetMs?: number;
+  /** Play the chosen shot exactly, without the player's errors (tests and diagnostics). */
+  perfect?: boolean;
   now?: () => number;
 }
 
@@ -239,6 +241,95 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
       }
   }
 
+  // Plants: the cue ball sends a ball on into another ball, which drops.
+  if (sk.level >= 2) {
+    for (const spot of spots.slice(0, 2)) {
+      const cueHere = { ...cue, pos: spot };
+      const balls = input.balls.map((b) => (b.id === 'cue' ? cueHere : b));
+      for (const a of targetBalls) {
+        for (const b of live) {
+          if (b === a || len(sub(b.pos, a.pos)) > 0.9) continue;
+          for (const p of rulesTable.pockets) {
+            // b into the pocket, struck by a.
+            const second = potLine(rulesTable, balls, a, b, p, (60 * Math.PI) / 180);
+            if (!second) continue;
+            // a sent to the contact point on b, struck by the cue ball.
+            const dirA = unit(sub(second.ghost, a.pos));
+            const D = cue.radius + a.radius;
+            const ghostA = { x: a.pos.x - dirA.x * D, y: a.pos.y - dirA.y * D };
+            const toGhost = sub(ghostA, spot);
+            const d1 = len(toGhost);
+            if (d1 < 1e-3) continue;
+            const cut1 = Math.acos(clamp((toGhost.x * dirA.x + toGhost.y * dirA.y) / d1, -1, 1));
+            if (cut1 > (60 * Math.PI) / 180) continue;
+            if (!pathClear(balls, spot, ghostA, cue.radius, [cue.id, a.id])) continue;
+            const speed =
+              potSpeed(simTable, { ...second, d1: d1 + second.d1, cut: Math.min(1.3, cut1 + second.cut) }) *
+              1.25;
+            const aim = Math.atan2(ghostA.y - spot.y, ghostA.x - spot.x);
+            for (const m of [1, 1.4]) {
+              cands.push({
+                shot: {
+                  ball: 'cue',
+                  aim,
+                  elevation: 0,
+                  tip: { a: 0, b: 0 },
+                  speed: clamp(speed * m, MIN_CUE, MAX_CUE),
+                },
+                decl: declFor(input, b.id, p.id, false),
+                ...(input.turn.ballInHand !== 'none' ? { place: spot } : {}),
+                label: `plant the ${ballName(a.id)} into the ${ballName(b.id)} (${describePocket(p.id)})`,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Kicks: when no ball on can be reached in a straight line, go off a cushion (one-rail escapes).
+  const hlR = rulesTable.playfield.length / 2 - cue.radius;
+  const hwR = rulesTable.playfield.width / 2 - cue.radius;
+  for (const spot of spots.slice(0, 1)) {
+    const reachable = targetBalls.some((t) =>
+      pathClear(input.balls, spot, t.pos, cue.radius * 0.5, [cue.id, t.id]),
+    );
+    if (reachable && sk.level < 4) continue;
+    // The cushion does not reflect like a mirror (pace, spin and friction bend the angle), so try a
+    // fan of aims around each mirror line and let the simulation find the ones that work.
+    const near = [...targetBalls]
+      .sort((a, b) => len(sub(a.pos, spot)) - len(sub(b.pos, spot)))
+      .slice(0, reachable ? 3 : 2);
+    const fan = reachable ? [0] : [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5];
+    for (const t of near) {
+      const mirrors: Vec2[] = [
+        { x: 2 * hlR - t.pos.x, y: t.pos.y },
+        { x: -2 * hlR - t.pos.x, y: t.pos.y },
+        { x: t.pos.x, y: 2 * hwR - t.pos.y },
+        { x: t.pos.x, y: -2 * hwR - t.pos.y },
+      ];
+      for (const m of mirrors) {
+        const base = Math.atan2(m.y - spot.y, m.x - spot.x);
+        for (const deg of fan) {
+          for (const speed of [1.8, 2.8]) {
+            cands.push({
+              shot: {
+                ball: 'cue',
+                aim: base + (deg * Math.PI) / 180,
+                elevation: 0,
+                tip: { a: 0, b: 0 },
+                speed,
+              },
+              decl: declFor(input, t.id, null, true),
+              ...(input.turn.ballInHand !== 'none' ? { place: spot } : {}),
+              label: `kick off the cushion at the ${ballName(t.id)}`,
+            });
+          }
+        }
+      }
+    }
+  }
+
   // Safeties: soft contacts across the ball on (and any shot that hits it, as a fallback).
   const nearest = [...targetBalls]
     .sort((a, b) => len(sub(a.pos, cue.pos)) - len(sub(b.pos, cue.pos)))
@@ -283,7 +374,9 @@ function score(
   const myTurn = j.turn.player === me && !j.turn.decision;
   if (myTurn) {
     const ease = j.turn.ballInHand !== 'none' ? 0.7 : bestPotEase(rulesTable, j.balls, j.turn.targets);
-    s += 300 + 400 * sk.position * ease + 30 * j.potted.length;
+    // Keeping the table dominates; position is worth less than the pot itself, so a stronger player
+    // still prefers a pot it will make over a riskier one with better position.
+    s += 1000 + 300 * sk.position * ease + 30 * j.potted.length;
   } else {
     const ease = j.turn.ballInHand !== 'none' ? 0.75 : bestPotEase(rulesTable, j.balls, j.turn.targets);
     s -= (sk.safeties ? 300 : 120) * ease;
@@ -309,7 +402,10 @@ function evaluate(input: AiInput, c: Candidate, sk: SkillProfile, rng: Rng | nul
     return -1e5;
   }
   const beforePoints = (input.state as { scores?: number[] }).scores;
-  return score(input, sk, j, beforePoints);
+  // Hitting a pot hard makes every error bigger and balls rattle in the jaws; good players avoid it.
+  // (Breaks, plants and kicks need the pace.)
+  const force = c.label.startsWith('pot') ? Math.max(0, c.shot.speed - 3.5) * 70 : 0;
+  return score(input, sk, j, beforePoints) - force;
 }
 
 /** Applies a player's errors to a shot. */
@@ -343,7 +439,7 @@ function refineSpin(
     if (!e.c.label.startsWith('pot') || seen.has(e.c.label)) continue;
     seen.add(e.c.label);
     bases.push(e.c);
-    if (bases.length >= 3) break;
+    if (bases.length >= (sk.level >= 4 ? 4 : 3)) break;
   }
   const add = (c: Candidate) => {
     scored.push({ c, s: evaluate(input, c, sk, null) });
@@ -354,7 +450,7 @@ function refineSpin(
   });
   for (const base of bases) {
     for (const b of [-0.45, -0.25, 0.1, 0.25, 0.42]) {
-      for (const pace of [0.9, 1.2]) {
+      for (const pace of [0.8, 1.05, 1.35]) {
         if (outOfTime()) break;
         add(variant(base, { a: 0, b }, pace));
       }
@@ -395,7 +491,7 @@ export function chooseShot(input: AiInput): AiShot {
   if (sk.level >= 3) refineSpin(input, sk, scored, () => now() - start > budget * 0.85);
   // Robustness: re-run the best few with errors and average.
   if (sk.robustness > 0) {
-    for (const entry of scored.slice(0, 5)) {
+    for (const entry of scored.slice(0, sk.level >= 4 ? 8 : 5)) {
       let sum = entry.s;
       for (let k = 0; k < sk.robustness; k++) sum += evaluate(input, entry.c, sk, rng);
       entry.s = sum / (sk.robustness + 1);
@@ -427,10 +523,14 @@ export function chooseShot(input: AiInput): AiShot {
     };
   }
   return {
-    shot: withErrors(pick.c.shot, sk, rng),
+    shot: input.perfect ? pick.c.shot : withErrors(pick.c.shot, sk, rng),
     decl: pick.c.decl,
     ...(pick.c.place ? { place: pick.c.place } : {}),
-    label: pick.c.label,
+    // A "safety" that keeps the table (it pots something on the way) is really an attacking shot.
+    label:
+      pick.s > 500 && pick.c.label.startsWith('play safe off')
+        ? `${pick.c.label.replace('play safe off', 'play off')} to pot a ball`
+        : pick.c.label,
     score: pick.s,
     considered: scored.length,
   };

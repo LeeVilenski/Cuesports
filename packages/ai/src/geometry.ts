@@ -87,6 +87,11 @@ export function bestPotEase(
 ): number {
   const cue = balls.find((b) => b.id === 'cue' && b.state !== 'pocketed');
   if (!cue) return 0.6; // ball in hand: usually a good chance
+  // A cue ball on (or very near) a cushion is harder to cue: the bridge is awkward and spin is limited.
+  const hl = table.playfield.length / 2;
+  const hw = table.playfield.width / 2;
+  const gap = Math.min(hl - Math.abs(cue.pos.x), hw - Math.abs(cue.pos.y)) - cue.radius;
+  const cushion = gap < 0.01 ? 0.65 : gap < 0.04 ? 0.85 : 1;
   let best = 0;
   for (const id of targets) {
     const t = balls.find((b) => b.id === id && b.state !== 'pocketed');
@@ -96,5 +101,5 @@ export function bestPotEase(
       if (l) best = Math.max(best, potEase(l));
     }
   }
-  return best;
+  return best * cushion;
 }
