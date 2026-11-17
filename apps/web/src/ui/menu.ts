@@ -42,7 +42,7 @@ function describe(c: MatchConfig): string {
 }
 
 function ballBadge(color: string, num: string): HTMLElement {
-  const b = h('span', { className: 'ball-badge' }, num);
+  const b = h('span', { className: 'ball-badge', ariaHidden: 'true' }, num);
   b.style.setProperty('--c', color);
   if (!num) b.classList.add('solid');
   return b;
