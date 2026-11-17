@@ -33,7 +33,7 @@ describe('power curve', () => {
   it('is monotonic from a soft touch to the maximum', () => {
     expect(powerToSpeed(0, 9)).toBeCloseTo(0.25);
     expect(powerToSpeed(1, 9)).toBeCloseTo(9);
-    expect(powerToSpeed(0.5, 9)).toBeLessThan(4.6);
+    expect(powerToSpeed(0.5, 9)).toBeLessThan(2.6);
   });
 });
 

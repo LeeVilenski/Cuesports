@@ -170,6 +170,12 @@ describe('9-ball pockets (WPA spec) take balls cut down the rail', () => {
     for (const err of [-1, -0.5, 0.5, 1]) expect(cutDownRail(20, 1.2, err), `${err}°`).toBe(true);
   });
 
+  it('takes a ball sent a degree into the rail at medium and firm pace', () => {
+    // It nicks the rail, deflects off the far facing and drops past the shelf line.
+    expect(cutDownRail(20, 2.5, 1)).toBe(true);
+    expect(cutDownRail(20, 4, 1)).toBe(true);
+  });
+
   it('still rejects a ball sent well into the far jaw', () => {
     expect(cutDownRail(20, 2.5, 2)).toBe(false);
   });
