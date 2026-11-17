@@ -11,12 +11,6 @@ const MAX_CONTACTS_PER_STEP = 1000;
 const TOUCH_TOL = 1e-9;
 /** A ball drops once its centre has been over the hole long enough to fall this far (× radius). */
 const DROP_DEPTH = 0.7;
-/**
- * Restitution of a jaw facing hit by a ball whose centre is already over the hole. The ball has
- * started to drop, so it meets the undercut facing (the 12–15° vertical pocket angle) below the
- * nose, which deadens the hit and pushes the ball down instead of back out.
- */
-const FALLING_JAW_RESTITUTION = 0.35;
 
 type Contact =
   { kind: 'ball'; t: number; i: number; j: number } | { kind: 'cushion'; t: number; i: number; seg: Segment };
@@ -195,12 +189,24 @@ export function simulate(
     }
   };
 
-  const fallingJaw = {
-    ...table.cushion,
-    restitution: FALLING_JAW_RESTITUTION,
-    minRestitution: FALLING_JAW_RESTITUTION,
-    restitutionSlope: 0,
-  };
+  // Pockets whose back the ball bounces off rather than dropping on contact (PocketSpec.backRestitution).
+  const pocketBack = new Map(
+    table.pockets
+      .filter((p) => p.backRestitution !== null)
+      .map((p) => {
+        const e = p.backRestitution!;
+        return [p.id, { ...table.cushion, restitution: e, minRestitution: e, restitutionSlope: 0 }] as const;
+      }),
+  );
+  // Jaw facings for a ball already over the drop, per pocket (PocketSpec.dropFacingRestitution).
+  const fallingJaw = new Map(
+    table.pockets
+      .filter((p) => p.dropFacingRestitution !== null)
+      .map((p) => {
+        const e = p.dropFacingRestitution!;
+        return [p.id, { ...table.cushion, restitution: e, minRestitution: e, restitutionSlope: 0 }] as const;
+      }),
+  );
   const hl = geo.halfLength;
   const hw = geo.halfWidth;
 
@@ -249,18 +255,20 @@ export function simulate(
       const dy = b.pos.y - cp.y;
       const d = Math.sqrt(dx * dx + dy * dy);
       if (d === 0) return;
-      if (c.seg.kind === 'pocket' && c.seg.pocket !== undefined) {
-        // Reaching the back of the pocket means the ball is already over the hole: it drops.
+      const backBounce = c.seg.pocket !== undefined ? pocketBack.get(c.seg.pocket) : undefined;
+      if (c.seg.kind === 'pocket' && c.seg.pocket !== undefined && backBounce === undefined) {
+        // Reaching the back of a drop pocket means the ball is already over the hole: it drops.
         pocketBall(b);
         b.pocket = c.seg.pocket;
         events.push({ type: 'pocket', t, ball: b.id, pocket: c.seg.pocket });
         return;
       }
-      const falling = c.seg.kind === 'jaw' && !Number.isNaN(overHole[c.i]!);
+      const deadened = c.seg.pocket !== undefined ? fallingJaw.get(c.seg.pocket) : undefined;
+      const falling = c.seg.kind === 'jaw' && !Number.isNaN(overHole[c.i]!) && deadened !== undefined;
       const speed = collideCushion(
         b,
         { x: dx / d, y: dy / d },
-        falling ? fallingJaw : table.cushion,
+        c.seg.kind === 'pocket' && backBounce ? backBounce : falling ? deadened! : table.cushion,
         cloth.slideFriction,
       );
       if (speed > 0) {
