@@ -35,8 +35,9 @@ function onLabel(turn: Turn): string {
 /** Scoreboard, shot messages and the match sheets (setup, push-out decision, rack result). */
 export class MatchHud {
   readonly root = h('div', { className: 'match-hud' });
-  private board = h('div', { className: 'scoreboard', hidden: true });
-  private toast = h('div', { className: 'toast', role: 'status', hidden: true });
+  /** The scoreboard; the game places it in the top bar. */
+  readonly board = h('div', { className: 'scoreboard', hidden: true });
+  private toast = h('div', { className: 'toast', role: 'status', hidden: true, title: 'Tap to hide' });
   private pushBtn = h('button', { className: 'chip push', hidden: true }, 'Push out');
   private callBtn = h('button', { className: 'chip call', hidden: true, ariaLabel: 'Called shot' });
   private picker = h('div', { className: 'sheet call-sheet', hidden: true });
@@ -52,8 +53,8 @@ export class MatchHud {
       this.pushBtn.classList.toggle('on', this.pushOn);
       cb.onPushOut(this.pushOn);
     });
+    this.toast.addEventListener('click', () => (this.toast.hidden = true));
     this.root.append(
-      this.board,
       this.toast,
       this.pushBtn,
       this.callBtn,
@@ -243,7 +244,7 @@ export class MatchHud {
     return this.pushOn && !this.pushBtn.hidden;
   }
 
-  say(text: string, ms = 4500): void {
+  say(text: string, ms = 3500): void {
     this.toast.textContent = text;
     this.toast.hidden = !text;
     window.clearTimeout(this.toastTimer);

@@ -194,7 +194,10 @@ function syncTurn(): void {
     frame: match.framePoints,
   });
   matchHud.setPushAvailable(t.canPushOut && !match.rackResult);
-  matchHud.showDecision(t.decision ? match.names(t.decision.prompt) : null, t.decision?.choices ?? []);
+  matchHud.showDecision(
+    t.decision ? match.names(t.decision.prompt) : null,
+    (t.decision?.choices ?? []).map((c) => ({ ...c, label: match!.names(c.label) })),
+  );
   placing = t.ballInHand !== 'none' && !match.rackResult;
   hud.setPlacing(placing);
   hud.setPlacingAllowed(placing);
@@ -215,7 +218,7 @@ function syncTurn(): void {
         : t.ballInHand === 'anywhere'
           ? ' Ball in hand: drag the cue ball anywhere.'
           : '';
-  matchHud.say(match.message + hand, hand ? 7000 : 4500);
+  matchHud.say(match.message + hand, hand ? 5000 : 3500);
   status(`${match.config.players[t.player]} to play`);
   if (match.rackResult) {
     const w = match.config.players[match.rackResult.winner]!;
@@ -501,6 +504,8 @@ const matchHud: MatchHud = new MatchHud({
   onPractice: () => setGame(GAMES[0]!),
 });
 app.append(matchHud.root);
+// The scoreboard lives in the top bar, next to the menu button.
+hud.placeInTop(matchHud.board);
 matchHud.onCallClick(() => {
   if (match?.turn.mustNominate) {
     matchHud.openNominatePicker(match.turn.targets, (b) => {

@@ -295,6 +295,11 @@ export class Hud {
     for (const [m, b] of this.camButtons) b.classList.toggle('on', m === mode);
   }
 
+  /** Puts an element (the match scoreboard) into the top bar, after the menu button. */
+  placeInTop(el: HTMLElement): void {
+    this.status.before(el);
+  }
+
   setStatus(text: string): void {
     this.status.textContent = text;
   }
