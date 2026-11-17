@@ -7,7 +7,7 @@ import {
   type TableSpec,
 } from '@cuesports/shared';
 import { describe, expect, it } from 'vitest';
-import { buildTableGeometry } from './geometry';
+import { buildTableGeometry, dropOutline } from './geometry';
 import { layout, makeBall, type LayoutId } from './layouts';
 import { simulate } from './simulate';
 import type { BallState } from './types';
@@ -50,6 +50,46 @@ describe('table geometry', () => {
       for (const p of t.pockets) expect(g.segments.some((s) => s.pocket === p.id)).toBe(true);
       // Consecutive pieces of each jaw join up.
       for (const s of g.segments) expect(Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y)).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('pocket drop outline', () => {
+  const inside = (pts: { x: number; y: number }[], q: { x: number; y: number }) => {
+    let c = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const a = pts[i]!;
+      const b = pts[j]!;
+      if (a.y > q.y !== b.y > q.y && q.x < ((b.x - a.x) * (q.y - a.y)) / (b.y - a.y) + a.x) c = !c;
+    }
+    return c;
+  };
+
+  it('starts at the shelf line and contains the drop area on the pocket axis', () => {
+    for (const t of TABLE_PRESETS) {
+      const g = buildTableGeometry(t);
+      for (const p of t.pockets) {
+        const pts = dropOutline(g, p.id);
+        expect(pts.length, `${t.id} ${p.id}`).toBeGreaterThan(6);
+        const mouth = {
+          x: p.position.x - p.axis.x * (p.shelfDepth + p.fallRadius),
+          y: p.position.y - p.axis.y * (p.shelfDepth + p.fallRadius),
+        };
+        for (const q of pts) {
+          const depth = (q.x - mouth.x) * p.axis.x + (q.y - mouth.y) * p.axis.y;
+          expect(depth).toBeGreaterThan(p.shelfDepth - 1e-9);
+        }
+        const justPast = {
+          x: mouth.x + p.axis.x * (p.shelfDepth + 0.005),
+          y: mouth.y + p.axis.y * (p.shelfDepth + 0.005),
+        };
+        const justShort = {
+          x: mouth.x + p.axis.x * (p.shelfDepth - 0.005),
+          y: mouth.y + p.axis.y * (p.shelfDepth - 0.005),
+        };
+        expect(inside(pts, justPast), `${t.id} ${p.id}`).toBe(true);
+        expect(inside(pts, justShort), `${t.id} ${p.id}`).toBe(false);
+      }
     }
   });
 });

@@ -113,6 +113,8 @@ export function simulate(
   const cloth = table.cloth;
   const state = balls.map(cloneBall);
   const ids = state.map((b) => b.id);
+  // Time at which each ball's centre moved over a pocket's drop (NaN = supported by the slate).
+  const overHole = new Float64Array(state.length).fill(NaN);
   const events: PhysicsEvent[] = [];
   const frames: Frame[] = [];
   let t = 0;
@@ -125,13 +127,20 @@ export function simulate(
     events.push({ type: 'strike', t: 0, ball: b.id, speed: out.speed, miscue: out.miscue });
   }
 
+  // Drawn sink depth per ball. A ball that rattles back out of a pocket rises back onto the slate
+  // over a few frames instead of popping up.
+  const sunk = new Float64Array(state.length);
+  let lastRecord = 0;
   const record = (): void => {
     const n = state.length;
+    const since = t - lastRecord;
+    lastRecord = t;
     const f: Frame = {
       t,
       pos: new Float64Array(2 * n),
       orient: new Float64Array(4 * n),
       pocketed: new Uint8Array(n),
+      drop: new Float64Array(n),
     };
     state.forEach((b, i) => {
       f.pos[2 * i] = b.pos.x;
@@ -141,6 +150,12 @@ export function simulate(
       f.orient[4 * i + 2] = b.orient.z;
       f.orient[4 * i + 3] = b.orient.w;
       f.pocketed[i] = b.state === 'pocketed' ? 1 : 0;
+      // A ball over the drop falls freely (it is no longer supported by the slate).
+      const t0 = overHole[i]!;
+      if (b.state === 'pocketed') sunk[i] = 0;
+      else if (!Number.isNaN(t0)) sunk[i] = -0.5 * g * (t - t0) * (t - t0);
+      else sunk[i] = sunk[i]! * Math.max(0, 1 - since * 25);
+      f.drop[i] = sunk[i]!;
     });
     frames.push(f);
   };
@@ -263,8 +278,6 @@ export function simulate(
     }
   };
 
-  // Time at which each ball's centre moved over a pocket's hole (NaN = supported by the slate).
-  const overHole = new Float64Array(state.length).fill(NaN);
   const dropTime = state.map((b) => Math.sqrt((2 * DROP_DEPTH * b.radius) / g));
 
   /**
@@ -368,5 +381,7 @@ export function sampleAt(result: ShotResult, t: number): Frame {
   const k = (t - a.t) / (b.t - a.t);
   const pos = new Float64Array(a.pos.length);
   for (let i = 0; i < pos.length; i++) pos[i] = a.pos[i]! + (b.pos[i]! - a.pos[i]!) * k;
-  return { t, pos, orient: k < 0.5 ? a.orient : b.orient, pocketed: k < 1 ? a.pocketed : b.pocketed };
+  const drop = new Float64Array(a.drop.length);
+  for (let i = 0; i < drop.length; i++) drop[i] = a.drop[i]! + (b.drop[i]! - a.drop[i]!) * k;
+  return { t, pos, orient: k < 0.5 ? a.orient : b.orient, pocketed: k < 1 ? a.pocketed : b.pocketed, drop };
 }

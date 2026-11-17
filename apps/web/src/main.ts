@@ -32,7 +32,7 @@ import { CameraRig, type CameraMode } from './render/cameras';
 import { physicsGroup, toPhysics } from './render/coords';
 import { CueView } from './render/cue-view';
 import { GuideView } from './render/guide-view';
-import { buildTableView, type TableView } from './render/table-view';
+import { buildTableView, WELL_DEPTH, type TableView } from './render/table-view';
 import { Hud } from './ui/hud';
 
 // ---------------------------------------------------------------------------------------------
@@ -112,6 +112,8 @@ let showGuide = true;
 let useOverview = true;
 let placing = false;
 let dirty = true;
+/** Playback frozen at a fixed time (test hook). */
+let frozen = false;
 
 const rig = new CameraRig(canvas, game.table);
 
@@ -126,6 +128,7 @@ function setGame(def: GameDef): void {
   }
   tableView = buildTableView(def.table);
   world.add(tableView.group);
+  ballsView.setPockets(tableView.pocketRest, WELL_DEPTH);
   placeCanopy(def.table.playfield.length);
   rig.setTable(def.table);
   rerack();
@@ -202,6 +205,7 @@ function endPlayback(): void {
     .filter((e) => e.type === 'pocket')
     .map((e) => (e.type === 'pocket' ? e.ball : ''));
   const cue = cueBall();
+  ballsView.commit(result);
   if (cue && cue.state === 'pocketed') respawnCue(cue);
   ballsView.showState(balls);
   playing = null;
@@ -483,7 +487,7 @@ function frame(now: number): void {
     if (strikeT >= 0.09 && pending) startPlayback();
   }
   if (phase === 'playing' && playing) {
-    playT += dt;
+    if (!frozen) playT += dt;
     ballsView.showFrame(playing, Math.min(playT, playing.duration));
     if (playT >= playing.duration) endPlayback();
     dirty = true;
@@ -548,6 +552,30 @@ registerSW({ immediate: true });
     rig.orbit.update();
     dirty = true;
   },
+  /** Moves a ball (for scripted test set-ups). */
+  place: (id: string, x: number, y: number) => {
+    const b = balls.find((q) => q.id === id);
+    if (!b || phase !== 'aim') return;
+    b.pos = { x, y };
+    b.state = 'stationary';
+    delete b.pocket;
+    ballsView.showState(balls);
+    dirty = true;
+  },
+  /** Sets the aim angle in radians. */
+  aim: (rad: number) => {
+    shot.aim = rad;
+    rig.followAimInstantly();
+    dirty = true;
+  },
+  /** Freezes playback of the current shot at time t (seconds), or resumes it with null. */
+  seek: (t: number | null) => {
+    frozen = t !== null;
+    if (t !== null) playT = t;
+    dirty = true;
+  },
+  /** Events of the shot being played. */
+  events: () => playing?.events.filter((e) => e.type !== 'state') ?? [],
   /** Jumps to the end of the shot being played. */
   fastForward: () => {
     if (playing) playT = playing.duration;

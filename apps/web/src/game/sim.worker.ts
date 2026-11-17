@@ -21,7 +21,8 @@ self.onmessage = (e: MessageEvent<SimRequest>) => {
   const result = simulate(table, balls, shot, { sampleRate: 120 });
   const ms = performance.now() - t0;
   const transfer: Transferable[] = [];
-  for (const f of result.frames) transfer.push(f.pos.buffer, f.orient.buffer, f.pocketed.buffer);
+  for (const f of result.frames)
+    transfer.push(f.pos.buffer, f.orient.buffer, f.pocketed.buffer, f.drop.buffer);
   (self as unknown as DedicatedWorkerGlobalScope).postMessage(
     { id, result, ms } satisfies SimResponse,
     transfer,
