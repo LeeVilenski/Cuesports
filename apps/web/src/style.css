@@ -308,3 +308,139 @@ input {
     max-width: 60vw;
   }
 }
+
+/* Match HUD */
+.match-hud > * {
+  pointer-events: auto;
+}
+
+.match-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.scoreboard {
+  position: absolute;
+  top: calc(56px + var(--safe-t));
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 14px;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+}
+
+.scoreboard[hidden] {
+  display: none;
+}
+
+.scoreboard .side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  opacity: 0.6;
+}
+
+.scoreboard .side.active {
+  opacity: 1;
+  background: rgba(242, 193, 78, 0.18);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.scoreboard .name {
+  max-width: 28vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scoreboard .score {
+  font-weight: 700;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.scoreboard .fouls {
+  color: #ef6f6c;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+
+.scoreboard .mid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.ball-on .dot {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, #f7f3e8 0 38%, var(--c) 40%);
+  color: #111;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.toast {
+  position: absolute;
+  top: calc(104px + var(--safe-t));
+  left: 50%;
+  translate: -50% 0;
+  max-width: min(90vw, 520px);
+  background: rgba(14, 20, 17, 0.9);
+  border: 1px solid var(--glass-line);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.toast[hidden] {
+  display: none;
+}
+
+.chip.push {
+  position: absolute;
+  right: calc(76px + var(--safe-r));
+  bottom: calc(10px + var(--safe-b));
+}
+
+.chip.push[hidden] {
+  display: none;
+}
+
+.sheet input[type='text'] {
+  flex: 1;
+  background: #1c2621;
+  border: 1px solid var(--glass-line);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+@media (orientation: portrait) {
+  .chip.push {
+    bottom: calc(64px + var(--safe-b));
+    right: calc(80px + var(--safe-r));
+  }
+}
+
+.chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

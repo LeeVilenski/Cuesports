@@ -38,6 +38,9 @@ importers:
       '@cuesports/physics':
         specifier: workspace:*
         version: link:../../packages/physics
+      '@cuesports/rules':
+        specifier: workspace:*
+        version: link:../../packages/rules
       '@cuesports/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -63,6 +66,15 @@ importers:
 
   packages/physics:
     dependencies:
+      '@cuesports/shared':
+        specifier: workspace:*
+        version: link:../shared
+
+  packages/rules:
+    dependencies:
+      '@cuesports/physics':
+        specifier: workspace:*
+        version: link:../physics
       '@cuesports/shared':
         specifier: workspace:*
         version: link:../shared

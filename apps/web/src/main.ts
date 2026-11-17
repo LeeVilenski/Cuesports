@@ -34,6 +34,9 @@ import { CueView } from './render/cue-view';
 import { GuideView } from './render/guide-view';
 import { buildTableView, WELL_DEPTH, type TableView } from './render/table-view';
 import { Hud } from './ui/hud';
+import { MatchHud } from './ui/match-hud';
+import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
+import { canPlaceCueBall, type ShotDeclaration } from '@cuesports/rules';
 
 // ---------------------------------------------------------------------------------------------
 // Renderer and scene
@@ -114,6 +117,10 @@ let guideSquirt = true;
 let useOverview = true;
 let placing = false;
 let dirty = true;
+/** The 9-ball match being played, or null in practice. */
+let match: Match | null = null;
+let decl: ShotDeclaration = {};
+let replaying = false;
 /** Playback frozen at a fixed time (test hook). */
 let frozen = false;
 
@@ -122,6 +129,17 @@ const rig = new CameraRig(canvas, game.table);
 const cueBall = (): BallState | undefined => balls.find((b) => b.id === 'cue');
 
 function setGame(def: GameDef): void {
+  match = null;
+  matchHud.showBoard(null);
+  matchHud.setPushAvailable(false);
+  matchHud.showDecision(null);
+  matchHud.showResult(null);
+  setTable(def);
+  rerack();
+  hud.setGame(def.id);
+}
+
+function setTable(def: GameDef): void {
   game = def;
   simTable = withClothSpeed(def.table, clothSpeed);
   if (tableView) {
@@ -133,8 +151,67 @@ function setGame(def: GameDef): void {
   ballsView.setPockets(tableView.pocketRest, WELL_DEPTH);
   placeCanopy(def.table.playfield.length);
   rig.setTable(def.table);
-  rerack();
-  hud.setGame(def.id);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Match play
+
+function startMatch(config: MatchConfig): void {
+  setTable(GAMES.find((g) => g.id === 'nine-ball')!);
+  match = new Match(config, (Math.random() * 1e9) | 0);
+  matchHud.showResult(null);
+  loadRack();
+}
+
+function loadRack(): void {
+  if (!match) return;
+  balls = match.balls.map(cloneBall);
+  ballsView.setBalls(balls);
+  last = null;
+  phase = 'aim';
+  playing = null;
+  rig.snap();
+  syncTurn();
+}
+
+/** Updates the HUD and controls for whoever is at the table now. */
+function syncTurn(): void {
+  if (!match) return;
+  const t = match.turn;
+  matchHud.showBoard({
+    players: match.config.players,
+    score: match.score,
+    raceTo: match.config.raceTo,
+    turn: t,
+  });
+  matchHud.setPushAvailable(t.canPushOut && !match.rackResult);
+  matchHud.showDecision(t.decision ? match.names(t.decision.prompt) : null, t.decision?.choices ?? []);
+  placing = t.ballInHand !== 'none' && !match.rackResult;
+  hud.setPlacing(placing);
+  hud.setPlacingAllowed(placing);
+  if (placing && rig.mode === 'aim') {
+    rig.setMode('top');
+    hud.setCamera('top');
+  }
+  const target = balls.find((b) => b.id === t.targets[0]);
+  const cue = cueBall();
+  if (target && cue) shot.aim = Math.atan2(target.pos.y - cue.pos.y, target.pos.x - cue.pos.x);
+  const hand =
+    t.ballInHand === 'behind-head-string'
+      ? ' Ball in hand behind the head string: drag the cue ball.'
+      : t.ballInHand === 'anywhere'
+        ? ' Ball in hand: drag the cue ball anywhere.'
+        : '';
+  matchHud.say(match.message + hand, hand ? 7000 : 4500);
+  status(`${match.config.players[t.player]} to play`);
+  if (match.rackResult) {
+    const w = match.config.players[match.rackResult.winner]!;
+    const score = `${match.config.players[0]} ${match.score[0]} – ${match.score[1]} ${match.config.players[1]}`;
+    if (match.winner !== null) matchHud.showResult(`${w} wins the match`, score, true);
+    else matchHud.showResult(`${w} wins rack ${match.rack}`, `${match.message} ${score}`);
+  }
+  rig.snap();
+  dirty = true;
 }
 
 function rerack(): void {
@@ -166,8 +243,11 @@ function status(extra = ''): void {
 
 function shoot(p: number): void {
   if (phase !== 'aim') return;
+  if (match && (match.turn.decision || match.rackResult)) return;
   const cue = cueBall();
   if (!cue || cue.state === 'pocketed') return;
+  decl = match ? { pushOut: matchHud.pushOut } : {};
+  hud.setPlacingAllowed(!match);
   placing = false;
   hud.setPlacing(false);
   shot = {
@@ -201,6 +281,21 @@ function startPlayback(): void {
 function endPlayback(): void {
   if (!playing) return;
   const result = playing;
+  if (replaying || match) {
+    if (match && !replaying && last) match.judge(decl, last.before, result);
+    replaying = false;
+    balls = match ? match.balls.map(cloneBall) : result.final.map(cloneBall);
+    ballsView.commit(result);
+    ballsView.showState(balls);
+    playing = null;
+    phase = 'aim';
+    rig.overview = false;
+    cueView.group.visible = true;
+    hud.setBusy(false);
+    if (match) syncTurn();
+    dirty = true;
+    return;
+  }
   balls = result.final.map(cloneBall);
   const miscue = result.events.some((e) => e.type === 'strike' && e.miscue);
   const potted = result.events
@@ -244,6 +339,7 @@ function respawnCue(cue: BallState): void {
 }
 
 function canPlace(cue: BallState, p: { x: number; y: number }): boolean {
+  if (match) return canPlaceCueBall(match.table, balls, match.turn.ballInHand, p, cue.id);
   const hl = game.table.playfield.length / 2 - cue.radius;
   const hw = game.table.playfield.width / 2 - cue.radius;
   if (Math.abs(p.x) > hl || Math.abs(p.y) > hw) return false;
@@ -261,11 +357,16 @@ function replay(): void {
   ballsView.showState(balls);
   shot = structuredClone(last.shot);
   pending = { result: last.result, ms: 0 };
+  replaying = true;
   hud.setBusy(true);
   startPlayback();
 }
 
 function undo(): void {
+  if (match) {
+    matchHud.say('Undo is only available in practice.');
+    return;
+  }
   if (!last || phase !== 'aim') return;
   balls = last.before.map(cloneBall);
   shot = structuredClone(last.shot);
@@ -304,6 +405,11 @@ const hud = new Hud(
       dirty = true;
     },
     onPlaceToggle: (on) => {
+      if (match && match.turn.ballInHand === 'none') {
+        hud.setPlacing(false);
+        matchHud.say('You can only move the cue ball when you have ball in hand.');
+        return;
+      }
       placing = on;
       if (on && rig.mode === 'aim') {
         rig.setMode('top');
@@ -314,7 +420,9 @@ const hud = new Hud(
     onReplay: replay,
     onUndo: undo,
     onGame: (id) => setGame(GAMES.find((g) => g.id === id) ?? GAMES[0]!),
-    onRerack: rerack,
+    onRerack: () =>
+      match ? matchHud.say('Re-rack is for practice. Start a new match from the menu.') : rerack(),
+    onNewMatch: () => matchHud.openSetup(),
     onClothSpeed: (speed) => {
       clothSpeed = speed;
       simTable = withClothSpeed(game.table, speed);
@@ -336,6 +444,26 @@ const hud = new Hud(
 );
 hud.setClothSpeed(clothSpeed);
 app.append(hud.root);
+
+const matchHud: MatchHud = new MatchHud({
+  onPushOut: () => undefined,
+  onDecision: (choice) => {
+    if (!match) return;
+    match.decide(choice);
+    balls = match.balls.map(cloneBall);
+    ballsView.showState(balls);
+    syncTurn();
+  },
+  onNextRack: () => {
+    if (!match) return;
+    matchHud.showResult(null);
+    match.startRack();
+    loadRack();
+  },
+  onStart: startMatch,
+  onPractice: () => setGame(GAMES[0]!),
+});
+app.append(matchHud.root);
 hud.setCamera('aim');
 
 // ---------------------------------------------------------------------------------------------
@@ -539,6 +667,7 @@ function adaptQuality(ms: number): void {
 // Boot
 
 setGame(GAMES[0]!);
+matchHud.openSetup();
 resize();
 requestAnimationFrame(frame);
 
@@ -547,7 +676,31 @@ registerSW({ immediate: true });
 // Exposed for automated smoke tests.
 (window as unknown as { __cuesports: unknown }).__cuesports = {
   shoot,
-  state: () => ({ phase, balls, shot }),
+  state: () => ({
+    phase,
+    balls,
+    shot,
+    match: match
+      ? {
+          score: match.score,
+          turn: match.turn,
+          message: match.message,
+          rack: match.rack,
+          rackResult: match.rackResult,
+        }
+      : null,
+  }),
+  /** Starts a 9-ball match with default settings. */
+  startMatch: (players?: [string, string]) =>
+    startMatch({ ...DEFAULT_MATCH, players: players ?? DEFAULT_MATCH.players }),
+  /** Takes a decision offered to the player at the table (e.g. 'play' or 'pass' after a push out). */
+  decide: (choice: string) => {
+    if (!match) return;
+    match.decide(choice);
+    balls = match.balls.map(cloneBall);
+    ballsView.showState(balls);
+    syncTurn();
+  },
   /** Free camera at a physics-space eye position looking at a target (for screenshots). */
   view: (eye: [number, number, number], target: [number, number, number]) => {
     rig.setMode('free');
