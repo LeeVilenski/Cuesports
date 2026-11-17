@@ -63,3 +63,75 @@ describe('Match', () => {
     expect(m.winner).toBe(0);
   });
 });
+
+describe('Match: snooker', () => {
+  it('plays a real simulated break-off through the snooker rules', () => {
+    const m = new Match({ ...DEFAULT_MATCH, game: 'snooker', raceTo: 2 }, 4);
+    expect(m.message).toMatch(/Frame 1: .* to break off\./);
+    expect(m.turn).toMatchObject({ ballInHand: 'in-d', player: 0 });
+    const cue = m.balls.find((b) => b.id === 'cue')!;
+    const red = m.balls.find((b) => b.id === 'red1')!;
+    // A gentle break-off: thin on the side of the reds.
+    const aim = Math.atan2(red.pos.y + 0.12 - cue.pos.y, red.pos.x - cue.pos.x);
+    const before = m.balls;
+    const result = simulate(m.table, before, {
+      ball: 'cue',
+      aim,
+      elevation: 0,
+      tip: { a: 0, b: 0 },
+      speed: 4,
+    });
+    m.judge({}, before, result);
+    expect(m.message).not.toMatch(/\{p\d\}/);
+    expect(m.framePoints).not.toBeNull();
+    expect(m.framePoints!.remaining).toBeLessThanOrEqual(147);
+  });
+
+  it('concession ends the frame and alternates the break-off', () => {
+    const m = new Match({ ...DEFAULT_MATCH, game: 'snooker', raceTo: 2 }, 4);
+    m.concede();
+    expect(m.score).toEqual([0, 1]);
+    expect(m.breaker).toBe(1);
+  });
+});
+
+describe('Match: English pool', () => {
+  it('plays a real simulated break under International rules', () => {
+    const m = new Match({ ...DEFAULT_MATCH, game: 'english' }, 6);
+    expect(m.turn).toMatchObject({ isBreak: true, ballInHand: 'behind-head-string' });
+    const cue = m.balls.find((b) => b.id === 'cue')!;
+    const apex = m.balls.find((b) => b.id === 'r1')!;
+    const before = m.balls;
+    const result = simulate(m.table, before, {
+      ball: 'cue',
+      aim: Math.atan2(apex.pos.y - cue.pos.y, apex.pos.x - cue.pos.x),
+      elevation: 0,
+      tip: { a: 0, b: 0 },
+      speed: 8,
+    });
+    m.judge({}, before, result);
+    expect(m.message).not.toMatch(/\{p\d\}/);
+    expect(m.turn.isBreak).toBe(m.reracked);
+  });
+
+  it('re-racks without scoring when the WEPF break is not fair', () => {
+    const m = new Match({ ...DEFAULT_MATCH, game: 'english', english: 'wepf' }, 6);
+    const before = m.balls;
+    // A tap that barely moves the rack: not a fair break.
+    m.judge({}, before, {
+      ids: before.map((b) => b.id),
+      events: [
+        { type: 'strike', t: 0, ball: 'cue', speed: 1, miscue: false },
+        { type: 'ball', t: 0.5, a: 'cue', b: 'r1', speed: 0.5 },
+      ],
+      frames: [],
+      final: before,
+      duration: 1,
+      truncated: false,
+    });
+    expect(m.reracked).toBe(true);
+    expect(m.score).toEqual([0, 0]);
+    expect(m.rack).toBe(1);
+    expect(m.turn).toMatchObject({ player: 1, isBreak: true });
+  });
+});

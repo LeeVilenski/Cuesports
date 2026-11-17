@@ -32,6 +32,10 @@ export function canPlaceCueBall(
   if (Math.abs(p.x) > hl || Math.abs(p.y) > hw) return false;
   // Behind the head string means the ball's centre is behind the line.
   if (zone === 'behind-head-string' && p.x >= headStringX(table)) return false;
+  if (zone === 'in-d') {
+    const d = theD(table);
+    if (!d || p.x > d.centre.x || Math.hypot(p.x - d.centre.x, p.y - d.centre.y) > d.radius) return false;
+  }
   return free(balls, cueId, p, R);
 }
 
@@ -73,4 +77,22 @@ export function spotBall(table: TableSpec, balls: BallState[], id: string, spot:
 export function footSpot(table: TableSpec): Vec2 {
   const m = table.markings.find((x) => x.type === 'spot' && x.id === 'foot');
   return m && m.type === 'spot' ? m.position : { x: table.playfield.length / 4, y: 0 };
+}
+
+/** The snooker D: a semicircle on the baulk line, on the baulk side. */
+export function theD(table: TableSpec): { centre: Vec2; radius: number } | null {
+  const m = table.markings.find((x) => x.type === 'arc' && x.id === 'D');
+  return m && m.type === 'arc' ? { centre: m.centre, radius: m.radius } : null;
+}
+
+/** A spot marking by id. */
+export function spotOf(table: TableSpec, id: string): Vec2 | null {
+  const m = table.markings.find((x) => x.type === 'spot' && x.id === id);
+  return m && m.type === 'spot' ? m.position : null;
+}
+
+/** Whether a ball could be spotted at p without touching another ball. */
+export function spotFree(balls: readonly BallState[], id: string, p: Vec2): boolean {
+  const b = balls.find((x) => x.id === id);
+  return free(balls, id, p, b?.radius ?? 0);
 }

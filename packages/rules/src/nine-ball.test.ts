@@ -1,7 +1,7 @@
 import { cloneBall, type BallState, type PhysicsEvent, type ShotResult } from '@cuesports/physics';
 import { Rng } from '@cuesports/shared';
 import { describe, expect, it } from 'vitest';
-import { NINE_BALL, type NineBallState } from './nine-ball';
+import { NINE_BALL, type NineBallState } from './rotation';
 import { footSpot } from './placement';
 
 const R = NINE_BALL;

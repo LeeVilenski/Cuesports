@@ -9,6 +9,8 @@ export interface ShotFacts {
   railAfterContact: boolean;
   /** Object balls potted, in order. */
   potted: string[];
+  /** Which pocket each potted object ball went into. */
+  pocketOf: Map<string, string>;
   /** Object balls that left the table. */
   offTable: string[];
   cueScratch: boolean;
@@ -21,6 +23,7 @@ export function shotFacts(result: ShotResult, cue = 'cue'): ShotFacts {
   let firstContactT = Infinity;
   let railAfterContact = false;
   const potted: string[] = [];
+  const pocketOf = new Map<string, string>();
   const offTable: string[] = [];
   const toRail = new Set<string>();
   let cueScratch = false;
@@ -39,7 +42,10 @@ export function shotFacts(result: ShotResult, cue = 'cue'): ShotFacts {
         break;
       case 'pocket':
         if (e.ball === cue) cueScratch = true;
-        else potted.push(e.ball);
+        else {
+          potted.push(e.ball);
+          pocketOf.set(e.ball, e.pocket);
+        }
         break;
       case 'off-table':
         if (e.ball === cue) cueScratch = true;
@@ -52,6 +58,7 @@ export function shotFacts(result: ShotResult, cue = 'cue'): ShotFacts {
     firstContactT,
     railAfterContact,
     potted,
+    pocketOf,
     offTable,
     cueScratch,
     objectBallsToRail: toRail.size,

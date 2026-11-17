@@ -71,6 +71,18 @@ export interface PocketSpec {
    */
   dropSag: number;
   fallRadius: number;
+  /**
+   * Restitution of the jaw facings for a ball already over the drop. American pocket facings are
+   * undercut, so a dropping ball meets them below the nose and dies (about 0.35). Snooker and English
+   * pockets have rounded, lively jaws that throw balls back out: null keeps normal cushion behaviour.
+   */
+  dropFacingRestitution: number | null;
+  /**
+   * The back of the pocket. null: a ball that reaches it is already over the hole and drops (deep
+   * American drop pockets). A number: the ball bounces off it with this restitution and only drops if
+   * it stays over the hole long enough, so a firm ball can rattle back out (snooker, English pool).
+   */
+  backRestitution: number | null;
 }
 
 export type MarkingSpec =

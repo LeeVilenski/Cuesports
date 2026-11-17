@@ -25,7 +25,7 @@ import {
   type ClothSpeed,
   type GameDef,
 } from './game/games';
-import { computeGuide, launchDirection } from './game/guide';
+import { computeGuide, launchDirection, pocketAhead } from './game/guide';
 import { SimClient } from './game/sim-client';
 import { BallsView } from './render/balls-view';
 import { CameraRig, type CameraMode } from './render/cameras';
@@ -34,9 +34,9 @@ import { CueView } from './render/cue-view';
 import { GuideView } from './render/guide-view';
 import { buildTableView, WELL_DEPTH, type TableView } from './render/table-view';
 import { Hud } from './ui/hud';
-import { MatchHud } from './ui/match-hud';
+import { MatchHud, type CallChoice } from './ui/match-hud';
 import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
-import { canPlaceCueBall, type ShotDeclaration } from '@cuesports/rules';
+import { canPlaceCueBall, numberedOnTable, pocketName, type ShotDeclaration } from '@cuesports/rules';
 
 // ---------------------------------------------------------------------------------------------
 // Renderer and scene
@@ -120,6 +120,12 @@ let dirty = true;
 /** The 9-ball match being played, or null in practice. */
 let match: Match | null = null;
 let decl: ShotDeclaration = {};
+/** The player's own call (10-ball); null means call automatically from the aim. */
+let manualCall: CallChoice = null;
+let autoCall: CallChoice = null;
+/** Snooker nomination: the player's own choice, or automatic from the aim. */
+let manualNominate: string | null = null;
+let autoNominate: string | null = null;
 let replaying = false;
 /** Playback frozen at a fixed time (test hook). */
 let frozen = false;
@@ -157,7 +163,7 @@ function setTable(def: GameDef): void {
 // Match play
 
 function startMatch(config: MatchConfig): void {
-  setTable(GAMES.find((g) => g.id === 'nine-ball')!);
+  setTable(GAMES.find((g) => g.id === config.game) ?? GAMES[0]!);
   match = new Match(config, (Math.random() * 1e9) | 0);
   matchHud.showResult(null);
   loadRack();
@@ -178,11 +184,14 @@ function loadRack(): void {
 function syncTurn(): void {
   if (!match) return;
   const t = match.turn;
+  manualCall = null;
+  manualNominate = null;
   matchHud.showBoard({
     players: match.config.players,
     score: match.score,
     raceTo: match.config.raceTo,
     turn: t,
+    frame: match.framePoints,
   });
   matchHud.setPushAvailable(t.canPushOut && !match.rackResult);
   matchHud.showDecision(t.decision ? match.names(t.decision.prompt) : null, t.decision?.choices ?? []);
@@ -198,17 +207,21 @@ function syncTurn(): void {
   if (target && cue) shot.aim = Math.atan2(target.pos.y - cue.pos.y, target.pos.x - cue.pos.x);
   const hand =
     t.ballInHand === 'behind-head-string'
-      ? ' Ball in hand behind the head string: drag the cue ball.'
-      : t.ballInHand === 'anywhere'
-        ? ' Ball in hand: drag the cue ball anywhere.'
-        : '';
+      ? match.config.game === 'english'
+        ? ' Ball in hand in baulk: drag the cue ball.'
+        : ' Ball in hand behind the head string: drag the cue ball.'
+      : t.ballInHand === 'in-d'
+        ? ' Ball in hand in the D: drag the cue ball.'
+        : t.ballInHand === 'anywhere'
+          ? ' Ball in hand: drag the cue ball anywhere.'
+          : '';
   matchHud.say(match.message + hand, hand ? 7000 : 4500);
   status(`${match.config.players[t.player]} to play`);
   if (match.rackResult) {
     const w = match.config.players[match.rackResult.winner]!;
     const score = `${match.config.players[0]} ${match.score[0]} – ${match.score[1]} ${match.config.players[1]}`;
     if (match.winner !== null) matchHud.showResult(`${w} wins the match`, score, true);
-    else matchHud.showResult(`${w} wins rack ${match.rack}`, `${match.message} ${score}`);
+    else matchHud.showResult(`${w} wins ${match.unit} ${match.rack}`, `${match.message} ${score}`);
   }
   rig.snap();
   dirty = true;
@@ -246,7 +259,18 @@ function shoot(p: number): void {
   if (match && (match.turn.decision || match.rackResult)) return;
   const cue = cueBall();
   if (!cue || cue.state === 'pocketed') return;
-  decl = match ? { pushOut: matchHud.pushOut } : {};
+  decl = {};
+  if (match) {
+    if (matchHud.pushOut) decl = { pushOut: true };
+    else if (match.turn.mustNominate) {
+      const n = manualNominate ?? autoNominate;
+      if (n) decl = { nominate: n };
+    } else if (match.turn.mustCall) {
+      const call = manualCall ?? autoCall;
+      if (call === 'safety') decl = { safety: true };
+      else if (call) decl = { call };
+    }
+  }
   hud.setPlacingAllowed(!match);
   placing = false;
   hud.setPlacing(false);
@@ -285,8 +309,11 @@ function endPlayback(): void {
     if (match && !replaying && last) match.judge(decl, last.before, result);
     replaying = false;
     balls = match ? match.balls.map(cloneBall) : result.final.map(cloneBall);
-    ballsView.commit(result);
-    ballsView.showState(balls);
+    if (match?.reracked) ballsView.setBalls(balls);
+    else {
+      ballsView.commit(result);
+      ballsView.showState(balls);
+    }
     playing = null;
     phase = 'aim';
     rig.overview = false;
@@ -423,6 +450,11 @@ const hud = new Hud(
     onRerack: () =>
       match ? matchHud.say('Re-rack is for practice. Start a new match from the menu.') : rerack(),
     onNewMatch: () => matchHud.openSetup(),
+    onConcede: () => {
+      if (!match || phase !== 'aim') return;
+      match.concede();
+      syncTurn();
+    },
     onClothSpeed: (speed) => {
       clothSpeed = speed;
       simTable = withClothSpeed(game.table, speed);
@@ -447,11 +479,16 @@ app.append(hud.root);
 
 const matchHud: MatchHud = new MatchHud({
   onPushOut: () => undefined,
+  onCall: (c) => {
+    manualCall = c;
+    dirty = true;
+  },
   onDecision: (choice) => {
     if (!match) return;
     match.decide(choice);
     balls = match.balls.map(cloneBall);
-    ballsView.showState(balls);
+    if (match.reracked) ballsView.setBalls(balls);
+    else ballsView.showState(balls);
     syncTurn();
   },
   onNextRack: () => {
@@ -464,6 +501,19 @@ const matchHud: MatchHud = new MatchHud({
   onPractice: () => setGame(GAMES[0]!),
 });
 app.append(matchHud.root);
+matchHud.onCallClick(() => {
+  if (match?.turn.mustNominate) {
+    matchHud.openNominatePicker(match.turn.targets, (b) => {
+      manualNominate = b;
+      dirty = true;
+    });
+    return;
+  }
+  matchHud.openCallPicker(
+    numberedOnTable(balls),
+    game.table.pockets.map((p) => ({ id: p.id, label: pocketName(p.id) })),
+  );
+});
 hud.setCamera('aim');
 
 // ---------------------------------------------------------------------------------------------
@@ -634,11 +684,24 @@ function frame(now: number): void {
       cueView.pose(cue.pos.x, cue.pos.y, cue.radius, shot, gap);
     }
   }
-  guideView.update(
-    showGuide && phase === 'aim' && !placing && cue
+  const guide =
+    phase === 'aim' && cue
       ? computeGuide(game.table, balls, 'cue', guideSquirt ? launchDirection(cue, shot) : shot.aim)
-      : null,
-  );
+      : null;
+  guideView.update(showGuide && !placing ? guide : null);
+  if (match && phase === 'aim') {
+    const pocket = guide?.object ? pocketAhead(game.table, guide.object.from, guide.object.dir) : null;
+    autoCall = guide?.object && pocket ? { ball: guide.object.id, pocket } : null;
+    const free = !match.turn.decision && !match.rackResult;
+    if (match.turn.mustNominate) {
+      const aimed = guide?.object?.id ?? null;
+      autoNominate = aimed && match.turn.targets.includes(aimed) ? aimed : null;
+      matchHud.showNomination(manualNominate ?? autoNominate, manualNominate !== null, free);
+    } else {
+      const needsCall = match.turn.mustCall && !matchHud.pushOut && free;
+      matchHud.showCall(manualCall ?? autoCall, manualCall !== null, pocketName, needsCall);
+    }
+  }
 
   if (dirty) {
     const t0 = performance.now();
@@ -698,7 +761,8 @@ registerSW({ immediate: true });
     if (!match) return;
     match.decide(choice);
     balls = match.balls.map(cloneBall);
-    ballsView.showState(balls);
+    if (match.reracked) ballsView.setBalls(balls);
+    else ballsView.showState(balls);
     syncTurn();
   },
   /** Free camera at a physics-space eye position looking at a target (for screenshots). */

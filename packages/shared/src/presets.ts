@@ -8,6 +8,8 @@ interface PocketParams {
   shelfDepth: number;
   dropSag: number;
   fallRadius: number;
+  dropFacingRestitution: number | null;
+  backRestitution: number | null;
 }
 
 /** Builds the six pockets of a standard table from corner and side pocket parameters. */
@@ -93,15 +95,28 @@ export const SNOOKER_12FT: TableSpec = {
   pockets: sixPockets(
     SNOOKER_L,
     SNOOKER_W,
+    // Tight, lively snooker pockets: a smaller knuckle that throws back balls clipping the jaw, and a
+    // soft pocket back, so firm pots that catch a jaw rattle out (playtest: they were far too easy).
     {
       mouthWidth: 0.086,
       jawAngle: 135,
-      jawRadius: 0.04,
-      shelfDepth: 0.015,
+      jawRadius: 0.015,
+      shelfDepth: 0.02,
       dropSag: 0.01,
       fallRadius: 0.045,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
     },
-    { mouthWidth: 0.105, jawAngle: 92, jawRadius: 0.03, shelfDepth: 0.02, dropSag: 0.008, fallRadius: 0.05 },
+    {
+      mouthWidth: 0.105,
+      jawAngle: 92,
+      jawRadius: 0.015,
+      shelfDepth: 0.015,
+      dropSag: 0.008,
+      fallRadius: 0.05,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
+    },
   ),
   markings: snookerMarkings,
   balls: {
@@ -134,21 +149,26 @@ export const ENGLISH_POOL_7FT: TableSpec = {
   pockets: sixPockets(
     EP_L,
     EP_W,
+    // Tight English pockets, built like the snooker ones.
     {
       mouthWidth: 0.088,
       jawAngle: 135,
-      jawRadius: 0.03,
-      shelfDepth: 0.012,
+      jawRadius: 0.015,
+      shelfDepth: 0.015,
       dropSag: 0.01,
       fallRadius: 0.045,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
     },
     {
       mouthWidth: 0.098,
       jawAngle: 92,
-      jawRadius: 0.025,
+      jawRadius: 0.015,
       shelfDepth: 0.015,
       dropSag: 0.008,
       fallRadius: 0.05,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
     },
   ),
   markings: [
@@ -199,6 +219,8 @@ export const AMERICAN_POOL_9FT: TableSpec = {
       shelfDepth: 0.0254,
       dropSag: 0.012,
       fallRadius: 0.055,
+      dropFacingRestitution: 0.35,
+      backRestitution: null,
     },
     {
       mouthWidth: 0.13,
@@ -207,6 +229,8 @@ export const AMERICAN_POOL_9FT: TableSpec = {
       shelfDepth: 0.003,
       dropSag: 0.008,
       fallRadius: 0.06,
+      dropFacingRestitution: 0.35,
+      backRestitution: null,
     },
   ),
   markings: [

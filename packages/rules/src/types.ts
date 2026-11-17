@@ -7,7 +7,7 @@ import type { Rng, TableSpec } from '@cuesports/shared';
  */
 
 /** Where the incoming player may place the cue ball. */
-export type BallInHand = 'none' | 'anywhere' | 'behind-head-string';
+export type BallInHand = 'none' | 'anywhere' | 'behind-head-string' | 'in-d';
 
 export interface RuleOption {
   id: string;
@@ -31,6 +31,14 @@ export interface Turn {
   targets: string[];
   /** The player may declare a push out for this shot. */
   canPushOut: boolean;
+  /** The shot must be called (ball and pocket) or declared a safety. */
+  mustCall: boolean;
+  /** The player must nominate a ball (snooker: a colour after a red, or a free ball). */
+  mustNominate?: boolean;
+  /** A free ball has been awarded: any ball may be nominated as the ball on. */
+  freeBall?: boolean;
+  /** Visits the player has (English pool: two after a foul under WEPF rules). */
+  visits?: number;
   /** A choice the player must make before anyone shoots (e.g. after a push out). */
   decision: Decision | null;
   isBreak: boolean;
@@ -43,11 +51,24 @@ export interface ShotDeclaration {
   pushOut?: boolean;
   /** Called ball and pocket, for call-shot games (10-ball, straight pool). */
   call?: { ball: string; pocket: string };
+  /** A declared safety in a call-shot game: balls potted stay down and the turn passes. */
+  safety?: boolean;
+  /** Nominated ball (snooker: the colour after a red, or the free ball). */
+  nominate?: string;
 }
 
 export interface Foul {
   code:
-    'scratch' | 'no-contact' | 'wrong-ball-first' | 'no-rail' | 'off-table' | 'illegal-break' | 'three-fouls';
+    | 'scratch'
+    | 'no-contact'
+    | 'wrong-ball-first'
+    | 'no-rail'
+    | 'off-table'
+    | 'illegal-break'
+    | 'three-fouls'
+    | 'wrong-ball-potted'
+    | 'no-nomination'
+    | 'three-misses';
   message: string;
 }
 
@@ -69,6 +90,8 @@ export interface Judgement<S> {
   message: string;
   /** Points per player, for scoring games (unused by 9-ball). */
   points?: number[];
+  /** The balls are re-racked and the frame restarted (no score) with this player breaking. */
+  rerack?: { breaker: number };
 }
 
 export interface Ruleset<S, O> {

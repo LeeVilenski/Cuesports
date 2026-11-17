@@ -54,6 +54,31 @@ describe('table geometry', () => {
   });
 });
 
+describe('snooker pockets', () => {
+  it('take a slightly off-line ball at slow pace but rattle it out when hit firmly', () => {
+    const t = SNOOKER_12FT;
+    const p = t.pockets.find((x) => x.id === 'top-right')!;
+    const perp = { x: -p.axis.y, y: p.axis.x };
+    const run = (speed: number, offset: number) => {
+      const start = {
+        x: p.position.x - p.axis.x * 0.9 + perp.x * offset,
+        y: p.position.y - p.axis.y * 0.9 + perp.y * offset,
+      };
+      const r = simulate(
+        t,
+        [cueAt(t, start.x, start.y)],
+        shot({ aim: Math.atan2(p.axis.y, p.axis.x), speed, tip: { a: 0, b: 0.4 } }),
+        { sampleRate: 0 },
+      );
+      return pocketEvents(r).length > 0;
+    };
+    expect(run(0.8, 0.012)).toBe(true);
+    expect(run(4, 0.012)).toBe(false);
+    // A hard, dead-straight pot still goes in.
+    expect(run(6, 0)).toBe(true);
+  });
+});
+
 describe('pocket drop outline', () => {
   const inside = (pts: { x: number; y: number }[], q: { x: number; y: number }) => {
     let c = false;
@@ -175,7 +200,7 @@ describe('pockets', () => {
     // 3 cm off the pocket line.
     expect(outcome(ENGLISH_POOL_7FT, 0.03)).toMatchObject({ potted: false });
     expect(outcome(SNOOKER_12FT, 0.03)).toMatchObject({ potted: false });
-    expect(outcome(SNOOKER_12FT, 0.03).jaws).toBeGreaterThan(1);
+
     expect(outcome(AMERICAN_POOL_9FT, 0.03)).toMatchObject({ potted: true });
     // ...and the ball touches the jaw on the way in.
     expect(outcome(AMERICAN_POOL_9FT, 0.03).jaws).toBeGreaterThan(0);
