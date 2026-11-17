@@ -323,6 +323,16 @@ function startPlayback(): void {
   navigator.vibrate?.(12);
 }
 
+/** A potted ball takes this long to drop and settle in the pocket. */
+const POT_SETTLE = 0.5;
+
+/** The shot is over when every ball is at rest, including balls still dropping into a pocket. */
+function playbackEnd(result: ShotResult): number {
+  let lastPot = -Infinity;
+  for (const e of result.events) if (e.type === 'pocket') lastPot = Math.max(lastPot, e.t);
+  return Math.max(result.duration, lastPot + POT_SETTLE);
+}
+
 /** Every shot starts from a centre-ball hit with a level cue. */
 function resetSpin(): void {
   shot = { ...shot, tip: { a: 0, b: 0 }, elevation: 0 };
@@ -775,8 +785,9 @@ function frame(now: number): void {
   }
   if (phase === 'playing' && playing) {
     if (!frozen) playT += dt;
-    ballsView.showFrame(playing, Math.min(playT, playing.duration));
-    if (playT >= playing.duration) endPlayback();
+    // The drop animation keeps running after the simulation ends.
+    ballsView.showFrame(playing, playT);
+    if (playT >= playbackEnd(playing)) endPlayback();
     dirty = true;
   }
 
@@ -906,7 +917,7 @@ registerSW({ immediate: true });
   events: () => playing?.events.filter((e) => e.type !== 'state') ?? [],
   /** Jumps to the end of the shot being played. */
   fastForward: () => {
-    if (playing) playT = playing.duration;
+    if (playing) playT = playbackEnd(playing);
   },
   setCamera: (m: CameraMode) => {
     rig.setMode(m);
