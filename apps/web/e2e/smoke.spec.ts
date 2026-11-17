@@ -20,10 +20,19 @@ declare global {
   }
 }
 
-/** The new-match sheet opens on start; these tests play practice, so close it. */
-async function practice(page: Page): Promise<void> {
+/** The home menu opens on start; these tests play practice on the 9-ball table. */
+async function practice(page: Page, game = '9-ball'): Promise<void> {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('button', { name: /^Practice/ }).click();
+  await page.getByRole('button', { name: game, exact: true }).click();
+}
+
+/** Opens the match set-up from the home menu, against a friend on the same device. */
+async function setup(page: Page, game?: string): Promise<void> {
+  await page.goto('/');
+  await page.getByRole('button', { name: /^Play/ }).click();
+  if (game) await page.getByRole('button', { name: game, exact: true }).click();
+  await page.getByRole('button', { name: 'Friend', exact: true }).click();
 }
 
 test('loads the 3D table, plays a shot and returns to aiming', async ({ page }) => {
@@ -49,10 +58,14 @@ test('switches games and cameras from the menu', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   await practice(page);
   await page.getByRole('button', { name: 'Menu' }).click();
-  await page.getByLabel('Game', { exact: true }).selectOption('snooker');
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: /^Change game/ }).click();
+  await page.getByRole('button', { name: 'Snooker', exact: true }).click();
   await expect(page.locator('.status')).toContainText('Snooker');
-  for (const name of ['Top', 'Free', 'Aim']) await page.getByRole('button', { name, exact: true }).click();
+  const cam = page.getByRole('button', { name: /^Camera/ });
+  for (const name of ['Top', 'Free', 'Aim']) {
+    await cam.click();
+    await expect(cam).toHaveAttribute('aria-label', `Camera: ${name} view`);
+  }
   const ids = await page.evaluate(() => window.__cuesports.state().balls.map((b) => b.id));
   expect(ids).toContain('black');
   expect(errors).toEqual([]);
@@ -73,7 +86,7 @@ test('pulling the power bar down and releasing takes a shot', async ({ page }) =
 test('plays a 9-ball match: setup, break, then the rules decide whose turn it is', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
+  await setup(page);
   await page.getByLabel('Player 1 name').fill('Ann');
   await page.getByLabel('Player 2 name').fill('Bo');
   await page.getByRole('button', { name: 'Start' }).click();
@@ -96,8 +109,7 @@ test('plays a 9-ball match: setup, break, then the rules decide whose turn it is
 test('plays 10-ball: after the break the shot is called automatically from the aim', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
-  await page.getByLabel('Game type').selectOption('ten-ball');
+  await setup(page, '10-Ball');
   await page.getByRole('button', { name: 'Start' }).click();
   const balls = await page.evaluate(() => window.__cuesports.state().balls.filter((b) => b.id !== 'cue'));
   expect(balls).toHaveLength(10);
@@ -124,9 +136,9 @@ test('plays snooker: break-off from the D, then the scoreboard shows points and 
 }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
-  await page.getByLabel('Game type').selectOption('snooker');
-  await page.getByLabel('Reds').selectOption('6');
+  await setup(page, 'Snooker');
+  await page.getByText('Rules', { exact: true }).click();
+  await page.getByRole('group', { name: 'Reds' }).getByRole('button', { name: '6' }).click();
   await page.getByRole('button', { name: 'Start' }).click();
   const balls = await page.evaluate(() =>
     window.__cuesports.state().balls.filter((b) => b.id.startsWith('red')),
@@ -148,9 +160,9 @@ test('plays snooker: break-off from the D, then the scoreboard shows points and 
 test('plays English pool: International rules break from baulk', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
-  await page.getByLabel('Game type').selectOption('english');
-  await expect(page.getByLabel('Rules')).toBeVisible();
+  await setup(page, 'UK 8-Ball');
+  await page.getByText('Rules', { exact: true }).click();
+  await expect(page.getByRole('group', { name: 'Rules' })).toBeVisible();
   await page.getByRole('button', { name: 'Start' }).click();
   const balls = await page.evaluate(() => window.__cuesports.state().balls.map((b) => b.id));
   expect(balls).toContain('8');
@@ -168,9 +180,11 @@ test('plays against the computer: it thinks in a worker and takes its own shots'
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
-  await page.getByLabel('Opponent').selectOption('3');
-  await expect(page.getByLabel('Player 2 name')).toHaveValue('CPU (Club)');
+  await page.getByRole('button', { name: /^Play/ }).click();
+  await page.getByRole('button', { name: 'Computer', exact: true }).click();
+  await page.getByRole('button', { name: 'Club', exact: true }).click();
   await page.getByRole('button', { name: 'Start' }).click();
+  await expect(page.locator('.scoreboard')).toContainText('CPU (Club)');
   // The human breaks.
   await page.evaluate(() => window.__cuesports.shoot(0.9));
   await page.waitForFunction(() => window.__cuesports.state().phase === 'playing', null, { timeout: 30_000 });
@@ -194,5 +208,21 @@ test('plays against the computer: it thinks in a worker and takes its own shots'
     await page.waitForFunction(() => window.__cuesports.state().phase === 'aim', null, { timeout: 30_000 });
   }
   expect(aiShots).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
+test('home screen: Quick match starts straight away and the pause menu returns home', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.getByRole('button', { name: /^Quick match/ }).click();
+  await expect(page.locator('.scoreboard')).toBeVisible();
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: /^Resume/ }).click();
+  await expect(page.locator('.menu')).toBeHidden();
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: /^Home/ }).click();
+  await expect(page.getByRole('button', { name: /^Quick match/ })).toBeVisible();
+  expect(await page.evaluate(() => window.__cuesports.state().match)).toBeNull();
   expect(errors).toEqual([]);
 });

@@ -1,4 +1,8 @@
 import type { CameraMode } from '../render/cameras';
+import { h, iconButton } from './kit';
+
+const CAMERAS: CameraMode[] = ['aim', 'top', 'free'];
+const CAMERA_NAMES: Record<CameraMode, string> = { aim: 'Aim view', top: 'Top view', free: 'Free view' };
 
 export interface HudCallbacks {
   onCamera(mode: CameraMode): void;
@@ -11,42 +15,23 @@ export interface HudCallbacks {
   onPlaceToggle(on: boolean): void;
   onReplay(): void;
   onUndo(): void;
-  onGame(id: string): void;
-  onRerack(): void;
-  onNewMatch(): void;
-  onConcede(): void;
-  onClothSpeed(speed: 'fast' | 'medium' | 'slow'): void;
-  onOption(name: 'guide' | 'squirt' | 'overview', on: boolean): void;
-}
-
-export interface GameOption {
-  id: string;
-  label: string;
+  onMenu(): void;
 }
 
 /** The tip can go up to just inside the miscue limit (0.55 R in DEFAULT_CUE). */
 const MAX_TIP = 0.52;
 const MISCUE_RING = 0.55;
 
-const h = <K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  props: Partial<HTMLElementTagNameMap[K]> & Record<string, unknown> = {},
-  ...children: (Node | string)[]
-): HTMLElementTagNameMap[K] => {
-  const e = document.createElement(tag);
-  Object.assign(e, props);
-  e.append(...children);
-  return e;
-};
 
 /** Touch-first HUD overlaid on the canvas. Layout adapts to portrait and landscape in CSS. */
 export class Hud {
   readonly root = h('div', { className: 'hud' });
   private status = h('div', { className: 'status' });
-  private camButtons = new Map<CameraMode, HTMLButtonElement>();
+  private camButton: HTMLButtonElement;
+  private camMode: CameraMode = 'aim';
   private powerFill = h('div', { className: 'power-fill' });
   private powerMark = h('div', { className: 'power-mark' });
-  private powerLabel = h('div', { className: 'power-label' }, 'Pull down');
+  private powerLabel = h('div', { className: 'power-label' });
   private spinMini = h('canvas', {
     className: 'spin-mini',
     width: 120,
@@ -60,12 +45,9 @@ export class Hud {
     ariaLabel: 'Tip position',
   });
   private spinPanel = h('div', { className: 'sheet spin-sheet', hidden: true });
-  private menu = h('div', { className: 'sheet menu-sheet', hidden: true });
   private elevInput = h('input', { type: 'range', min: '0', max: '60', step: '0.5', value: '0' });
   private elevOut = h('output', {}, '0°');
-  private placeBtn = h('button', { className: 'chip' }, 'Move cue ball');
-  private gameSelect = h('select', { ariaLabel: 'Game' });
-  private clothSelect = h('select', { ariaLabel: 'Cloth speed' });
+  private placeBtn = iconButton('hand', 'Move cue ball', () => undefined);
   private tip = { a: 0, b: 0 };
   private elevation = 0;
   /** Elevation the cue is forced up to by a cushion or ball in the way (degrees, 0 if none). */
@@ -73,34 +55,20 @@ export class Hud {
   private placing = false;
   private lastPower = 0.4;
 
-  constructor(
-    private cb: HudCallbacks,
-    games: GameOption[],
-    clothSpeeds: GameOption[],
-  ) {
-    for (const g of games) this.gameSelect.append(h('option', { value: g.id }, g.label));
-    for (const c of clothSpeeds) this.clothSelect.append(h('option', { value: c.id }, c.label));
-    this.clothSelect.addEventListener('change', () =>
-      cb.onClothSpeed(this.clothSelect.value as 'fast' | 'medium' | 'slow'),
-    );
-
-    const cams = h('div', { className: 'cams', role: 'group', ariaLabel: 'Camera' });
-    for (const [mode, label] of [
-      ['aim', 'Aim'],
-      ['top', 'Top'],
-      ['free', 'Free'],
-    ] as const) {
-      const b = h('button', { onclick: () => cb.onCamera(mode) }, label);
-      this.camButtons.set(mode, b);
-      cams.append(b);
-    }
+  constructor(private cb: HudCallbacks) {
+    // One camera button: tap cycles Aim → Top → Free.
+    this.camButton = iconButton('camera', 'Camera', () => {
+      const next = CAMERAS[(CAMERAS.indexOf(this.camMode) + 1) % CAMERAS.length]!;
+      cb.onCamera(next);
+    });
+    this.camButton.append(h('span', { className: 'cam-mode' }));
 
     const top = h(
       'div',
       { className: 'top' },
-      h('button', { className: 'icon', ariaLabel: 'Menu', onclick: () => this.toggle(this.menu) }, '☰'),
+      iconButton('menu', 'Menu', () => cb.onMenu()),
       this.status,
-      cams,
+      this.camButton,
     );
 
     // Power bar: pull down from anywhere on it, release to strike; drag back to the top to cancel.
@@ -146,7 +114,7 @@ export class Hud {
     const fine = h(
       'div',
       { className: 'fine', ariaLabel: 'Fine aim: drag sideways' },
-      h('span', {}, '◀  fine aim  ▶'),
+      h('span', { className: 'fine-grip' }),
     );
     let fx = 0;
     let fineDown = false;
@@ -216,67 +184,22 @@ export class Hud {
       ),
     );
 
+    this.placeBtn.onclick = null;
     this.placeBtn.addEventListener('click', () => {
       this.placing = !this.placing;
       this.placeBtn.classList.toggle('on', this.placing);
+      this.placeBtn.setAttribute('aria-pressed', String(this.placing));
       cb.onPlaceToggle(this.placing);
     });
     const actions = h(
       'div',
       { className: 'actions' },
       this.placeBtn,
-      h('button', { className: 'chip', onclick: () => cb.onReplay() }, 'Replay'),
-      h('button', { className: 'chip', onclick: () => cb.onUndo() }, 'Undo'),
+      iconButton('undo', 'Undo', () => cb.onUndo()),
+      iconButton('replay', 'Replay', () => cb.onReplay()),
     );
 
-    const check = (name: 'guide' | 'squirt' | 'overview', label: string, on: boolean) => {
-      const input = h('input', { type: 'checkbox', checked: on });
-      input.addEventListener('change', () => cb.onOption(name, input.checked));
-      return h('label', { className: 'check' }, input, ' ', label);
-    };
-    this.gameSelect.addEventListener('change', () => cb.onGame(this.gameSelect.value));
-    this.menu.append(
-      h('h2', {}, 'Cuesports prototype'),
-      h(
-        'button',
-        {
-          className: 'chip on',
-          onclick: () => {
-            this.toggle(this.menu);
-            cb.onNewMatch();
-          },
-        },
-        'New match',
-      ),
-      h(
-        'button',
-        {
-          className: 'chip',
-          onclick: () => {
-            this.toggle(this.menu);
-            cb.onConcede();
-          },
-        },
-        'Concede rack / frame',
-      ),
-      h('div', { className: 'row' }, h('label', {}, 'Practice'), this.gameSelect),
-      h('div', { className: 'row' }, h('label', {}, 'Cloth speed'), this.clothSelect),
-      h('button', { className: 'chip', onclick: () => cb.onRerack() }, 'Re-rack'),
-      check('guide', 'Aiming guide', true),
-      check('squirt', 'Guide shows squirt from side (off = aim for it yourself)', true),
-      check('overview', 'Rise to an overview during the shot', true),
-      h(
-        'p',
-        { className: 'help' },
-        'Drag on the table to aim (slow drags are finer). Use the strip at the bottom for fine aim. ',
-        'Pull the power bar down and let go to shoot. Pinch or scroll to zoom; drag two fingers up or down to tilt. ',
-        'Keys: ← → aim (Shift for bigger steps), ↑ ↓ tilt, Space shoots at the last power.',
-      ),
-      h('p', {}, h('a', { href: '/lab/' }, 'Open the 2D physics lab')),
-      h('button', { className: 'chip', onclick: () => this.toggle(this.menu) }, 'Close'),
-    );
-
-    this.root.append(top, power, fine, this.spinMini, actions, this.spinPanel, this.menu);
+    this.root.append(top, power, fine, this.spinMini, actions, this.spinPanel);
     this.powerMark.style.setProperty('--p', String(this.lastPower));
     this.drawSpin();
   }
@@ -285,16 +208,17 @@ export class Hud {
     return this.lastPower;
   }
 
-  setGame(id: string): void {
-    this.gameSelect.value = id;
-  }
-
-  setClothSpeed(id: string): void {
-    this.clothSelect.value = id;
-  }
-
   setCamera(mode: CameraMode): void {
-    for (const [m, b] of this.camButtons) b.classList.toggle('on', m === mode);
+    this.camMode = mode;
+    this.camButton.dataset.mode = mode;
+    this.camButton.ariaLabel = `Camera: ${CAMERA_NAMES[mode]}`;
+    this.camButton.title = CAMERA_NAMES[mode];
+    this.camButton.querySelector('.cam-mode')!.textContent = mode[0]!.toUpperCase();
+  }
+
+  /** Closes the spin sheet (e.g. when the pause menu opens). */
+  closeSheets(): void {
+    this.spinPanel.hidden = true;
   }
 
   /** Puts an element (the match scoreboard) into the top bar, after the menu button. */
@@ -309,6 +233,7 @@ export class Hud {
   setPlacing(on: boolean): void {
     this.placing = on;
     this.placeBtn.classList.toggle('on', on);
+    this.placeBtn.setAttribute('aria-pressed', String(on));
   }
 
   /** Enables or disables the Move cue ball button (in a match, only with ball in hand). */
@@ -323,13 +248,13 @@ export class Hud {
   private toggle(sheet: HTMLElement): void {
     const open = sheet.hidden;
     this.spinPanel.hidden = true;
-    this.menu.hidden = true;
     sheet.hidden = !open;
   }
 
   private showPower(p: number): void {
     this.powerFill.style.setProperty('--p', String(p));
-    this.powerLabel.textContent = p > 0 ? `${Math.round(p * 100)}%` : 'Pull down';
+    this.powerLabel.textContent = p > 0 ? `${Math.round(p * 100)}` : '';
+    this.powerLabel.parentElement?.classList.toggle('pulling', p > 0);
   }
 
   /** Shows a tip position and elevation on the spin widget (e.g. back to centre, or the AI's choice). */

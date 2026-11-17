@@ -628,3 +628,710 @@ input {
     bottom: calc(48px + var(--safe-b));
   }
 }
+
+/* =============================================================================================
+   M8a interface: design tokens, kit components, menus. Overrides the prototype styles above.
+   ============================================================================================= */
+
+:root {
+  --font: 'Barlow', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+  --radius: 14px;
+  --lip: 5px;
+  --gap: clamp(6px, 1.4vmin, 12px);
+  --blue: #2f7cf6;
+  --blue-lip: #1c58c0;
+  --orange: #f07f2e;
+  --orange-lip: #bf5a14;
+  --green: #36a64a;
+  --green-lip: #237633;
+  --yellow: #f6bd16;
+  --yellow-lip: #c08c00;
+  --purple: #7c5ce0;
+  --purple-lip: #573bb3;
+  --navy: #1b2740;
+  --navy-lip: #0e1628;
+  --panel: rgba(16, 24, 40, 0.92);
+}
+
+html,
+body {
+  font-family: var(--font);
+  font-weight: 500;
+}
+
+/* ---- Kit ---------------------------------------------------------------------------------- */
+
+.ico {
+  width: 1.25em;
+  height: 1.25em;
+  flex: none;
+}
+
+.ibtn {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  font-size: 18px;
+  transition: transform 0.08s, background 0.15s;
+}
+
+.ibtn:active {
+  transform: scale(0.92);
+}
+
+.ibtn.on,
+.ibtn[aria-pressed='true'] {
+  background: var(--accent);
+  color: #1a1407;
+  border-color: var(--accent);
+}
+
+.ibtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.seg button {
+  flex: 1 1 auto;
+  min-height: 38px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.seg button[aria-pressed='true'] {
+  background: var(--text);
+  color: #111a2e;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stepper .ibtn {
+  width: 38px;
+  height: 38px;
+}
+
+.stepper output {
+  min-width: 2ch;
+  text-align: center;
+  font: 700 22px var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.switch input {
+  appearance: none;
+  flex: none;
+  width: 46px;
+  height: 28px;
+  margin: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.18);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.switch input::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  transition: translate 0.15s;
+}
+
+.switch input:checked {
+  background: var(--green);
+}
+
+.switch input:checked::after {
+  translate: 18px 0;
+}
+
+/* Chunky tiles with a pressable lip. */
+.tile {
+  --c: var(--navy);
+  --c-lip: var(--navy-lip);
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.6vmin, 14px);
+  min-height: clamp(54px, 14vmin, 92px);
+  padding: 8px clamp(10px, 2vmin, 16px);
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--c);
+  box-shadow: 0 var(--lip) 0 var(--c-lip), 0 calc(var(--lip) + 4px) 14px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  margin-bottom: var(--lip);
+  transition:
+    transform 0.08s,
+    box-shadow 0.08s;
+}
+
+.tile:active:not(:disabled) {
+  transform: translateY(calc(var(--lip) - 1px));
+  box-shadow: 0 1px 0 var(--c-lip);
+}
+
+.tile.blue {
+  --c: var(--blue);
+  --c-lip: var(--blue-lip);
+}
+.tile.orange {
+  --c: var(--orange);
+  --c-lip: var(--orange-lip);
+}
+.tile.green {
+  --c: var(--green);
+  --c-lip: var(--green-lip);
+}
+.tile.yellow {
+  --c: var(--yellow);
+  --c-lip: var(--yellow-lip);
+  color: #1d1600;
+}
+.tile.purple {
+  --c: var(--purple);
+  --c-lip: var(--purple-lip);
+}
+
+.tile.locked {
+  filter: saturate(0.35) brightness(0.75);
+  cursor: default;
+}
+
+.tile-ico {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: clamp(34px, 8vmin, 48px);
+  height: clamp(34px, 8vmin, 48px);
+  border-radius: 10px;
+  border: 2px solid currentColor;
+  font-size: clamp(16px, 4vmin, 24px);
+  opacity: 0.95;
+}
+
+.tile-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tile strong {
+  font: 700 clamp(19px, 4.6vmin, 30px) / 1.05 var(--font-display);
+  letter-spacing: 0.01em;
+}
+
+.tile small {
+  font-size: clamp(12px, 2.8vmin, 16px);
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tile small:empty {
+  display: none;
+}
+
+/* ---- Menu shell --------------------------------------------------------------------------- */
+
+#app.menu-open .hud,
+#app.menu-open .match-hud {
+  display: none;
+}
+
+.menu {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  padding: calc(12px + var(--safe-t)) calc(16px + var(--safe-r)) calc(12px + var(--safe-b))
+    calc(16px + var(--safe-l));
+  background: linear-gradient(90deg, rgba(6, 10, 18, 0.7) 0%, rgba(6, 10, 18, 0.35) 55%, transparent 80%);
+  display: flex;
+}
+
+.menu[hidden] {
+  display: none;
+}
+
+.menu[data-screen='pause'] {
+  background: rgba(6, 10, 18, 0.6);
+  backdrop-filter: blur(3px);
+  align-items: center;
+  justify-content: center;
+}
+
+.panel.enter {
+  animation: panel-in 0.18s ease-out;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    translate: -12px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel.enter {
+    animation: none;
+  }
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+}
+
+.tiles .wide {
+  grid-column: 1 / -1;
+}
+
+/* ---- Home --------------------------------------------------------------------------------- */
+
+.home {
+  width: min(580px, 60vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--gap);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: var(--gap);
+}
+
+.wordmark {
+  font: italic 800 clamp(34px, 9vmin, 64px) / 0.9 var(--font-display);
+  letter-spacing: 0.01em;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.tag {
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--yellow);
+  color: #1d1600;
+  font: 700 clamp(13px, 3vmin, 20px) / 1.2 var(--font-display);
+  letter-spacing: 0.08em;
+  box-shadow: 0 3px 0 var(--yellow-lip);
+}
+
+.utility {
+  display: flex;
+  gap: var(--gap);
+  margin-top: 2px;
+}
+
+.ubtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--navy);
+  box-shadow: 0 4px 0 var(--navy-lip);
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+
+.ubtn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--navy-lip);
+}
+
+/* ---- Sub screens (Play, Practice, Settings, Help) ------------------------------------------ */
+
+.sub {
+  width: min(560px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: 12px 14px 10px;
+  border-radius: 18px;
+  background: var(--panel);
+  border: 1px solid var(--glass-line);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bar h2 {
+  margin: 0;
+  font: italic 800 26px/1 var(--font-display);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 2px;
+}
+
+.scroll h3 {
+  margin: 8px 0 0;
+  font: 700 13px var(--font-display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.field[hidden],
+.sub [hidden] {
+  display: none !important;
+}
+
+.field-label {
+  flex: none;
+  min-width: 5.5em;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.field .seg {
+  flex: 1;
+}
+
+.field input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-line);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.levels button {
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.game-pick {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.game-pick.big {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
+
+.game-pick button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px 8px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.06);
+  font: 700 16px var(--font-display);
+  cursor: pointer;
+}
+
+.game-pick button[aria-pressed='true'] {
+  border-color: var(--yellow);
+  background: rgba(246, 189, 22, 0.14);
+}
+
+.game-pick.big button:active {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.ball-badge {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.55), transparent 35%),
+    radial-gradient(circle, #f7f3e8 0 34%, var(--c) 36%);
+  color: #111;
+  font: 800 13px var(--font-display);
+  box-shadow: inset -3px -4px 6px rgba(0, 0, 0, 0.35);
+}
+
+.ball-badge.solid {
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.55), transparent 35%),
+    var(--c);
+}
+
+.rules summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.rules summary::-webkit-details-marker {
+  display: none;
+}
+
+.rules[open] summary {
+  color: var(--text);
+}
+
+.cta {
+  justify-content: center;
+  min-height: 56px;
+}
+
+.cta strong {
+  font-size: 26px;
+}
+
+.help-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.help-row p {
+  margin: 0;
+}
+
+.help-ico {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 20px;
+}
+
+.fine-print {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.fine-print a {
+  color: var(--accent);
+}
+
+/* ---- Pause -------------------------------------------------------------------------------- */
+
+.pause {
+  width: min(520px, 100%);
+}
+
+/* ---- In-game HUD: icon controls ----------------------------------------------------------- */
+
+.top {
+  gap: 10px;
+}
+
+.top > .ibtn:last-child {
+  margin-left: auto;
+}
+
+.cam-mode {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #1a1407;
+  font: 800 11px/18px var(--font-display);
+  text-align: center;
+}
+
+.actions {
+  flex-wrap: nowrap;
+  max-width: none;
+  gap: 8px;
+}
+
+.power {
+  width: 44px;
+  border-radius: 22px;
+}
+
+.power-label {
+  writing-mode: horizontal-tb;
+  transform: none;
+  translate: none;
+  left: 0;
+  right: 0;
+  bottom: auto;
+  top: 50%;
+  font: 800 18px var(--font-display);
+  color: #fff;
+  text-shadow: 0 1px 3px #000;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.power.pulling .power-label {
+  opacity: 1;
+}
+
+.fine {
+  height: 34px;
+  border-radius: 17px;
+}
+
+.fine-grip {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.scoreboard,
+.toast {
+  font-family: var(--font);
+}
+
+.scoreboard .score {
+  font-family: var(--font-display);
+}
+
+/* ---- Portrait ----------------------------------------------------------------------------- */
+
+@media (orientation: portrait) {
+  .menu {
+    background: linear-gradient(0deg, rgba(6, 10, 18, 0.85) 0%, rgba(6, 10, 18, 0.5) 55%, transparent 85%);
+  }
+
+  .home {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .brand {
+    margin-bottom: auto;
+    padding-top: 8px;
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  .tile {
+    min-height: clamp(62px, 9vh, 92px);
+  }
+
+  .sub {
+    width: 100%;
+  }
+
+  .game-pick {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .levels button {
+    flex: 1 1 30%;
+  }
+}
+
+/* Short landscape phones: everything has to fit in ~360px of height. */
+@media (max-height: 500px) {
+  .ibtn {
+    width: 38px;
+    height: 38px;
+    font-size: 16px;
+  }
+
+  .power {
+    width: 38px;
+  }
+
+  .fine {
+    height: 30px;
+  }
+
+  .sub {
+    padding: 8px 12px 6px;
+  }
+
+  .bar h2 {
+    font-size: 22px;
+  }
+
+  .cta {
+    min-height: 46px;
+  }
+
+  .field {
+    min-height: 38px;
+  }
+}
