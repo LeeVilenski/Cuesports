@@ -6,6 +6,7 @@ interface PocketParams {
   jawAngle: number;
   jawRadius: number;
   shelfDepth: number;
+  dropSag: number;
   fallRadius: number;
 }
 
@@ -92,8 +93,15 @@ export const SNOOKER_12FT: TableSpec = {
   pockets: sixPockets(
     SNOOKER_L,
     SNOOKER_W,
-    { mouthWidth: 0.086, jawAngle: 135, jawRadius: 0.04, shelfDepth: 0.015, fallRadius: 0.045 },
-    { mouthWidth: 0.105, jawAngle: 92, jawRadius: 0.03, shelfDepth: 0.02, fallRadius: 0.05 },
+    {
+      mouthWidth: 0.086,
+      jawAngle: 135,
+      jawRadius: 0.04,
+      shelfDepth: 0.015,
+      dropSag: 0.01,
+      fallRadius: 0.045,
+    },
+    { mouthWidth: 0.105, jawAngle: 92, jawRadius: 0.03, shelfDepth: 0.02, dropSag: 0.008, fallRadius: 0.05 },
   ),
   markings: snookerMarkings,
   balls: {
@@ -126,8 +134,22 @@ export const ENGLISH_POOL_7FT: TableSpec = {
   pockets: sixPockets(
     EP_L,
     EP_W,
-    { mouthWidth: 0.088, jawAngle: 135, jawRadius: 0.03, shelfDepth: 0.012, fallRadius: 0.045 },
-    { mouthWidth: 0.098, jawAngle: 92, jawRadius: 0.025, shelfDepth: 0.015, fallRadius: 0.05 },
+    {
+      mouthWidth: 0.088,
+      jawAngle: 135,
+      jawRadius: 0.03,
+      shelfDepth: 0.012,
+      dropSag: 0.01,
+      fallRadius: 0.045,
+    },
+    {
+      mouthWidth: 0.098,
+      jawAngle: 92,
+      jawRadius: 0.025,
+      shelfDepth: 0.015,
+      dropSag: 0.008,
+      fallRadius: 0.05,
+    },
   ),
   markings: [
     {
@@ -170,8 +192,22 @@ export const AMERICAN_POOL_9FT: TableSpec = {
   pockets: sixPockets(
     AP_L,
     AP_W,
-    { mouthWidth: 0.1143, jawAngle: 142, jawRadius: 0.0127, shelfDepth: 0.0254, fallRadius: 0.055 },
-    { mouthWidth: 0.13, jawAngle: 104, jawRadius: 0.0127, shelfDepth: 0.003, fallRadius: 0.06 },
+    {
+      mouthWidth: 0.1143,
+      jawAngle: 142,
+      jawRadius: 0.0127,
+      shelfDepth: 0.0254,
+      dropSag: 0.012,
+      fallRadius: 0.055,
+    },
+    {
+      mouthWidth: 0.13,
+      jawAngle: 104,
+      jawRadius: 0.0127,
+      shelfDepth: 0.003,
+      dropSag: 0.008,
+      fallRadius: 0.06,
+    },
   ),
   markings: [
     { type: 'line', id: 'head-string', a: { x: -AP_L / 4, y: -AP_W / 2 }, b: { x: -AP_L / 4, y: AP_W / 2 } },

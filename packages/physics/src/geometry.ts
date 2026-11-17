@@ -10,9 +10,24 @@ export interface Segment {
   pocket?: string;
 }
 
+/**
+ * The slate's drop edge in a pocket: an arc of a circle through the shelf point on the pocket's
+ * centre line and the points where it meets the two jaws. A ball whose centre is inside the circle
+ * is over the hole.
+ */
+export interface DropEdge {
+  centre: Vec2;
+  radius: number;
+  /** Where the edge meets jaw 0 and jaw 1, and its shallowest point (on the centre line). */
+  jaw0: Vec2;
+  jaw1: Vec2;
+  mid: Vec2;
+}
+
 export interface TableGeometry {
   segments: Segment[];
   pockets: PocketSpec[];
+  drops: Map<string, DropEdge>;
   halfLength: number;
   halfWidth: number;
 }
@@ -144,7 +159,12 @@ export function buildTableGeometry(table: TableSpec): TableGeometry {
     }
   }
 
-  return { segments, pockets: table.pockets, halfLength: hl, halfWidth: hw };
+  const drops = new Map<string, DropEdge>();
+  for (const p of table.pockets) {
+    const d = dropEdge(segments, p);
+    if (d) drops.set(p.id, d);
+  }
+  return { segments, pockets: table.pockets, drops, halfLength: hl, halfWidth: hw };
 }
 
 /**
@@ -200,36 +220,121 @@ export function tableGeometry(table: TableSpec): TableGeometry {
   return g;
 }
 
-/**
- * Outline of a pocket's drop: the area past the shelf line, between the jaws, closed by the back of
- * the pocket. A ball whose centre is inside it is over the hole (see `overDrop` in simulate.ts).
- * The renderer cuts exactly this shape out of the cloth, so what you see matches the physics.
- */
-export function dropOutline(geo: TableGeometry, pocketId: string): Vec2[] {
-  const p = geo.pockets.find((x) => x.id === pocketId);
-  if (!p) return [];
-  const mouth = {
-    x: p.position.x - p.axis.x * (p.shelfDepth + p.fallRadius),
-    y: p.position.y - p.axis.y * (p.shelfDepth + p.fallRadius),
-  };
-  const depth = (q: Vec2) => (q.x - mouth.x) * p.axis.x + (q.y - mouth.y) * p.axis.y - p.shelfDepth;
-  /** Jaw i as a polyline from its tip into the pocket, cut where it crosses the shelf line. */
-  const jaw = (i: number): Vec2[] => {
-    const segs = geo.segments.filter((s) => s.id.startsWith(`jaw:${p.id}:${i}:`));
-    const pts = [...segs.map((s) => s.a), segs[segs.length - 1]!.b];
-    for (let k = 1; k < pts.length; k++) {
-      const a = pts[k - 1]!;
-      const b = pts[k]!;
-      const da = depth(a);
-      const db = depth(b);
-      if (da < 0 && db >= 0) {
-        const f = -da / (db - da);
-        return [{ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }, ...pts.slice(k)];
-      }
-      if (da >= 0) return pts.slice(k - 1);
+const mouthOf = (p: PocketSpec): Vec2 => ({
+  x: p.position.x - p.axis.x * (p.shelfDepth + p.fallRadius),
+  y: p.position.y - p.axis.y * (p.shelfDepth + p.fallRadius),
+});
+
+/** Jaw i of a pocket as a polyline from its tip into the pocket. */
+function jawPoints(segments: Segment[], pocketId: string, i: number): Vec2[] {
+  const segs = segments.filter((s) => s.id.startsWith(`jaw:${pocketId}:${i}:`));
+  return segs.length ? [...segs.map((s) => s.a), segs[segs.length - 1]!.b] : [];
+}
+
+/** Where a jaw polyline first reaches `target` depth behind the mouth line, and the index after it. */
+function jawAtDepth(pts: Vec2[], p: PocketSpec, target: number): { at: Vec2; next: number } | null {
+  const m = mouthOf(p);
+  const depth = (q: Vec2) => (q.x - m.x) * p.axis.x + (q.y - m.y) * p.axis.y - target;
+  for (let k = 1; k < pts.length; k++) {
+    const a = pts[k - 1]!;
+    const b = pts[k]!;
+    const da = depth(a);
+    const db = depth(b);
+    if (da < 0 && db >= 0) {
+      const f = -da / (db - da);
+      return { at: { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }, next: k };
     }
-    return [pts[pts.length - 1]!];
+  }
+  return null;
+}
+
+/** Circle through three points (only exactly rounded operations, so it is deterministic). */
+function circleThrough(a: Vec2, b: Vec2, c: Vec2): { centre: Vec2; radius: number } {
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  const a2 = a.x * a.x + a.y * a.y;
+  const b2 = b.x * b.x + b.y * b.y;
+  const c2 = c.x * c.x + c.y * c.y;
+  const centre = {
+    x: (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / d,
+    y: (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d,
   };
-  const back = geo.segments.filter((s) => s.id.startsWith(`back:${p.id}:`)).map((s) => s.b);
-  return [...jaw(0), ...back.slice(0, -1), ...jaw(1).reverse()];
+  return { centre, radius: Math.sqrt((a.x - centre.x) ** 2 + (a.y - centre.y) ** 2) };
+}
+
+function dropEdge(segments: Segment[], p: PocketSpec): DropEdge | null {
+  const m = mouthOf(p);
+  const mid = { x: m.x + p.axis.x * p.shelfDepth, y: m.y + p.axis.y * p.shelfDepth };
+  const sag = Math.max(p.dropSag, 1e-4);
+  const j0 = jawAtDepth(jawPoints(segments, p.id, 0), p, p.shelfDepth + sag);
+  const j1 = jawAtDepth(jawPoints(segments, p.id, 1), p, p.shelfDepth + sag);
+  if (!j0 || !j1) return null;
+  const { centre, radius } = circleThrough(mid, j0.at, j1.at);
+  return { centre, radius, jaw0: j0.at, jaw1: j1.at, mid };
+}
+
+/** True when a point is over a pocket's drop (inside the drop-edge circle, in the pocket). */
+export function overDrop(pos: Vec2, p: PocketSpec, d: DropEdge): boolean {
+  const ex = pos.x - p.position.x;
+  const ey = pos.y - p.position.y;
+  const reach = p.fallRadius + p.mouthWidth;
+  if (ex * ex + ey * ey > reach * reach) return false;
+  const dx = pos.x - d.centre.x;
+  const dy = pos.y - d.centre.y;
+  return dx * dx + dy * dy <= d.radius * d.radius;
+}
+
+/**
+ * Outline of a pocket's drop: the curved slate edge between the jaws, the jaws further in, and the
+ * back of the pocket. A ball whose centre is inside it is over the hole. The renderer cuts exactly
+ * this shape out of the cloth, so what you see matches the physics.
+ */
+export function dropOutline(geo: TableGeometry, pocketId: string, arcSteps = 16): Vec2[] {
+  const p = geo.pockets.find((x) => x.id === pocketId);
+  const d = geo.drops.get(pocketId);
+  if (!p || !d) return [];
+  const target = p.shelfDepth + Math.max(p.dropSag, 1e-4);
+  const j0pts = jawPoints(geo.segments, pocketId, 0);
+  const j1pts = jawPoints(geo.segments, pocketId, 1);
+  const c0 = jawAtDepth(j0pts, p, target)!;
+  const c1 = jawAtDepth(j1pts, p, target)!;
+  const back = geo.segments.filter((s) => s.id.startsWith(`back:${pocketId}:`)).map((s) => s.b);
+  // The slate edge from jaw 1 round through the shallowest point to jaw 0 (normalised
+  // interpolation between directions from the centre, no trig).
+  const unit = (v: Vec2): Vec2 => {
+    const l = Math.sqrt(v.x * v.x + v.y * v.y);
+    return { x: v.x / l, y: v.y / l };
+  };
+  const u1 = unit({ x: d.jaw1.x - d.centre.x, y: d.jaw1.y - d.centre.y });
+  const um = unit({ x: d.mid.x - d.centre.x, y: d.mid.y - d.centre.y });
+  const u0 = unit({ x: d.jaw0.x - d.centre.x, y: d.jaw0.y - d.centre.y });
+  const edge: Vec2[] = [];
+  for (const [from, to] of [
+    [u1, um],
+    [um, u0],
+  ] as const) {
+    for (let k = 1; k <= arcSteps; k++) {
+      const f = k / arcSteps;
+      const u = unit({ x: from.x * (1 - f) + to.x * f, y: from.y * (1 - f) + to.y * f });
+      edge.push({ x: d.centre.x + u.x * d.radius, y: d.centre.y + u.y * d.radius });
+    }
+  }
+  edge.pop(); // ends at jaw0, which starts the outline
+  return [
+    c0.at,
+    ...j0pts.slice(c0.next),
+    ...back.slice(0, -1),
+    ...j1pts.slice(c1.next).reverse(),
+    c1.at,
+    ...edge,
+  ];
+}
+
+/** Points along a pocket's curved slate edge, from jaw 1 to jaw 0 (for drawing the cloth lip). */
+export function dropEdgePoints(geo: TableGeometry, pocketId: string, steps = 24): Vec2[] {
+  const out = dropOutline(geo, pocketId, steps / 2);
+  const d = geo.drops.get(pocketId);
+  if (!d) return [];
+  // The edge is the tail of the outline: from jaw 1's crossing round to jaw 0's.
+  const i = out.findIndex((q) => q.x === d.jaw1.x && q.y === d.jaw1.y);
+  return i < 0 ? [] : [...out.slice(i), out[0]!];
 }

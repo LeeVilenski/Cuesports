@@ -1,7 +1,10 @@
-import { dropOutline, tableGeometry, type TableGeometry } from '@cuesports/physics';
+import { dropEdgePoints, dropOutline, tableGeometry, type TableGeometry } from '@cuesports/physics';
 import type { TableSpec, Vec2 } from '@cuesports/shared';
 import {
   BackSide,
+  BufferGeometry,
+  DoubleSide,
+  Float32BufferAttribute,
   BoxGeometry,
   CircleGeometry,
   Color,
@@ -77,6 +80,41 @@ function backRadius(geo: TableGeometry, pocketId: string): number {
   const back = geo.segments.filter((s) => s.id.startsWith(`back:${pocketId}:`));
   const q = back[0]?.a ?? p.position;
   return Math.hypot(q.x - p.position.x, q.y - p.position.y) || p.fallRadius;
+}
+
+const LIP_RADIUS = 0.005;
+
+/** A strip of cloth curving down over the slate edge, from the edge into the hole. */
+function clothLip(edge: Vec2[], centre: Vec2, material: MeshStandardMaterial): Mesh {
+  const steps = 5;
+  const pos: number[] = [];
+  const idx: number[] = [];
+  edge.forEach((e, i) => {
+    const dx = centre.x - e.x;
+    const dy = centre.y - e.y;
+    const l = Math.hypot(dx, dy);
+    const nx = dx / l;
+    const ny = dy / l;
+    for (let k = 0; k <= steps; k++) {
+      const phi = ((k / steps) * Math.PI) / 2;
+      const out = LIP_RADIUS * Math.sin(phi);
+      pos.push(e.x + nx * out, e.y + ny * out, -LIP_RADIUS * (1 - Math.cos(phi)));
+    }
+    if (i > 0) {
+      for (let k = 0; k < steps; k++) {
+        const a = (i - 1) * (steps + 1) + k;
+        const b = i * (steps + 1) + k;
+        idx.push(a, b, a + 1, b, b + 1, a + 1);
+      }
+    }
+  });
+  const g = new BufferGeometry();
+  g.setAttribute('position', new Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const lipMat = material.clone();
+  lipMat.side = DoubleSide;
+  return new Mesh(g, lipMat);
 }
 
 /** Centre of a polygon's area (where potted balls come to rest in the well). */
@@ -238,6 +276,10 @@ export function buildTableView(table: TableSpec): TableView {
   for (const p of table.pockets) {
     const outline = drops.get(p.id)!;
     rest.set(p.id, centroid(outline));
+    // Cloth lip: the cloth rolls over the rounded slate edge (BCA: 1/8–1/4" radius) into the hole.
+    const edgeInfo = geo.drops.get(p.id);
+    const edge = dropEdgePoints(geo, p.id);
+    if (edgeInfo && edge.length > 1) group.add(clothLip(edge, edgeInfo.centre, cushionMat));
     // Well: the drop outline extruded down below the slate, seen from inside.
     const wellShape = toShape(outline);
     const well = new Mesh(new ExtrudeGeometry(wellShape, { depth: WELL_DEPTH, bevelEnabled: false }), [

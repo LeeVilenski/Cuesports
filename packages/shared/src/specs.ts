@@ -65,6 +65,11 @@ export interface PocketSpec {
   jawRadius: number;
   /** Distance from the mouth line to the edge of the drop. */
   shelfDepth: number;
+  /**
+   * The slate's drop edge is a curve, not a straight line: it is `shelfDepth` behind the mouth on
+   * the pocket's centre line and curves this much deeper where it meets each jaw facing.
+   */
+  dropSag: number;
   fallRadius: number;
 }
 
