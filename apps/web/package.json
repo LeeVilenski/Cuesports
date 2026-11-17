@@ -11,11 +11,13 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@cuesports/ai": "workspace:*",
     "@cuesports/physics": "workspace:*",
-    "@cuesports/shared": "workspace:*",
-    "three": "0.187.0",
     "@cuesports/rules": "workspace:*",
-    "@cuesports/ai": "workspace:*"
+    "@cuesports/shared": "workspace:*",
+    "@fontsource/barlow": "5.2.5",
+    "@fontsource/barlow-condensed": "5.2.5",
+    "three": "0.187.0"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

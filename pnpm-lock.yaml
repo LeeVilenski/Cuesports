@@ -47,6 +47,12 @@ importers:
       '@cuesports/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@fontsource/barlow':
+        specifier: 5.2.5
+        version: 5.2.5
+      '@fontsource/barlow-condensed':
+        specifier: 5.2.5
+        version: 5.2.5
       three:
         specifier: 0.187.0
         version: 0.187.0
@@ -674,6 +680,12 @@ packages:
   '@eslint/plugin-kit@0.7.3':
     resolution: {integrity: sha512-IkO+/KEUvwbVpiURZg+P7zF74z5Jxe0UgJxVni+RtoHQ6IZieXaO02kmadomap/q+l6bc/jdPGGqTjhuZnuz1Q==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
+
+  '@fontsource/barlow-condensed@5.2.5':
+    resolution: {integrity: sha512-ggz5MQX65HIeLek9db7jB+Duyvi8NlC1MHkd0u2s7UBgdXgxJHGnQ5IqI2GlYheScemH7ajMO47n6XKkmXRMtA==}
+
+  '@fontsource/barlow@5.2.5':
+    resolution: {integrity: sha512-p+2XXEM7v85kbn0Dh8g0YLMjTCDiRCAi9nHik6w/2owZ9CkT1yYGGgaUMshJRqykh7efv1gE0QxAkOhZHd8tEg==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -3181,6 +3193,10 @@ snapshots:
     dependencies:
       '@eslint/core': 1.2.1
       levn: 0.4.1
+
+  '@fontsource/barlow-condensed@5.2.5': {}
+
+  '@fontsource/barlow@5.2.5': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

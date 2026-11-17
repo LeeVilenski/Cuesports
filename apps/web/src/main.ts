@@ -24,7 +24,6 @@ import { DEFAULT_CUE } from '@cuesports/shared';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { registerSW } from 'virtual:pwa-register';
 import {
-  CLOTH_SPEEDS,
   GAMES,
   powerToSpeed,
   strokeSpeed,
@@ -42,6 +41,11 @@ import { GuideView } from './render/guide-view';
 import { buildTableView, WELL_DEPTH, type TableView } from './render/table-view';
 import { Hud } from './ui/hud';
 import { MatchHud, type CallChoice } from './ui/match-hud';
+import { Menu } from './ui/menu';
+import '@fontsource/barlow/500.css';
+import '@fontsource/barlow/600.css';
+import '@fontsource/barlow-condensed/700.css';
+import '@fontsource/barlow-condensed/800-italic.css';
 import { chooseDecision } from '@cuesports/ai';
 import { AiClient } from './game/ai-client';
 import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
@@ -159,7 +163,6 @@ function setGame(def: GameDef): void {
   matchHud.showCall(null, false, (p) => p, false);
   setTable(def);
   rerack();
-  hud.setGame(def.id);
 }
 
 function setTable(def: GameDef): void {
@@ -570,35 +573,12 @@ const hud = new Hud(
     },
     onReplay: replay,
     onUndo: undo,
-    onGame: (id) => setGame(GAMES.find((g) => g.id === id) ?? GAMES[0]!),
-    onRerack: () =>
-      match ? matchHud.say('Re-rack is for practice. Start a new match from the menu.') : rerack(),
-    onNewMatch: () => matchHud.openSetup(),
-    onConcede: () => {
-      if (!match || phase !== 'aim') return;
-      match.concede();
-      syncTurn();
-    },
-    onClothSpeed: (speed) => {
-      clothSpeed = speed;
-      simTable = withClothSpeed(game.table, speed);
-      try {
-        localStorage.setItem('cuesports.clothSpeed', speed);
-      } catch {
-        // Not persisted; fine for this session.
-      }
-    },
-    onOption: (name, on) => {
-      if (name === 'guide') showGuide = on;
-      else if (name === 'squirt') guideSquirt = on;
-      else useOverview = on;
-      dirty = true;
+    onMenu: () => {
+      hud.closeSheets();
+      menu.open('pause', { inMatch: match !== null });
     },
   },
-  GAMES.map((g) => ({ id: g.id, label: g.label })),
-  Object.entries(CLOTH_SPEEDS).map(([id, c]) => ({ id, label: c.label })),
 );
-hud.setClothSpeed(clothSpeed);
 app.append(hud.root);
 
 const matchHud: MatchHud = new MatchHud({
@@ -621,10 +601,79 @@ const matchHud: MatchHud = new MatchHud({
     match.startRack();
     loadRack();
   },
-  onStart: startMatch,
-  onPractice: () => setGame(GAMES[0]!),
+  onNewMatch: () => menu.open('play'),
+  onHome: () => {
+    quitToHome();
+    menu.open('home');
+  },
 });
 app.append(matchHud.root);
+
+// ---------------------------------------------------------------------------------------------
+// Menus
+
+/** Camera mode to go back to when the menu closes. */
+let playCamera: CameraMode = 'aim';
+const menu: Menu = new Menu(
+  {
+    onStart: startMatch,
+    onPractice: (id) => setGame(GAMES.find((g) => g.id === id) ?? GAMES[0]!),
+    onRestart: () => (match ? startMatch(match.config) : rerack()),
+    onConcede: () => {
+      if (!match || phase !== 'aim') return;
+      match.concede();
+      syncTurn();
+    },
+    onQuit: quitToHome,
+    onClothSpeed: (speed) => {
+      clothSpeed = speed;
+      simTable = withClothSpeed(game.table, speed);
+      try {
+        localStorage.setItem('cuesports.clothSpeed', speed);
+      } catch {
+        // Not persisted; fine for this session.
+      }
+    },
+    onOption: (name, on) => {
+      if (name === 'guide') showGuide = on;
+      else if (name === 'squirt') guideSquirt = on;
+      else useOverview = on;
+      dirty = true;
+    },
+    onVisible: (open) => {
+      app.classList.toggle('menu-open', open);
+      if (open) {
+        if (rig.mode !== 'free' || !rig.orbit.autoRotate) playCamera = rig.mode;
+        // Attract mode: a slow orbit around the table behind the menu.
+        const L = game.table.playfield.length;
+        rig.setMode('free');
+        rig.persp.position.set(L * 0.55, L * 0.42, L * 0.55);
+        rig.orbit.target.set(0, 0, 0);
+        rig.orbit.enabled = false;
+        rig.orbit.autoRotate = true;
+        rig.orbit.autoRotateSpeed = 0.35;
+      } else {
+        rig.orbit.autoRotate = false;
+        rig.setMode(playCamera);
+        hud.setCamera(playCamera);
+        rig.snap();
+      }
+      dirty = true;
+    },
+  },
+  GAMES.map((g) => ({ id: g.id, label: g.label })),
+  clothSpeed,
+);
+showGuide = menu.settings.guide;
+guideSquirt = menu.settings.squirt;
+useOverview = menu.settings.overview;
+app.append(menu.root);
+
+/** Back to a practice rack behind the home screen. */
+function quitToHome(): void {
+  playCamera = 'aim';
+  setGame(GAMES[0]!);
+}
 // The scoreboard lives in the top bar, next to the menu button.
 hud.placeInTop(matchHud.board);
 matchHud.onCallClick(() => {
@@ -749,6 +798,7 @@ function placeCue(p: { x: number; y: number }, force = false): void {
 }
 
 window.addEventListener('keydown', (e) => {
+  if (menu.isOpen) return;
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
   const step = ((e.shiftKey ? 1 : 0.05) * Math.PI) / 180;
   if (e.key === 'ArrowLeft') shot.aim += step;
@@ -805,6 +855,7 @@ function frame(now: number): void {
     dirty = true;
   }
 
+  if (menu.isOpen) dirty = true;
   if (cue) {
     const moving = rig.update(dt, cue.pos, cue.radius, shot.aim);
     if (moving) dirty = true;
@@ -863,7 +914,7 @@ function adaptQuality(ms: number): void {
 // Boot
 
 setGame(GAMES[0]!);
-matchHud.openSetup();
+menu.open('home');
 resize();
 requestAnimationFrame(frame);
 

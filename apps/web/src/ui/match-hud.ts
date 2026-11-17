@@ -1,6 +1,6 @@
 import type { Turn } from '@cuesports/rules';
 import { ballArt } from '../render/textures';
-import { DEFAULT_MATCH, type MatchConfig } from '../game/match';
+import { h } from './kit';
 
 export type CallChoice = { ball: string; pocket: string } | 'safety' | null;
 
@@ -10,20 +10,11 @@ export interface MatchHudCallbacks {
   onCall(call: CallChoice): void;
   onDecision(choice: string): void;
   onNextRack(): void;
-  onStart(config: MatchConfig): void;
-  onPractice(): void;
+  /** Match over: set up another. */
+  onNewMatch(): void;
+  onHome(): void;
 }
 
-const h = <K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  props: Partial<HTMLElementTagNameMap[K]> & Record<string, unknown> = {},
-  ...children: (Node | string)[]
-): HTMLElementTagNameMap[K] => {
-  const e = document.createElement(tag);
-  Object.assign(e, props);
-  e.append(...children);
-  return e;
-};
 
 /** What a snooker player is on, in words. */
 function onLabel(turn: Turn): string {
@@ -43,7 +34,6 @@ export class MatchHud {
   private picker = h('div', { className: 'sheet call-sheet', hidden: true });
   private decision = h('div', { className: 'sheet decision-sheet', hidden: true });
   private result = h('div', { className: 'sheet result-sheet', hidden: true });
-  private setup = h('div', { className: 'sheet setup-sheet', hidden: true });
   private toastTimer = 0;
   private pushOn = false;
 
@@ -60,10 +50,8 @@ export class MatchHud {
       this.callBtn,
       this.decision,
       this.result,
-      this.setup,
       this.picker,
     );
-    this.buildSetup();
   }
 
   /** Shows the scoreboard for the current turn, or hides it (practice). */
@@ -276,134 +264,9 @@ export class MatchHud {
         'div',
         { className: 'row' },
         matchOver
-          ? h('button', { className: 'chip on', onclick: () => this.openSetup() }, 'New match')
+          ? h('button', { className: 'chip on', onclick: () => this.cb.onNewMatch() }, 'New match')
           : h('button', { className: 'chip on', onclick: () => this.cb.onNextRack() }, 'Next rack'),
-        h('button', { className: 'chip', onclick: () => this.cb.onPractice() }, 'Practice'),
-      ),
-    );
-  }
-
-  openSetup(): void {
-    this.result.hidden = true;
-    this.setup.hidden = false;
-  }
-
-  private buildSetup(): void {
-    const name1 = h('input', {
-      type: 'text',
-      value: DEFAULT_MATCH.players[0],
-      maxLength: 16,
-      ariaLabel: 'Player 1 name',
-    });
-    const name2 = h('input', {
-      type: 'text',
-      value: DEFAULT_MATCH.players[1],
-      maxLength: 16,
-      ariaLabel: 'Player 2 name',
-    });
-    const race = h('select', { ariaLabel: 'Race to' });
-    for (const n of [1, 2, 3, 4, 5, 7, 9, 11])
-      race.append(h('option', { value: String(n), selected: n === DEFAULT_MATCH.raceTo }, String(n)));
-    const breaks = h('select', { ariaLabel: 'Break' });
-    breaks.append(
-      h('option', { value: 'alternate' }, 'Alternate breaks'),
-      h('option', { value: 'winner' }, 'Winner breaks'),
-    );
-    const threeFoul = h('input', { type: 'checkbox', checked: DEFAULT_MATCH.rules.threeFoulRule });
-    const game = h('select', { ariaLabel: 'Game type' });
-    game.append(
-      h('option', { value: 'nine-ball' }, '9-ball'),
-      h('option', { value: 'ten-ball' }, '10-ball (call shot)'),
-      h('option', { value: 'snooker' }, 'Snooker'),
-      h('option', { value: 'english' }, 'English pool'),
-    );
-    const preset = h('select', { ariaLabel: 'Rules' });
-    preset.append(
-      h('option', { value: 'international' }, 'International / Ultimate Pool'),
-      h('option', { value: 'wepf' }, 'World Eightball (WEPF / EPA)'),
-    );
-    const opponent = h('select', { ariaLabel: 'Opponent' });
-    opponent.append(h('option', { value: '' }, 'Human (pass the device)'));
-    for (const [lvl, label] of [
-      [1, 'Beginner'],
-      [2, 'Amateur'],
-      [3, 'Club'],
-      [4, 'Semi-pro'],
-      [5, 'Pro'],
-    ] as const) {
-      opponent.append(h('option', { value: String(lvl) }, `Computer: ${label}`));
-    }
-    opponent.addEventListener('change', () => {
-      const label = opponent.selectedOptions[0]?.textContent ?? '';
-      if (opponent.value && (name2.value === 'Player 2' || name2.value.startsWith('CPU'))) {
-        name2.value = `CPU (${label.replace('Computer: ', '')})`;
-      } else if (!opponent.value && name2.value.startsWith('CPU')) name2.value = 'Player 2';
-    });
-    const englishOpts = h('div', { hidden: true });
-    englishOpts.append(h('div', { className: 'row' }, h('label', {}, 'Rules'), preset));
-    const reds = h('select', { ariaLabel: 'Reds' });
-    for (const n of [15, 10, 6]) reds.append(h('option', { value: String(n) }, `${n} reds`));
-    const missRule = h('input', { type: 'checkbox', checked: true });
-    const poolOpts = h('div');
-    const snookerOpts = h('div', { hidden: true });
-    const start = () => {
-      this.setup.hidden = true;
-      this.cb.onStart({
-        snooker: {
-          ...DEFAULT_MATCH.snooker,
-          reds: Number(reds.value) as 15 | 10 | 6,
-          missRule: missRule.checked,
-        },
-        english: preset.value as MatchConfig['english'],
-        ai: opponent.value ? Number(opponent.value) : null,
-        game: game.value as MatchConfig['game'],
-        players: [name1.value.trim() || 'Player 1', name2.value.trim() || 'Player 2'],
-        raceTo: Number(race.value),
-        breaks: breaks.value as MatchConfig['breaks'],
-        rules: { ...DEFAULT_MATCH.rules, threeFoulRule: threeFoul.checked },
-      });
-    };
-    poolOpts.append(
-      h('div', { className: 'row' }, h('label', {}, 'Break'), breaks),
-      h('label', { className: 'check' }, threeFoul, ' Three fouls in a row lose the rack'),
-    );
-    snookerOpts.append(
-      h('div', { className: 'row' }, h('label', {}, 'Reds'), reds),
-      h(
-        'label',
-        { className: 'check' },
-        missRule,
-        ' Miss rule (pro): always call a miss when the ball on is not hit',
-      ),
-    );
-    const raceLabel = h('label', {}, 'Race to');
-    game.addEventListener('change', () => {
-      const snooker = game.value === 'snooker';
-      poolOpts.hidden = snooker || game.value === 'english';
-      snookerOpts.hidden = !snooker;
-      englishOpts.hidden = game.value !== 'english';
-      raceLabel.textContent = snooker ? 'Frames to win' : 'Race to';
-    });
-    this.setup.append(
-      h('h2', {}, 'New match'),
-      h('div', { className: 'row' }, h('label', {}, 'Game'), game),
-      h('div', { className: 'row' }, h('label', {}, 'Player 1'), name1),
-      h('div', { className: 'row' }, h('label', {}, 'Opponent'), opponent),
-      h('div', { className: 'row' }, h('label', {}, 'Player 2'), name2),
-      h('div', { className: 'row' }, raceLabel, race),
-      poolOpts,
-      snookerOpts,
-      englishOpts,
-      h(
-        'p',
-        { className: 'help' },
-        'Rules: WPA (9-ball, 10-ball), WPBSA (snooker), International or WEPF (English pool). Two players on this device: pass it over when the turn changes.',
-      ),
-      h(
-        'div',
-        { className: 'row' },
-        h('button', { className: 'chip on', onclick: start }, 'Start'),
-        h('button', { className: 'chip', onclick: () => (this.setup.hidden = true) }, 'Cancel'),
+        h('button', { className: 'chip', onclick: () => this.cb.onHome() }, 'Home'),
       ),
     );
   }
