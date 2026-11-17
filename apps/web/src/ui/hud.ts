@@ -68,6 +68,8 @@ export class Hud {
   private clothSelect = h('select', { ariaLabel: 'Cloth speed' });
   private tip = { a: 0, b: 0 };
   private elevation = 0;
+  /** Elevation the cue is forced up to by a cushion or ball in the way (degrees, 0 if none). */
+  private forced = 0;
   private placing = false;
   private lastPower = 0.4;
 
@@ -339,6 +341,16 @@ export class Hud {
     this.drawSpin();
   }
 
+  /** Shows the elevation the cue is raised to when the rail or a ball is in the way. */
+  setForcedElevation(deg: number): void {
+    const f = deg > this.elevation + 0.25 ? Math.round(deg * 2) / 2 : 0;
+    const text = f ? `${f}° (raised to clear)` : `${this.elevation}°`;
+    if (this.elevOut.textContent !== text) this.elevOut.textContent = text;
+    if (f === this.forced) return;
+    this.forced = f;
+    this.drawSpin();
+  }
+
   private drawSpin(): void {
     for (const c of [this.spinMini, this.spinBig]) {
       const g = c.getContext('2d')!;
@@ -367,11 +379,12 @@ export class Hud {
       g.beginPath();
       g.arc(s / 2 + this.tip.a * r, s / 2 - this.tip.b * r, s / 11, 0, Math.PI * 2);
       g.fill();
-      if (this.elevation > 0 && c === this.spinMini) {
-        g.fillStyle = '#111';
+      const shown = Math.max(this.elevation, this.forced);
+      if (shown > 0 && c === this.spinMini) {
+        g.fillStyle = this.forced ? '#b3261e' : '#111';
         g.font = `600 ${s / 5}px system-ui`;
         g.textAlign = 'center';
-        g.fillText(`${Math.round(this.elevation)}°`, s / 2, s - s / 10);
+        g.fillText(`${Math.round(shown)}°`, s / 2, s - s / 10);
       }
     }
   }

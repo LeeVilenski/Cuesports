@@ -1,4 +1,11 @@
-import { cloneBall, layout, type BallState, type ShotInput, type ShotResult } from '@cuesports/physics';
+import {
+  cloneBall,
+  cueClearElevation,
+  layout,
+  type BallState,
+  type ShotInput,
+  type ShotResult,
+} from '@cuesports/physics';
 import {
   ACESFilmicToneMapping,
   Color,
@@ -228,7 +235,7 @@ function syncTurn(): void {
         : t.ballInHand === 'anywhere'
           ? ' Ball in hand: drag the cue ball anywhere.'
           : '';
-  matchHud.say(match.message + hand, hand ? 5000 : 3500);
+  matchHud.say(match.notable ? match.message + hand : '', hand ? 5000 : 3500);
   status(`${match.config.players[t.player]} to play`);
   window.setTimeout(maybeAiTurn, 400);
   if (match.rackResult) {
@@ -294,6 +301,8 @@ function shoot(p: number): void {
 
 /** Takes a shot exactly as given (used by the player's stroke and by the AI). */
 function strike(input: ShotInput, declaration: ShotDeclaration, pullVisual: number): void {
+  // The cue can't pass through the rail or a ball: it is raised until it clears them.
+  input = withClearance(input);
   decl = declaration;
   hud.setPlacingAllowed(!match);
   placing = false;
@@ -311,6 +320,11 @@ function strike(input: ShotInput, declaration: ShotDeclaration, pullVisual: numb
     last = { before, shot: s, result: r.result };
   });
   dirty = true;
+}
+
+/** The shot with the butt raised as far as the cushion, rail and other balls force it. */
+function withClearance(s: ShotInput): ShotInput {
+  return { ...s, elevation: cueClearElevation(game.table, balls, s) };
 }
 
 function startPlayback(): void {
@@ -798,7 +812,9 @@ function frame(now: number): void {
       // The cue draws back as the power bar is pulled, then drives through during the strike.
       const back = 0.015 + pull * 0.22;
       const gap = phase === 'striking' ? Math.max(0, back * (1 - (strikeT / 0.09) ** 2)) : back;
-      cueView.pose(cue.pos.x, cue.pos.y, cue.radius, shot, gap);
+      const live = phase === 'aim' ? withClearance(shot) : shot;
+      cueView.pose(cue.pos.x, cue.pos.y, cue.radius, live, gap);
+      if (phase === 'aim') hud.setForcedElevation((live.elevation * 180) / Math.PI);
     }
   }
   const guide =

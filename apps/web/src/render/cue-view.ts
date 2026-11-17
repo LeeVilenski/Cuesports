@@ -1,9 +1,9 @@
-import type { ShotInput } from '@cuesports/physics';
+import { CUE_SHAPE, type ShotInput } from '@cuesports/physics';
 import { CylinderGeometry, Group, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 
-const LENGTH = 1.45;
-const TIP_R = 0.0062;
-const BUTT_R = 0.0145;
+const LENGTH = CUE_SHAPE.length;
+const TIP_R = CUE_SHAPE.tipRadius;
+const BUTT_R = CUE_SHAPE.buttRadius;
 
 /**
  * Placeholder cue. Built along +y with the tip at the origin, then aligned to the shot: the tip sits
