@@ -311,7 +311,7 @@ export function stancePose(st: StanceInput, t: TableFrame): Pose {
 
   // Pelvis outside the table, torso leaning so the chin is just over the cue.
   const spot = stanceSpot(st, t);
-  let pelvis = flat(spot, t.floorZ + PELVIS_Z - 0.06);
+  let pelvis = flat(spot, t.floorZ + PELVIS_Z - 0.11);
   const chin = add(at(kb + 0.24), add(v3(0, 0, 0.1), scale(s, -0.02)));
   const neckGoal = add(chin, add(scale(b, 0.12), v3(0, 0, -0.04)));
   const short = TORSO - len(sub(neckGoal, pelvis));
