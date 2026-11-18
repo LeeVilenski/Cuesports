@@ -154,6 +154,8 @@ let decl: ShotDeclaration = {};
 const aiClient = new AiClient();
 /** The computer is thinking or playing its shot. */
 let aiBusy = false;
+/** Bumped whenever the table is reset, so a computer turn from before can't act afterwards. */
+let aiTurnId = 0;
 /** The player at the table is the computer (inputs are ignored). */
 const aiTurn = (): boolean =>
   !!match && match.isAi(match.turn.player) && !match.rackResult && match.winner === null;
@@ -171,7 +173,25 @@ const rig = new CameraRig(canvas, game.table);
 
 const cueBall = (): BallState | undefined => balls.find((b) => b.id === 'cue');
 
+/**
+ * Drops anything left over from the last table: a computer turn still thinking or waiting to
+ * strike, a replay, the busy HUD. Without this, leaving a match mid-way through the computer's turn
+ * left the controls disabled in the next one.
+ */
+function resetTurnState(): void {
+  aiTurnId++;
+  aiBusy = false;
+  replaying = false;
+  replayShooter = null;
+  pending = null;
+  playing = null;
+  rig.shotView = null;
+  shotCam = null;
+  hud.setBusy(false);
+}
+
 function setGame(def: GameDef): void {
+  resetTurnState();
   match = null;
   matchHud.showBoard(null);
   matchHud.setPushAvailable(false);
@@ -260,6 +280,7 @@ function playerWants(i: number, cue: BallState | undefined, gap: number): Want {
 // Match play
 
 function startMatch(config: MatchConfig): void {
+  resetTurnState();
   setTable(GAMES.find((g) => g.id === config.game) ?? GAMES[0]!);
   match = new Match(config, (Math.random() * 1e9) | 0);
   // Each player gets their own look, chosen from their name.
@@ -506,6 +527,9 @@ function maybeAiTurn(): void {
   if (!match || aiBusy || phase !== 'aim' || !aiTurn()) return;
   const m = match;
   const t = m.turn;
+  const id = ++aiTurnId;
+  // The table was reset (new match, practice, home) since this turn began.
+  const stale = () => id !== aiTurnId || match !== m;
   aiBusy = true;
   hud.setBusy(true);
   placing = false;
@@ -536,8 +560,8 @@ function maybeAiTurn(): void {
     const label = t.decision.choices.find((c) => c.id === choice)?.label ?? choice;
     matchHud.say(`${m.config.players[t.player]}: ${m.names(label)}`);
     window.setTimeout(() => {
+      if (stale()) return;
       aiBusy = false;
-      if (match !== m) return;
       m.decide(choice);
       balls = m.balls.map(cloneBall);
       if (m.reracked) ballsView.setBalls(balls);
@@ -550,14 +574,16 @@ function maybeAiTurn(): void {
   status(`${m.config.players[t.player]} is thinking…`);
   const started = performance.now();
   void aiClient.choose(input).then(({ ai }) => {
-    if (match !== m || phase !== 'aim') {
+    if (stale()) return;
+    if (phase !== 'aim') {
       aiBusy = false;
+      hud.setBusy(false);
       return;
     }
     // Show the decision for a moment: place the cue ball, line up, then strike.
     const wait = Math.max(0, 700 - (performance.now() - started));
     window.setTimeout(() => {
-      if (match !== m) return;
+      if (stale()) return;
       if (ai.place) placeCue(ai.place, true);
       shot = { ...ai.shot };
       hud.showSpin(ai.shot.tip, (ai.shot.elevation * 180) / Math.PI);
@@ -567,7 +593,7 @@ function maybeAiTurn(): void {
       // Strike once the player has walked round and got down on the shot.
       const started = performance.now();
       const go = () => {
-        if (match !== m) return;
+        if (stale()) return;
         const p = players[t.player];
         if (p && showPlayer && (p.busy || !p.isDown) && performance.now() - started < 4000) {
           window.setTimeout(go, 100);
