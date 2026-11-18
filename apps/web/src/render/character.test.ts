@@ -2,6 +2,7 @@ import { makeBall, simulate, type ShotInput } from '@cuesports/physics';
 import { AMERICAN_POOL_9FT as T } from '@cuesports/shared';
 import { describe, expect, it } from 'vitest';
 import { Character, cueLine, stancePose, stanceSpot, type StanceInput, type TableFrame } from './character';
+import { lookFor, PRESETS } from './figure';
 import { exitDistance, len, sub, twoBone, v3, walkPath } from './ik';
 import { ballAt, ShotCamera } from './shot-camera';
 
@@ -99,7 +100,7 @@ describe('stance', () => {
 
 describe('Character', () => {
   it('walks round to a new shot, then gets down', () => {
-    const c = new Character({ skin: '#fff', hair: '#000', shirt: '#00f', trousers: '#111', shoes: '#222' });
+    const c = new Character(lookFor(PRESETS[0]!, 'nine-ball'));
     c.setTable(frame, { x: 0, y: -(frame.hy + 1) }, Math.PI / 2);
     const first: StanceInput = { ball: { x: 0.8, y: 0 }, R, shot: shotAt(Math.PI), gap: 0.015 };
     c.place({ kind: 'shoot', stance: first });

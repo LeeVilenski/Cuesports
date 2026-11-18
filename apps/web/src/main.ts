@@ -42,7 +42,8 @@ import { BallsView } from './render/balls-view';
 import { CameraRig, type CameraMode } from './render/cameras';
 import { physicsGroup, toPhysics, toWorld } from './render/coords';
 import { CueView } from './render/cue-view';
-import { Character, looksFor, type StanceInput, type TableFrame, type Want } from './render/character';
+import { Character, type StanceInput, type TableFrame, type Want } from './render/character';
+import { lookFor, PRESETS, presetsFor } from './render/figure';
 import { ShotCamera, type ShotCameraMode } from './render/shot-camera';
 import { GuideView } from './render/guide-view';
 import { buildTableView, WELL_DEPTH, type TableView } from './render/table-view';
@@ -212,8 +213,9 @@ function buildPlayers(): void {
     railTop: tableView.railTop,
     floorZ: tableView.floorZ,
   };
-  players = looksFor(game.table.id).map((look, i) => {
-    const c = new Character(look);
+  const picks = presetsFor(match ? match.config.players : ['Player 1', 'Player 2']);
+  players = picks.map((pi, i) => {
+    const c = new Character(lookFor(PRESETS[pi]!, game.table.id));
     // Chairs along one long side, facing the table.
     c.setTable(t, { x: (i === 0 ? -1 : 1) * t.hl * 0.55, y: -(t.hy + 1.15) }, Math.PI / 2);
     world.add(c.group, c.chair);
@@ -253,6 +255,8 @@ function playerWants(i: number, cue: BallState | undefined, gap: number): Want {
 function startMatch(config: MatchConfig): void {
   setTable(GAMES.find((g) => g.id === config.game) ?? GAMES[0]!);
   match = new Match(config, (Math.random() * 1e9) | 0);
+  // Each player gets their own look, chosen from their name.
+  buildPlayers();
   matchHud.showResult(null);
   loadRack();
 }

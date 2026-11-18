@@ -25,7 +25,8 @@ physics engine works.
   matches. Snooker and English pool pockets are tighter and pace-sensitive.
 - **M5 AI:** play against the computer at five levels (Beginner to Pro) in every game. Shot search with the
   real physics and rules, run in a Web Worker. See [docs/ai.md](docs/ai.md).
-- **M6 Characters & cinematics:** first pass. Procedural placeholder players (no assets yet) with an IK
+- **M6 Characters & cinematics:** first pass. Procedural players (no assets: eight fictional presets with
+  natural proportions, faces, hair styles, casual pool clothes or snooker waistcoats) with an IK
   stance solved for every shot: bridge hand on the cloth or rail (or a rest when out of reach), chin over
   the cue, grip hand following the stroke, feet outside the table. They walk round the table to each shot,
   stay down through the follow-through, and the opponent sits in a chair. Shot cameras: cinematic (follow,
