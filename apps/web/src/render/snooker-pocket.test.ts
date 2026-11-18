@@ -1,6 +1,7 @@
 import { SNOOKER_12FT as T } from '@cuesports/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { alongPath, RUNNER_BALLS, runnerSlots } from './snooker-pocket';
+import { SNOOKER_BODY } from './snooker-table';
 import { buildTableView } from './table-view';
 
 // Textures need a canvas; geometry doesn't.
@@ -34,8 +35,9 @@ describe('snooker pocket runners', () => {
         const [a, b] = [pts[k - 1]!, pts[k]!];
         expect(Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)).toBeGreaterThanOrEqual(2 * R - 1e-9);
       }
-      // The end stop is out beyond the side of the table, where the runners hang.
-      expect(Math.abs(pts[0]!.y)).toBeGreaterThan(view.outer.hy);
+      // The rails run outside the frieze, clear of it and its base moulding.
+      const frieze = view.outer.hy - SNOOKER_BODY.friezeInset;
+      expect(Math.abs(pts[0]!.y) - R).toBeGreaterThan(frieze + 0.012);
     });
   }
 });

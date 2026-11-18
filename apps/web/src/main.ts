@@ -177,7 +177,7 @@ function setTable(def: GameDef): void {
     world.remove(tableView.group);
     tableView.dispose();
   }
-  tableView = buildTableView(def.table);
+  tableView = buildTableView(def.table, scene.environment);
   world.add(tableView.group);
   ballsView.setPockets(
     tableView.pocketRest,
