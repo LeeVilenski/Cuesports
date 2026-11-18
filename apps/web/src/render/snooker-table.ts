@@ -211,10 +211,49 @@ export function buildSnookerBody(q: SnookerBodyParams): {
   roomLit(wood, 0.6);
   roomLit(dark, 0.8);
 
-  // Rails: from the slate's edge up to the rail top, rounded along the top.
-  const rail = roundedRect(hx, hy, B.cornerRadius);
-  rail.holes.push(new Path(q.railHole.map((p) => new Vector2(p.x, p.y))));
-  g.add(slab(rail, B.railBottom, q.railTop, 0.006, wood));
+  // Six independent cushion-rail sections: two on each long side (split at the
+  // middle pocket) and one across each short end. The frieze below remains continuous.
+  // Each section is its own solid, with a small clearance at every pocket junction.
+  const railGap = 0.022;
+  const addRailSection = (side: 'x' | 'y', sign: -1 | 1, from: number, to: number) => {
+    const outer = side === 'y' ? sign * hy : sign * hx;
+    const inner = side === 'y' ? sign * (hy - q.trim.railWidth) : sign * (hx - q.trim.railWidth);
+    const shape = new Shape();
+    if (side === 'y') {
+      shape.moveTo(from, outer);
+      shape.lineTo(to, outer);
+      shape.lineTo(to, inner);
+      shape.lineTo(from, inner);
+    } else {
+      shape.moveTo(outer, from);
+      shape.lineTo(outer, to);
+      shape.lineTo(inner, to);
+      shape.lineTo(inner, from);
+    }
+    shape.closePath();
+    g.add(slab(shape, B.railBottom, q.railTop, 0.004, wood));
+  };
+  for (const sign of [-1, 1] as const) {
+    // Long rails: the middle pocket divides each side into two separate sections.
+    const sidePockets = q.pockets
+      .filter((pk) => Math.abs(pk.pocket.position.y - sign * hy) < 0.16)
+      .map((pk) => pk.pocket.position.x)
+      .sort((a, b) => a - b);
+    const cuts = [-hx, ...sidePockets, hx];
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const from = cuts[i]! + railGap;
+      const to = cuts[i + 1]! - railGap;
+      if (to - from > 0.05) addRailSection('y', sign, from, to);
+    }
+    // Short rails: one section between the two corner pockets.
+    const endPockets = q.pockets
+      .filter((pk) => Math.abs(pk.pocket.position.x - sign * hx) < 0.16)
+      .map((pk) => pk.pocket.position.y)
+      .sort((a, b) => a - b);
+    const lo = endPockets[0] ?? -hy;
+    const hi = endPockets[endPockets.length - 1] ?? hy;
+    addRailSection('x', sign, lo + railGap, hi - railGap);
+  }
 
   // The frieze, set well back under the rails (so the corner nets and ball rails hang clear of it),
   // with small recesses where the nets need room.
