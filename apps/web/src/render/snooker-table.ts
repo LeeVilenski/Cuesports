@@ -6,7 +6,6 @@ import {
   LatheGeometry,
   Mesh,
   MeshStandardMaterial,
-  Path,
   Shape,
   type Texture,
   Vector2,
@@ -74,20 +73,6 @@ function friezePlan(hx: number, hy: number, n: number, mw: number, md: number): 
     const q = pts[(i + pts.length - 1) % pts.length]!;
     return Math.hypot(p.x - q.x, p.y - q.y) > 1e-6;
   });
-}
-
-function roundedRect(hx: number, hy: number, r: number): Shape {
-  const s = new Shape();
-  s.moveTo(-hx + r, -hy);
-  s.lineTo(hx - r, -hy);
-  s.absarc(hx - r, -hy + r, r, -Math.PI / 2, 0, false);
-  s.lineTo(hx, hy - r);
-  s.absarc(hx - r, hy - r, r, 0, Math.PI / 2, false);
-  s.lineTo(-hx + r, hy);
-  s.absarc(-hx + r, hy - r, r, Math.PI / 2, Math.PI, false);
-  s.lineTo(-hx, -hy + r);
-  s.absarc(-hx + r, -hy + r, r, Math.PI, 1.5 * Math.PI, false);
-  return s;
 }
 
 const toShape = (pts: readonly Vec2[]): Shape => new Shape(pts.map((p) => new Vector2(p.x, p.y)));
