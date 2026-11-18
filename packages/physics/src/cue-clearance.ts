@@ -1,16 +1,19 @@
-import { detCos, detSin, type TableSpec } from '@cuesports/shared';
+import { detCos, detSin, type TableSpec, type TableTrim } from '@cuesports/shared';
 import type { BallState, ShotInput } from './types';
 
 /** Cue dimensions (metres): the radius tapers linearly from the tip to the butt. */
 export const CUE_SHAPE = { length: 1.45, tipRadius: 0.0062, buttRadius: 0.0145 };
 
 /** The table around the playfield: cushion and wooden rail widths, and their heights above the nose. */
-export const TABLE_TRIM = {
+export const TABLE_TRIM: TableTrim = {
   cushionWidth: 0.05,
   railWidth: 0.1,
   cushionTopAboveNose: 0.007,
   railTopAboveNose: 0.013,
 };
+
+/** A table's cushion and rail sizes. */
+export const tableTrim = (table: TableSpec): TableTrim => table.trim ?? TABLE_TRIM;
 
 const MAX_ELEVATION = 1.4; // ~80°: near-vertical masse
 const STEP = Math.PI / 360; // 0.5°
@@ -107,10 +110,11 @@ function clear(
     const u = dist / ce;
     return P.z + dist * tanE - cueRadius(u) / ce >= height;
   };
-  const edge = reach(TABLE_TRIM.cushionWidth + TABLE_TRIM.railWidth);
+  const trim = tableTrim(table);
+  const edge = reach(trim.cushionWidth + trim.railWidth);
   const cushionAt = reach(0);
-  const railAt = reach(TABLE_TRIM.cushionWidth);
-  if (cushionAt < edge && !above(cushionAt, nose + TABLE_TRIM.cushionTopAboveNose)) return false;
-  if (railAt < edge && !above(railAt, nose + TABLE_TRIM.railTopAboveNose)) return false;
+  const railAt = reach(trim.cushionWidth);
+  if (cushionAt < edge && !above(cushionAt, nose + trim.cushionTopAboveNose)) return false;
+  if (railAt < edge && !above(railAt, nose + trim.railTopAboveNose)) return false;
   return true;
 }

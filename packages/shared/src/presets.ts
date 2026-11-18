@@ -82,6 +82,8 @@ export const SNOOKER_12FT: TableSpec = {
   id: 'snooker-12ft',
   name: 'Snooker 12 ft',
   playfield: { length: SNOOKER_L, width: SNOOKER_W },
+  // About 136mm of cushion and rail each side: 3.84m x 2.05m overall, like full-size match tables.
+  trim: { cushionWidth: 0.05, railWidth: 0.086, cushionTopAboveNose: 0.007, railTopAboveNose: 0.013 },
   cushion: {
     noseHeight: 0.0335,
     restitution: 0.8,

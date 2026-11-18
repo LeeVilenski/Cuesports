@@ -10,6 +10,7 @@ import {
   SphereGeometry,
 } from 'three';
 import { ballTexture, shadowTexture } from './textures';
+import { alongPath, RUNNER_BALLS, runnerSlots, type Vec3 } from './snooker-pocket';
 import { distanceToOutline } from './well';
 
 interface BallMesh {
@@ -31,7 +32,7 @@ interface Fall {
   fallStart: number;
   pocket: string;
   slot: number;
-  /** Height of its centre every PATH_DT from t0, worked out on first use. */
+  /** Its centre (x, y, z) every PATH_DT from t0, worked out on first use. */
   path?: Float64Array;
 }
 
@@ -44,6 +45,8 @@ const qb = new Quaternion();
 const G = 9.81;
 /** Most balls shown stacked in one pocket's well. */
 const MAX_STACK = 3;
+/** Balls shown in a snooker pocket's net once its runners are full. */
+const NET_STACK = 3;
 
 /**
  * Ball meshes with contact shadows. Positions, rotations and how far a ball has sunk into a pocket
@@ -63,10 +66,19 @@ export class BallsView {
   /** Outline of each pocket's hole (the slate edge, jaws and back), as cut out of the cloth. */
   private outlines = new Map<string, Vec2[]>();
 
-  setPockets(rest: Map<string, Vec2>, wellDepth: number, outlines?: Map<string, Vec2[]>): void {
+  /** Snooker: where a potted ball's centre rolls along each pocket's wire runners. */
+  private runners = new Map<string, Vec3[]>();
+
+  setPockets(
+    rest: Map<string, Vec2>,
+    wellDepth: number,
+    outlines?: Map<string, Vec2[]>,
+    runners?: Map<string, Vec3[]>,
+  ): void {
     this.rest = rest;
     this.wellDepth = wellDepth;
     this.outlines = outlines ?? new Map();
+    this.runners = runners ?? new Map();
   }
 
   /**
@@ -253,28 +265,42 @@ export class BallsView {
 
   /**
    * A potted ball keeps falling (continuing the drop it had started over the hole) and drifts from
-   * where it went in to its resting place in the well. On the way it rolls over the edge of the hole
-   * rather than through it, and lands on the floor of the well or on balls already there. Balls
-   * beyond the visible stack fall onto it and are then hidden.
+   * where it went in to the bottom of the well. On the way it rolls over the edge of the hole rather
+   * than through it, and lands on the floor of the well or on balls already there. Where the pocket
+   * has wire runners (snooker), it then drops through the ring and rolls out along them to the
+   * last free place. Balls beyond what the pocket shows fall in and are then hidden.
    */
   private animateFall(b: BallMesh, f: Fall, t: number): void {
-    const target = this.slotPosition(b, f.pocket, Math.min(f.slot, MAX_STACK - 1));
-    if (!target) {
+    const cap = this.capacity(f.pocket);
+    if (!this.rest.get(f.pocket)) {
       this.hide(b);
       return;
     }
-    if (f.slot >= MAX_STACK && t - f.t > 0.4) {
+    if (f.slot >= cap && t - f.t > 0.4) {
       this.hide(b);
       return;
     }
-    const path = (f.path ??= this.fallPath(b, f, target));
+    const path = (f.path ??= this.fallPath(b, f));
     const u = Math.max(0, (t - f.t0) / PATH_DT);
-    const i = Math.min(path.length - 2, Math.floor(u));
+    const n = path.length / 3;
+    const i = Math.min(n - 2, Math.floor(u));
     const k = Math.min(1, u - i);
-    const z = path[i]! + (path[i + 1]! - path[i]!) * k;
-    const { x, y } = this.fallXY(f, target, t);
-    this.place(b, x, y, z, true);
+    const at = (c: number) => path[3 * i + c]! + (path[3 * (i + 1) + c]! - path[3 * i + c]!) * k;
+    this.place(b, at(0), at(1), at(2), true);
     b.shadow.visible = false;
+  }
+
+  /** How many balls a pocket shows: on its runners and in its net, or stacked in its well. */
+  private capacity(pocket: string): number {
+    return this.runners.has(pocket) ? RUNNER_BALLS + NET_STACK : MAX_STACK;
+  }
+
+  /** Where a ball dropping into the well heads for: its stack place, or under the ring. */
+  private dropTarget(b: BallMesh, f: Fall): Vec3 {
+    const runner = this.runners.get(f.pocket);
+    const cap = this.capacity(f.pocket);
+    if (runner && f.slot < RUNNER_BALLS) return alongPath(runner, 0);
+    return this.slotPosition(b, f.pocket, Math.min(f.slot, cap - 1))!;
   }
 
   /** Where a falling ball is across the table at time t. */
@@ -289,20 +315,25 @@ export class BallsView {
     return { x: f.from.x + (target.x - f.from.x) * e, y: f.from.y + (target.y - f.from.y) * e };
   }
 
-  /** Steps a falling ball's height: free fall, held up by the hole's edge, the well floor and the stack. */
-  private fallPath(b: BallMesh, f: Fall, target: Vec2): Float64Array {
+  /**
+   * Steps a falling ball (x, y, z every PATH_DT): free fall, held up by the hole's edge, the well
+   * floor and the balls below; then, onto the runners, a roll out to its place.
+   */
+  private fallPath(b: BallMesh, f: Fall): Float64Array {
     const R = b.radius;
     const n = Math.ceil(PATH_TIME / PATH_DT) + 2;
-    const out = new Float64Array(n);
-    const below = Array.from({ length: Math.min(f.slot, MAX_STACK) }, (_, k) =>
-      this.slotPosition(b, f.pocket, k)!,
-    );
+    const out = new Float64Array(3 * n);
+    const target = this.dropTarget(b, f);
+    const cap = this.capacity(f.pocket);
+    const below: Vec3[] = [];
+    for (let k = 0; k < Math.min(f.slot, cap); k++) below.push(this.slotPosition(b, f.pocket, k)!);
+    const runner = this.runners.get(f.pocket);
+    const rollTo = runner && f.slot < RUNNER_BALLS ? runnerSlots(runner, R)[f.slot]! : 0;
     // The lip of the hole only holds it up while it is still level with the cloth; once below the
     // slate it is in the well.
     let onLip = true;
-    const floor = (t: number): number => {
-      const { x, y } = this.fallXY(f, target, t);
-      let z = -this.wellDepth + R;
+    const floor = (x: number, y: number): number => {
+      let z = runner ? target.z : -this.wellDepth + R;
       if (onLip) z = Math.max(z, this.edgeFloor(f.pocket, x, y, R));
       for (const c of below) {
         const d2 = (x - c.x) ** 2 + (y - c.y) ** 2;
@@ -313,42 +344,64 @@ export class BallsView {
     const fallen = Math.max(0, f.t0 - f.fallStart);
     let z = R - 0.5 * G * fallen * fallen;
     let vz = -G * fallen;
-    const f0 = floor(f.t0);
+    let xy = this.fallXY(f, target, f.t0);
+    const f0 = floor(xy.x, xy.y);
     if (z < f0) [z, vz] = [f0, 0];
-    out[0] = z;
+    out[0] = xy.x;
+    out[1] = xy.y;
+    out[2] = z;
+    // Rolling along the runners: when it started, and how far it has gone.
+    let rollStart = -1;
+    let s = 0;
+    let v = 0;
     for (let i = 1; i < n; i++) {
+      const t = f.t0 + i * PATH_DT;
+      if (rollStart >= 0) {
+        // Gathers speed down the slight slope, then stops at its place.
+        v = Math.min(1.4, v + 5 * PATH_DT);
+        s = Math.min(rollTo, s + v * PATH_DT);
+        const q = alongPath(runner!, s);
+        out.set([q.x, q.y, q.z], 3 * i);
+        continue;
+      }
+      xy = this.fallXY(f, target, t);
       vz -= G * PATH_DT;
       z += vz * PATH_DT;
-      const fl = floor(f.t0 + i * PATH_DT);
+      const fl = floor(xy.x, xy.y);
       if (z < fl) {
         // Resting on (or rolling over) something: it follows it down without bouncing.
         z = fl;
-        vz = Math.min(0, Math.max(vz, (fl - out[i - 1]!) / PATH_DT));
+        vz = Math.min(0, Math.max(vz, (fl - out[3 * (i - 1) + 2]!) / PATH_DT));
       }
-      out[i] = z;
+      out.set([xy.x, xy.y, z], 3 * i);
       if (z < 0) onLip = false;
+      // Down through the ring and onto the runners once it is under it.
+      if (rollTo > 0 && t >= f.t + 0.22 && z <= target.z + 1e-6) rollStart = t;
     }
     return out;
   }
 
-  private slotPosition(
-    b: BallMesh,
-    pocket: string,
-    slot: number,
-  ): { x: number; y: number; z: number } | null {
+  private slotPosition(b: BallMesh, pocket: string, slot: number): Vec3 | null {
     const c = this.rest.get(pocket);
-    if (!c || slot >= MAX_STACK) return null;
-    // Balls stack in the well, each settling slightly to one side of the one below and touching it
-    // (never overlapping it).
+    if (!c || slot >= this.capacity(pocket)) return null;
     const R = b.radius;
+    const runner = this.runners.get(pocket);
+    // On the runners the first ball rolls to the end stop, the next stops against it, and so on.
+    const slots = runner ? runnerSlots(runner, R) : null;
+    if (runner && slot < RUNNER_BALLS) return alongPath(runner, slots![slot]!);
+    // Balls stack in the well (or the net, above the ball under its ring), each settling slightly to
+    // one side of the one below and touching it (never overlapping it).
+    const k0 = runner ? slot - RUNNER_BALLS + 1 : slot;
     const sideOf = (k: number) => (k === 0 ? 0 : k % 2 ? 0.35 : -0.35) * R;
-    let z = -this.wellDepth + R;
-    for (let k = 1; k <= slot; k++) {
+    // In a net, the stack stands on the last ball on the runners (the one under the ring).
+    const base = runner ? alongPath(runner, slots![RUNNER_BALLS - 1]!) : { ...c, z: -this.wellDepth + R };
+    let z = base.z;
+    for (let k = 1; k <= k0; k++) {
       const dh = Math.abs(sideOf(k) - sideOf(k - 1)) * Math.SQRT2;
       z += Math.sqrt(4 * R * R - dh * dh);
     }
-    const side = sideOf(slot);
-    return { x: c.x + side, y: c.y - side, z };
+    const side = sideOf(k0);
+    return { x: base.x + side, y: base.y - side, z };
   }
 
   private placeInWell(b: BallMesh, pocket: string, slot: number, _settled: number): void {

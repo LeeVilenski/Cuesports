@@ -1,8 +1,9 @@
 import { dropOutline, makeBall, simulate, tableGeometry } from '@cuesports/physics';
 import { AMERICAN_POOL_9FT as T } from '@cuesports/shared';
-import type { Mesh } from 'three';
+import { type Mesh, Vector3 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { BallsView } from './balls-view';
+import { alongPath, RUNNER_BALLS, runnerSlots } from './snooker-pocket';
 import { wellCentre } from './well';
 
 // Textures need a canvas; the ball paths don't.
@@ -121,6 +122,73 @@ describe('balls potted into the same pocket', () => {
         expect(gap(), `overlap at pot${(t - pot!.t).toFixed(3)}s`).toBeGreaterThan(2 * R - 1e-4);
       }
       expect(m2.position.z).toBeGreaterThan(m1.position.z + R);
+    }
+  });
+});
+
+describe('a snooker pocket with ball runners', () => {
+  it('drops each ball through the net and rolls it out to the next free place', () => {
+    const pk = T.pockets.find((p) => p.id === 'bottom-left')!;
+    const c = rest.get(pk.id)!;
+    const R = T.balls.object.radius;
+    // Out from under the net, then away along the table.
+    const floorZ = -WELL + R;
+    const runner = [
+      { x: c.x, y: c.y, z: floorZ },
+      { x: c.x, y: c.y - 0.12, z: floorZ - 0.006 },
+      { x: c.x + 0.4, y: c.y - 0.12, z: floorZ - 0.03 },
+    ];
+    const total = (RUNNER_BALLS - 1) * 2.02 * R;
+    // As on the table, a little longer than six balls end to end so they fit round the bend.
+    const path = [runner[0]!, runner[1]!, alongPath(runner, total + 0.03)];
+    const slots = runnerSlots(path, R).map((s) => alongPath(path, s));
+    for (let k = 1; k < slots.length; k++) {
+      const [a, b] = [slots[k - 1]!, slots[k]!];
+      expect(Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)).toBeGreaterThanOrEqual(2 * R);
+    }
+    const view = new BallsView();
+    view.setPockets(rest, WELL, outlines, new Map([[pk.id, path]]));
+    const from = { x: pk.position.x * 0.5, y: pk.position.y * 0.3 };
+    const aim = Math.atan2(pk.position.y - from.y, pk.position.x - from.x);
+    let balls = [makeBall('cue', T.balls.cue, { x: 0.8, y: 0.3 })];
+    for (let k = 0; k < 8; k++) balls.push(makeBall(`r${k}`, T.balls.object, { x: 0.5 + 0.08 * k, y: -0.4 }));
+    view.setBalls(balls);
+    const meshes = (view as unknown as { balls: { id: string; mesh: Mesh }[] }).balls;
+
+    for (let k = 0; k < 8; k++) {
+      const id = `r${k}`;
+      balls = balls.map((b) => (b.id === id ? { ...b, pos: { ...from } } : b));
+      const r = simulate(
+        T,
+        balls,
+        { ball: id, aim, elevation: 0, tip: { a: 0, b: 0 }, speed: 1 },
+        { sampleRate: 120 },
+      );
+      const pot = r.events.find((e) => e.type === 'pocket' && e.ball === id)!;
+      expect(pot).toBeDefined();
+      const m = meshes.find((b) => b.id === id)!.mesh;
+      let prev: Mesh['position'] | null = null;
+      for (let t = pot.t - 0.05; t < pot.t + 0.8; t += 0.001) {
+        view.showFrame(r, t);
+        expect(m.visible).toBe(true);
+        if (prev) expect(m.position.distanceTo(prev), `ball ${k} jumps`).toBeLessThan(0.006);
+        prev = m.position.clone();
+        // Never overlaps a ball already in the pocket.
+        for (let j = 0; j < k; j++) {
+          const o = meshes.find((b) => b.id === `r${j}`)!.mesh;
+          expect(m.position.distanceTo(o.position), `ball ${k} hits ball ${j}`).toBeGreaterThan(2 * R - 2e-4);
+        }
+      }
+      // Where it ends up matches where it rests after the shot.
+      const end = m.position.clone();
+      view.commit(r);
+      balls = r.final;
+      view.showState(balls);
+      expect(m.position.distanceTo(end)).toBeLessThan(1e-4);
+      if (k < RUNNER_BALLS) {
+        const want = alongPath(path, runnerSlots(path, R)[k]!);
+        expect(end.distanceTo(new Vector3(want.x, want.y, want.z))).toBeLessThan(1e-4);
+      } else expect(end.z).toBeGreaterThan(floorZ + R);
     }
   });
 });

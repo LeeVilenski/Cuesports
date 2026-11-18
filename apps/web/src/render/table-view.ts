@@ -2,7 +2,7 @@ import { wellCentre } from './well';
 import {
   dropEdgePoints,
   dropOutline,
-  TABLE_TRIM,
+  tableTrim,
   tableGeometry,
   type TableGeometry,
 } from '@cuesports/physics';
@@ -25,12 +25,11 @@ import {
   ShapeGeometry,
   RepeatWrapping,
   Shape,
+  type Texture,
 } from 'three';
+import { type Vec3 } from './snooker-pocket';
+import { buildSnookerBody } from './snooker-table';
 import { clothColour, clothTexture, woodTexture } from './textures';
-
-/** Visual dimensions of the table around the playfield (metres). */
-export const CUSHION_WIDTH = TABLE_TRIM.cushionWidth;
-export const RAIL_WIDTH = TABLE_TRIM.railWidth;
 
 export interface TableView {
   group: Group;
@@ -38,6 +37,8 @@ export interface TableView {
   railTop: number;
   /** Where potted balls come to rest at the bottom of each pocket's well. */
   pocketRest: Map<string, Vec2>;
+  /** Snooker: the path a potted ball's centre rolls along the wire runners, from under the net. */
+  pocketRunners: Map<string, Vec3[]>;
   outer: { hx: number; hy: number };
   dispose(): void;
 }
@@ -192,15 +193,23 @@ function railOutline(geo: TableGeometry, hx: number, hy: number, clearance: numb
 const toShape = (pts: Vec2[]): Shape => new Shape(pts.map((p) => ({ x: p.x, y: p.y }) as never));
 const toPath = (pts: Vec2[]): Path => new Path(pts.map((p) => ({ x: p.x, y: p.y }) as never));
 
-export function buildTableView(table: TableSpec): TableView {
+/**
+ * Builds the table. `env` is the room's environment map: parts of the table the canopy does not
+ * light (the sides and legs of a snooker table) take more of it.
+ */
+export function buildTableView(table: TableSpec, env?: Texture | null): TableView {
   const geo = tableGeometry(table);
   const group = new Group();
   const hl = table.playfield.length / 2;
   const hw = table.playfield.width / 2;
-  const cushionTop = table.cushion.noseHeight + TABLE_TRIM.cushionTopAboveNose;
-  const railTop = table.cushion.noseHeight + TABLE_TRIM.railTopAboveNose;
+  const trim = tableTrim(table);
+  const CUSHION_WIDTH = trim.cushionWidth;
+  const RAIL_WIDTH = trim.railWidth;
+  const cushionTop = table.cushion.noseHeight + trim.cushionTopAboveNose;
+  const railTop = table.cushion.noseHeight + trim.railTopAboveNose;
   const hx = hl + CUSHION_WIDTH + RAIL_WIDTH;
   const hy = hw + CUSHION_WIDTH + RAIL_WIDTH;
+  const snooker = table.id.startsWith('snooker');
 
   // Cloth, slightly larger than the cushion line so it shows inside the pocket mouths.
   const ex = hl + CUSHION_WIDTH + 0.06;
@@ -234,10 +243,22 @@ export function buildTableView(table: TableSpec): TableView {
   const cushionOuter = railOutline(geo, hl + CUSHION_WIDTH + 0.01, hw + CUSHION_WIDTH + 0.01, 0.012);
   const cushionShape = toShape(cushionOuter.slice().reverse());
   cushionShape.holes.push(toPath(innerOutline(geo)));
+  // Snooker cushions have a rounded nose: the bevel rounds the top edge back from the nose line,
+  // which stays where the physics has it.
+  const nose = snooker ? 0.005 : 0;
+  const below = 0.01;
   const cushions = new Mesh(
-    new ExtrudeGeometry(cushionShape, { depth: cushionTop, bevelEnabled: false }),
+    new ExtrudeGeometry(cushionShape, {
+      depth: cushionTop + below - 2 * nose,
+      bevelEnabled: nose > 0,
+      bevelThickness: nose,
+      bevelSize: nose,
+      bevelOffset: -nose,
+      bevelSegments: 4,
+    }),
     cushionMat,
   );
+  cushions.position.z = -below + nose;
   group.add(cushions);
 
   // Wooden rails with cut-outs around the pockets.
@@ -251,27 +272,41 @@ export function buildTableView(table: TableSpec): TableView {
     { x: hx, y: hy },
     { x: -hx, y: hy },
   ]);
-  railShape.holes.push(toPath(railOutline(geo, hl + CUSHION_WIDTH, hw + CUSHION_WIDTH, 0.012)));
-  const rails = new Mesh(new ExtrudeGeometry(railShape, { depth: railTop, bevelEnabled: false }), [
-    woodMat,
-    woodMat,
-  ]);
-  group.add(rails);
+  const railHole = railOutline(geo, hl + CUSHION_WIDTH, hw + CUSHION_WIDTH, 0.012);
+  railShape.holes.push(toPath(railHole));
+  if (!snooker) {
+    const rails = new Mesh(new ExtrudeGeometry(railShape, { depth: railTop, bevelEnabled: false }), [
+      woodMat,
+      woodMat,
+    ]);
+    group.add(rails);
+  }
 
-  // Pockets: a hole dropping below the slate, and a black liner that wraps the rail around the
-  // back of the hole (open towards the table), like the leathers on a real table.
+  // Pockets: a hole dropping below the slate. Pool tables have a black liner round the back of the
+  // hole over a dark well; snooker tables have leathers, cloth-lined holes, nets and ball rails.
+  if (snooker) woodMat.color.set('#a25a40'); // Polished mahogany, so the tan leathers stand out.
   const linerMat = new MeshStandardMaterial({ color: '#111111', roughness: 0.5, metalness: 0 });
   const wallMat = new MeshStandardMaterial({ color: '#0b0b0b', roughness: 0.9, side: BackSide });
   const floorMat = new MeshStandardMaterial({ color: '#151210', roughness: 1 });
   const hidden = new MeshBasicMaterial({ visible: false });
   const rest = new Map<string, Vec2>();
+  let runners = new Map<string, Vec3[]>();
+  const snookerPockets: Parameters<typeof buildSnookerBody>[0]['pockets'][number][] = [];
   for (const p of table.pockets) {
     const outline = drops.get(p.id)!;
-    rest.set(p.id, wellCentre(outline));
+    const centre = wellCentre(outline);
+    rest.set(p.id, centre);
     // Cloth lip: the cloth rolls over the rounded slate edge (BCA: 1/8–1/4" radius) into the hole.
     const edgeInfo = geo.drops.get(p.id);
     const edge = dropEdgePoints(geo, p.id);
     if (edgeInfo && edge.length > 1) group.add(clothLip(edge, edgeInfo.centre, cushionMat));
+    const inner = backRadius(geo, p.id);
+
+    if (snooker) {
+      snookerPockets.push({ pocket: p, outline, centre, backRadius: inner });
+      continue;
+    }
+
     // Well: the drop outline extruded down below the slate, seen from inside.
     const wellShape = toShape(outline);
     const well = new Mesh(new ExtrudeGeometry(wellShape, { depth: WELL_DEPTH, bevelEnabled: false }), [
@@ -284,7 +319,6 @@ export function buildTableView(table: TableSpec): TableView {
     group.add(well, floor);
 
     // Liner: wraps the rail round the back of the hole, open towards the table.
-    const inner = backRadius(geo, p.id);
     const outer = Math.max(inner + 0.032, p.fallRadius + 0.02);
     const at = Math.atan2(p.axis.y, p.axis.x);
     const half = (115 * Math.PI) / 180;
@@ -298,27 +332,47 @@ export function buildTableView(table: TableSpec): TableView {
     group.add(liner);
   }
 
-  // Body: a wooden apron round the edge down to below the pocket wells, then the base.
-  const bodyMat = new MeshStandardMaterial({ color: '#2b170c', roughness: 0.6 });
-  const apronShape = toShape([
-    { x: -hx, y: -hy },
-    { x: hx, y: -hy },
-    { x: hx, y: hy },
-    { x: -hx, y: hy },
-  ]);
-  apronShape.holes.push(
-    toPath([
-      { x: -hx + 0.012, y: -hy + 0.012 },
-      { x: hx - 0.012, y: -hy + 0.012 },
-      { x: hx - 0.012, y: hy - 0.012 },
-      { x: -hx + 0.012, y: hy - 0.012 },
-    ]),
-  );
-  const apron = new Mesh(new ExtrudeGeometry(apronShape, { depth: 0.18, bevelEnabled: false }), bodyMat);
-  apron.position.z = -0.18;
-  const base = new Mesh(new BoxGeometry(2 * hx, 2 * hy, 0.2), bodyMat);
-  base.position.z = -0.18 - 0.1;
-  group.add(apron, base);
+  let floorZ = -0.8;
+  if (snooker) {
+    const body = buildSnookerBody({
+      table,
+      trim,
+      railTop,
+      cushionTop,
+      hx,
+      hy,
+      railHole,
+      pockets: snookerPockets,
+      wood: woodMat,
+      cloth: cushionMat,
+      env: env ?? null,
+    });
+    group.add(body.group);
+    runners = body.runners;
+    floorZ = body.floorZ;
+  } else {
+    // Body: a wooden apron round the edge down to below the pocket wells, then the base.
+    const bodyMat = new MeshStandardMaterial({ color: '#2b170c', roughness: 0.6 });
+    const apronShape = toShape([
+      { x: -hx, y: -hy },
+      { x: hx, y: -hy },
+      { x: hx, y: hy },
+      { x: -hx, y: hy },
+    ]);
+    apronShape.holes.push(
+      toPath([
+        { x: -hx + 0.012, y: -hy + 0.012 },
+        { x: hx - 0.012, y: -hy + 0.012 },
+        { x: hx - 0.012, y: hy - 0.012 },
+        { x: -hx + 0.012, y: hy - 0.012 },
+      ]),
+    );
+    const apron = new Mesh(new ExtrudeGeometry(apronShape, { depth: 0.18, bevelEnabled: false }), bodyMat);
+    apron.position.z = -0.18;
+    const base = new Mesh(new BoxGeometry(2 * hx, 2 * hy, 0.2), bodyMat);
+    base.position.z = -0.18 - 0.1;
+    group.add(apron, base);
+  }
 
   // Sights (diamonds) on the rails of pool tables.
   if (!table.id.startsWith('snooker')) {
@@ -349,13 +403,14 @@ export function buildTableView(table: TableSpec): TableView {
     new PlaneGeometry(30, 30),
     new MeshStandardMaterial({ color: '#16110d', roughness: 1 }),
   );
-  floor.position.z = -0.8;
+  floor.position.z = floorZ;
   group.add(floor);
 
   return {
     group,
     railTop,
     pocketRest: rest,
+    pocketRunners: runners,
     outer: { hx, hy },
     dispose() {
       group.traverse((o) => {

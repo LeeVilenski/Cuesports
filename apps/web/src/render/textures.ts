@@ -223,3 +223,60 @@ export function woodTexture(): Texture {
   t.colorSpace = SRGBColorSpace;
   return t;
 }
+
+/** A knotted string net (one diamond per tile) on a transparent background, for snooker pockets. */
+export function netTexture(): Texture {
+  const s = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d')!;
+  g.clearRect(0, 0, s, s);
+  g.strokeStyle = '#ece8dc';
+  g.lineWidth = 3.2;
+  g.lineCap = 'round';
+  g.beginPath();
+  // Diamond mesh: lines corner to corner, so tiles join up.
+  g.moveTo(0, s / 2);
+  g.lineTo(s / 2, 0);
+  g.lineTo(s, s / 2);
+  g.lineTo(s / 2, s);
+  g.closePath();
+  g.stroke();
+  // Knots where the strings cross.
+  g.fillStyle = '#f4f1e6';
+  for (const [x, y] of [
+    [s / 2, 0],
+    [s, s / 2],
+    [s / 2, s],
+    [0, s / 2],
+  ] as const) {
+    g.beginPath();
+    g.arc(x, y, 3.8, 0, Math.PI * 2);
+    g.fill();
+  }
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  return t;
+}
+
+/** Pebbled leather grain, for pocket leathers. */
+export function leatherTexture(base: string): Texture {
+  const s = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d')!;
+  g.fillStyle = base;
+  g.fillRect(0, 0, s, s);
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 900; i++) {
+    const v = rnd();
+    g.fillStyle = v < 0.5 ? `rgba(0,0,0,${0.05 + rnd() * 0.08})` : `rgba(255,235,210,${0.03 + rnd() * 0.05})`;
+    g.beginPath();
+    g.arc(rnd() * s, rnd() * s, 0.8 + rnd() * 2.2, 0, Math.PI * 2);
+    g.fill();
+  }
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  return t;
+}

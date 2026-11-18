@@ -90,9 +90,19 @@ export type MarkingSpec =
   | { type: 'arc'; id: string; centre: Vec2; radius: number; startDeg: number; endDeg: number }
   | { type: 'spot'; id: string; position: Vec2 };
 
+/** The table around the playfield: cushion and wooden rail widths, and their heights above the nose. */
+export interface TableTrim {
+  cushionWidth: number;
+  railWidth: number;
+  cushionTopAboveNose: number;
+  railTopAboveNose: number;
+}
+
 export interface TableSpec {
   id: string;
   name: string;
+  /** Cushion and rail sizes, where they differ from the usual (see TABLE_TRIM in physics). */
+  trim?: TableTrim;
   /** Playfield measured between cushion noses. The table centre is the origin, x along the length. */
   playfield: { length: number; width: number };
   cushion: CushionSpec;
