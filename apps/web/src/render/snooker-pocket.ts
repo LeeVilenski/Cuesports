@@ -164,6 +164,7 @@ export interface SnookerPocketMaterials {
   net: MeshStandardMaterial;
   wire: MeshStandardMaterial;
   strap: MeshStandardMaterial;
+  iron: MeshStandardMaterial;
 }
 
 export function snookerPocketMaterials(): SnookerPocketMaterials {
@@ -195,6 +196,13 @@ export function snookerPocketMaterials(): SnookerPocketMaterials {
       envMapIntensity: 4,
     }),
     wire: new MeshStandardMaterial({ color: '#1c1c1c', roughness: 0.3, metalness: 0.1, envMapIntensity: 4 }),
+    iron: new MeshStandardMaterial({
+      color: '#c39645',
+      roughness: 0.32,
+      metalness: 0.95,
+      side: DoubleSide,
+      envMapIntensity: 4,
+    }),
     strap: new MeshStandardMaterial({ color: '#4a2a1a', roughness: 0.6, envMapIntensity: 4 }),
   };
 }
@@ -289,48 +297,62 @@ export function buildSnookerPocket(
   const rIn = q.backRadius;
   const top = q.railTop + 0.004;
 
-  // ---- Leather: swept round the back of the hole. Each row is a profile across the leather: up
-  // the inside of the hole, over the rail, and down the outside as a flap.
+  // ---- The pocket is a separate part from the rails. A cast brass pocket iron caps the rail round
+  // the back of the hole and joins the two rail ends (its flanges are screwed down onto them, below).
+  // The leather lines the inside of the iron and hangs beneath it as a stitched cup, with the net
+  // below that. Both are swept round the back of the hole, one profile per row.
   const rows = 64;
   const grid: Vector3[][] = [];
+  const cup: Vector3[][] = [];
   const stitchTop: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
   const stitchFlap: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
   const at3 = (r: number, th: number, z: number) =>
     new Vector3(p.position.x + Math.cos(th) * r, p.position.y + Math.sin(th) * r, z);
+  const railBottom = -q.slate - 0.002;
   for (let i = 0; i <= rows; i++) {
     const th = at - span + (2 * span * i) / rows;
     const dx = Math.cos(th);
     const dy = Math.sin(th);
     const edge = rayToRoundedBox(p.position.x, p.position.y, dx, dy, q.hx, q.hy, q.cornerRadius);
-    // Along the rail (at the ends of a middle pocket's leather) it stops on the rail top and the
-    // "flap" runs down into the wood, out of sight.
+    // Along the rail (at the ends of a middle pocket's iron) it stops on the rail top and its outer
+    // face runs down into the wood, out of sight.
     const reach = p.kind === 'corner' ? 0.2 : 0.075;
-    const overEdge = edge + 0.003 <= rIn + reach;
     const rOut = Math.min(edge + 0.003, rIn + reach);
-    // The flap is deepest in the middle and rounds off towards the ends.
-    const f = Math.cos(((th - at) / span) * (Math.PI / 2));
-    const flap = 0.02 + 0.045 * Math.pow(Math.max(0, f), 1.3);
-    const prof: [number, number][] = [
-      [rIn + 0.001, -0.003],
-      [rIn - 0.002, q.railTop - 0.02],
-      [rIn - 0.002, top - 0.004],
-      [rIn + 0.003, top],
-      [rIn + 0.01, top + 0.0008],
-      [rOut - 0.01, top + 0.0008],
-      [rOut - 0.003, top - 0.001],
-      [rOut, top - 0.006],
-      [rOut, q.railTop - flap + 0.006],
-      [rOut - 0.002, q.railTop - flap],
-    ];
-    grid.push(prof.map(([r, z]) => at3(r, th, z)));
+    grid.push(
+      (
+        [
+          [rIn - 0.002, q.railTop - 0.014],
+          [rIn - 0.002, top - 0.003],
+          [rIn + 0.003, top],
+          [rOut - 0.006, top],
+          [rOut - 0.001, top - 0.003],
+          [rOut, top - 0.008],
+          [rOut, railBottom + 0.004],
+          [rOut - 0.004, railBottom],
+        ] as [number, number][]
+      ).map(([r, z]) => at3(r, th, z)),
+    );
+    // The cup is deepest at the back and rounds off towards the jaws.
+    const f = Math.max(0, Math.cos(((th - at) / span) * (Math.PI / 2)));
+    const depth = 0.025 + 0.045 * Math.pow(f, 1.2);
+    cup.push(
+      (
+        [
+          [rIn - 0.004, q.railTop - 0.012],
+          [rIn - 0.004, railBottom],
+          [rIn + 0.003, railBottom - 0.02],
+          [rIn + 0.004, railBottom - depth + 0.008],
+          [rIn - 0.004, railBottom - depth],
+        ] as [number, number][]
+      ).map(([r, z]) => at3(r, th, z)),
+    );
     const t = new Vector3(-dy, dx, 0);
     const n = new Vector3(dx, dy, 0);
-    if (i > 1 && i < rows - 1) {
-      if (rOut - rIn > 0.03) stitchTop.push({ p: at3(rOut - 0.009, th, top + 0.0014), t, n });
-      if (overEdge) stitchFlap.push({ p: at3(rOut + 0.0006, th, q.railTop - flap + 0.01), t, n });
-    }
+    if (i > 1 && i < rows - 1)
+      stitchFlap.push({ p: at3(rIn + 0.0047, th, railBottom - depth + 0.012), t, n });
   }
-  g.add(new Mesh(gridMesh(grid, 0.05), m.leather));
+  g.add(new Mesh(gridMesh(grid, 0.05), m.iron));
+  g.add(new Mesh(gridMesh(cup, 0.05), m.leather));
   // Stitching: short cream dashes along the top and round the bottom of the flap.
   const dash = (pts: typeof stitchTop, onTop: boolean) => {
     if (pts.length === 0) return;
