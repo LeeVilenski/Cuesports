@@ -16,6 +16,8 @@ import {
   MeshStandardMaterial,
   RepeatWrapping,
   Shape,
+  ShapeUtils,
+  Vector2,
   SphereGeometry,
   TorusGeometry,
   TubeGeometry,
@@ -34,11 +36,6 @@ const hiddenMat = new MeshBasicMaterial({ visible: false });
 /** Height of the padded leather roll above the rail, and of the brass collar under the net. */
 const PAD = 0.007;
 const BAND = 0.02;
-
-function smooth(x: number): number {
-  const t = Math.min(1, Math.max(0, x));
-  return t * t * (3 - 2 * t);
-}
 
 /** Height of the padded leather top at radius r: a flat crown with rolled edges either side. */
 function domeZ(r: number, r0: number, r1: number, top: number, pad: number): number {
@@ -310,6 +307,7 @@ export function buildSnookerPocket(
   // ---- Leather: swept round the back of the hole. Each row is a profile across the leather: up
   // the inside of the hole, over the rail, and down the outside as a flap.
   const rows = 64;
+  const cuts: [number, number][][] = [];
   const grid: Vector3[][] = [];
   const stitchTop: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
   const stitchFlap: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
@@ -329,7 +327,7 @@ export function buildSnookerPocket(
     const f = Math.cos(((th - at) / span) * (Math.PI / 2));
     const flap = 0.03 + 0.055 * Math.pow(Math.max(0, f), 0.8);
     // The top is padded over the iron: a raised roll that flattens out under the brass plates.
-    const pad = PAD * smooth(Math.min(i, rows - i) / (rows * 0.12));
+    const pad = PAD;
     const z = (r: number) => domeZ(r, rIn, rOut, top, pad);
     const prof: [number, number][] = [
       [rIn + 0.001, -0.003],
@@ -346,6 +344,7 @@ export function buildSnookerPocket(
       [rOut - 0.002, q.railTop - flap],
     );
     grid.push(prof.map(([r, z]) => at3(r, th, z)));
+    if (i === 0 || i === rows) cuts.push(prof);
     const t = new Vector3(-dy, dx, 0);
     const n = new Vector3(dx, dy, 0);
     if (i > 1 && i < rows - 1) {
@@ -358,6 +357,32 @@ export function buildSnookerPocket(
     }
   }
   g.add(new Mesh(gridMesh(grid, 0.05), m.leather));
+  // The leather is a separate moulded piece laid over the rail, not part of it: close its cut ends
+  // so its thickness shows where it stops on the rail.
+  cuts.forEach((prof, k) => {
+    const th = at + (k === 0 ? -span : span);
+    const tri = ShapeUtils.triangulateShape(
+      prof.map(([r, z]) => new Vector2(r, z)),
+      [],
+    );
+    const pos: number[] = [];
+    for (const [r, z] of prof) {
+      const v = at3(r, th, z);
+      pos.push(v.x, v.y, v.z);
+    }
+    const geo = new BufferGeometry();
+    geo.setAttribute('position', new Float32BufferAttribute(pos, 3));
+    geo.setAttribute(
+      'uv',
+      new Float32BufferAttribute(
+        prof.flatMap(([r, z]) => [r / 0.05, z / 0.05]),
+        2,
+      ),
+    );
+    geo.setIndex(tri.flat());
+    geo.computeVertexNormals();
+    g.add(new Mesh(geo, m.leather));
+  });
   // Stitching: short cream dashes along the top and round the bottom of the flap.
   const dash = (pts: typeof stitchTop, onTop: boolean) => {
     if (pts.length === 0) return;
@@ -387,7 +412,7 @@ export function buildSnookerPocket(
       : new Vector3(Math.sign(e.x) * (q.hx - q.railWidth / 2), e.y, 0);
     const w = 0.056;
     const h = 0.024;
-    const c = mid.clone().addScaledVector(dir, w / 2 - 0.004);
+    const c = mid.clone().addScaledVector(dir, w / 2 + 0.006);
     const s = new Shape();
     s.moveTo(-w / 2 + h / 2, -h / 2);
     s.lineTo(w / 2 - h / 2, -h / 2);
@@ -404,7 +429,7 @@ export function buildSnookerPocket(
       }),
       m.brass,
     );
-    plate.position.set(c.x, c.y, top + 0.0012);
+    plate.position.set(c.x, c.y, q.railTop + 0.0006);
     plate.rotation.z = Math.atan2(dir.y, dir.x);
     g.add(plate);
     for (const k of [-1, 1]) {
@@ -413,7 +438,7 @@ export function buildSnookerPocket(
       screw.rotation.x = Math.PI / 2;
       screw.scale.set(1, 0.55, 1);
       const sc = c.clone().addScaledVector(dir, k * 0.017);
-      screw.position.set(sc.x, sc.y, top + 0.0039);
+      screw.position.set(sc.x, sc.y, q.railTop + 0.0033);
       g.add(screw);
     }
   }
