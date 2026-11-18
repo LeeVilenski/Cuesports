@@ -21,7 +21,10 @@ export interface HudCallbacks {
 /** The tip can go up to just inside the miscue limit (0.55 R in DEFAULT_CUE). */
 const MAX_TIP = 0.52;
 const MISCUE_RING = 0.55;
+/** Pull-back stroke: forward speed (bar heights per second) for a full-power shot. */
+const PULL_FULL_SPEED = 7;
 
+export type StrokeMode = 'bar' | 'pull';
 
 /** Touch-first HUD overlaid on the canvas. Layout adapts to portrait and landscape in CSS. */
 export class Hud {
@@ -54,6 +57,9 @@ export class Hud {
   private forced = 0;
   private placing = false;
   private lastPower = 0.4;
+  private powerEl!: HTMLElement;
+  /** Power bar (pull down, release) or pull-back stroke (pull down, push back up to strike). */
+  strokeMode: StrokeMode = 'bar';
 
   constructor(private cb: HudCallbacks) {
     // One camera button: tap cycles Aim → Top → Free.
@@ -82,11 +88,17 @@ export class Hud {
     let startY = 0;
     let pulling = false;
     let p = 0;
+    // Pull-back stroke: the furthest the cue was drawn back, and the smoothed forward speed.
+    let back = 0;
+    let lastY = 0;
+    let lastT = 0;
+    let fwd = 0;
     power.addEventListener('pointerdown', (e) => {
       power.setPointerCapture(e.pointerId);
-      startY = e.clientY;
+      startY = lastY = e.clientY;
+      lastT = e.timeStamp;
       pulling = true;
-      p = 0;
+      p = back = fwd = 0;
       this.showPower(0);
       cb.onPull(0);
     });
@@ -94,6 +106,29 @@ export class Hud {
       if (!pulling) return;
       const range = power.getBoundingClientRect().height * 0.9;
       p = Math.max(0, Math.min(1, (e.clientY - startY) / range));
+      if (this.strokeMode === 'pull') {
+        // Forward speed in bar-heights per second, smoothed over the last few moves.
+        const dt = Math.max(1, e.timeStamp - lastT);
+        const v = ((lastY - e.clientY) / range) * (1000 / dt);
+        fwd = fwd * 0.5 + v * 0.5;
+        lastY = e.clientY;
+        lastT = e.timeStamp;
+        back = Math.max(back, p);
+        if (back > 0.05 && e.clientY <= startY) {
+          // Pushed through to where the stroke started: strike with the forward speed, never much
+          // more than the backswing allows (so a twitch can't become a full-power shot).
+          pulling = false;
+          const shotPower = Math.max(0.03, Math.min(1, fwd / PULL_FULL_SPEED, back * 1.5 + 0.1));
+          this.showPower(0);
+          this.lastPower = shotPower;
+          this.powerMark.style.setProperty('--p', String(shotPower));
+          cb.onShoot(shotPower);
+          return;
+        }
+        this.showPower(p);
+        cb.onPull(p);
+        return;
+      }
       this.showPower(p);
       cb.onPull(p);
     });
@@ -101,7 +136,8 @@ export class Hud {
       if (!pulling) return;
       pulling = false;
       this.showPower(0);
-      if (!cancel && p > 0.02) {
+      // In pull-back mode, letting go without pushing through cancels the stroke.
+      if (!cancel && p > 0.02 && this.strokeMode === 'bar') {
         this.lastPower = p;
         this.powerMark.style.setProperty('--p', String(p));
         cb.onShoot(p);
@@ -109,6 +145,7 @@ export class Hud {
     };
     power.addEventListener('pointerup', () => release(false));
     power.addEventListener('pointercancel', () => release(true));
+    this.powerEl = power;
 
     // Fine aim strip: drags here turn the aim 15× more slowly.
     const fine = h(
@@ -202,6 +239,15 @@ export class Hud {
     this.root.append(top, power, fine, this.spinMini, actions, this.spinPanel);
     this.powerMark.style.setProperty('--p', String(this.lastPower));
     this.drawSpin();
+  }
+
+  setStrokeMode(mode: StrokeMode): void {
+    this.strokeMode = mode;
+    this.powerEl.classList.toggle('stroke', mode === 'pull');
+    this.powerEl.ariaLabel =
+      mode === 'pull'
+        ? 'Stroke: pull down to draw the cue back, then push up to strike'
+        : 'Power: pull down and release to shoot';
   }
 
   get power(): number {

@@ -83,6 +83,32 @@ test('pulling the power bar down and releasing takes a shot', async ({ page }) =
   await page.waitForFunction(() => window.__cuesports.state().phase !== 'aim', null, { timeout: 10_000 });
 });
 
+test('pull-back stroke: letting go cancels, pushing back up strikes', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Pull back' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByRole('button', { name: /^Practice/ }).click();
+  await page.getByRole('button', { name: '9-ball', exact: true }).click();
+  await page.waitForFunction(() => window.__cuesports?.state().phase === 'aim');
+  const bar = (await page.locator('.power').boundingBox())!;
+  const x = bar.x + bar.width / 2;
+  // Pull back and let go: no shot.
+  await page.mouse.move(x, bar.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(x, bar.y + bar.height * 0.4, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__cuesports.state().phase)).toBe('aim');
+  // Pull back, then push through: a shot.
+  await page.mouse.move(x, bar.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(x, bar.y + bar.height * 0.4, { steps: 6 });
+  await page.mouse.move(x, bar.y + 5, { steps: 3 });
+  await page.mouse.up();
+  await page.waitForFunction(() => window.__cuesports.state().phase !== 'aim', null, { timeout: 10_000 });
+});
+
 test('plays a 9-ball match: setup, break, then the rules decide whose turn it is', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));

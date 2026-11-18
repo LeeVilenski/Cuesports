@@ -42,6 +42,8 @@ import { BallsView } from './render/balls-view';
 import { CameraRig, type CameraMode } from './render/cameras';
 import { physicsGroup, toPhysics, toWorld } from './render/coords';
 import { CueView } from './render/cue-view';
+import { Character, looksFor, type StanceInput, type TableFrame, type Want } from './render/character';
+import { ShotCamera, type ShotCameraMode } from './render/shot-camera';
 import { GuideView } from './render/guide-view';
 import { buildTableView, WELL_DEPTH, type TableView } from './render/table-view';
 import { Hud } from './ui/hud';
@@ -132,7 +134,13 @@ let last: { before: BallState[]; shot: ShotInput; result: ShotResult } | null = 
 let showGuide = true;
 /** The guide follows the cue ball's real launch direction, including squirt from side. */
 let guideSquirt = true;
-let useOverview = true;
+let shotCamMode: ShotCameraMode = 'cinematic';
+let shotCam: ShotCamera | null = null;
+let showPlayer = true;
+/** The two players (placeholder characters); [0] plays practice. */
+let players: Character[] = [];
+/** The stance of the last shot, so the player stays down through the follow-through. */
+let lastStance: StanceInput | null = null;
 let placing = false;
 let dirty = true;
 /** The 9-ball match being played, or null in practice. */
@@ -187,6 +195,56 @@ function setTable(def: GameDef): void {
   );
   placeCanopy(def.table.playfield.length);
   rig.setTable(def.table);
+  buildPlayers();
+}
+
+function buildPlayers(): void {
+  if (!tableView) return;
+  for (const p of players) {
+    world.remove(p.group, p.chair);
+    p.dispose();
+  }
+  const t: TableFrame = {
+    hl: game.table.playfield.length / 2,
+    hw: game.table.playfield.width / 2,
+    hx: tableView.outer.hx,
+    hy: tableView.outer.hy,
+    railTop: tableView.railTop,
+    floorZ: tableView.floorZ,
+  };
+  players = looksFor(game.table.id).map((look, i) => {
+    const c = new Character(look);
+    // Chairs along one long side, facing the table.
+    c.setTable(t, { x: (i === 0 ? -1 : 1) * t.hl * 0.55, y: -(t.hy + 1.15) }, Math.PI / 2);
+    world.add(c.group, c.chair);
+    return c;
+  });
+  lastStance = null;
+}
+
+/** The player at the table now. */
+const activePlayer = (): number => (match ? match.turn.player : 0);
+
+/** What each player should be doing this frame. */
+function playerWants(i: number, cue: BallState | undefined, gap: number): Want {
+  if (i !== activePlayer()) return { kind: 'sit' };
+  if (!cue || cue.state === 'pocketed') return { kind: 'watch' };
+  // Watch from beside the cue ball.
+  const near = { kind: 'watch' as const, at: { ...cue.pos } };
+  if (phase === 'playing') {
+    // Stay down through the follow-through, then stand and watch.
+    if (lastStance && playT < 0.8) return { kind: 'shoot', stance: { ...lastStance, gap: -0.06 } };
+    return { kind: 'watch' };
+  }
+  if (placing || (match && (match.turn.decision || match.rackResult))) return near;
+  const stance: StanceInput = {
+    ball: cue.pos,
+    R: cue.radius,
+    shot: phase === 'aim' ? withClearance(shot) : shot,
+    gap,
+  };
+  lastStance = stance;
+  return { kind: 'shoot', stance };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -208,6 +266,7 @@ function loadRack(): void {
   playing = null;
   rig.snap();
   syncTurn();
+  placePlayers();
 }
 
 /** Updates the HUD and controls for whoever is at the table now. */
@@ -271,9 +330,16 @@ function rerack(): void {
   playing = null;
   last = null;
   aimAtFirstBall();
+  placePlayers();
   rig.snap();
   status();
   dirty = true;
+}
+
+/** Puts both players straight into place (new rack or table), without walking. */
+function placePlayers(): void {
+  const cue = cueBall();
+  players.forEach((p, i) => p.place(i === 0 || match ? playerWants(i, cue, 0.015) : { kind: 'sit' }));
 }
 
 function aimAtFirstBall(): void {
@@ -347,7 +413,9 @@ function startPlayback(): void {
   playT = 0;
   phase = 'playing';
   cueView.group.visible = false;
-  rig.overview = useOverview && rig.mode === 'aim';
+  const camMode: ShotCameraMode = replaying ? 'cinematic' : shotCamMode;
+  rig.overview = camMode === 'overview' && rig.mode === 'aim';
+  shotCam = rig.mode === 'aim' ? new ShotCamera(playing, game.table, camMode, shot.aim) : null;
   navigator.vibrate?.(12);
 }
 
@@ -383,6 +451,8 @@ function endPlayback(): void {
     playing = null;
     phase = 'aim';
     rig.overview = false;
+    rig.shotView = null;
+    shotCam = null;
     cueView.group.visible = true;
     hud.setBusy(false);
     if (match) syncTurn();
@@ -401,6 +471,8 @@ function endPlayback(): void {
   playing = null;
   phase = 'aim';
   rig.overview = false;
+  rig.shotView = null;
+  shotCam = null;
   cueView.group.visible = true;
   hud.setBusy(false);
   const ms = pending?.ms;
@@ -479,11 +551,19 @@ function maybeAiTurn(): void {
       rig.followAimInstantly();
       status(`${m.config.players[t.player]}: ${ai.label}`);
       dirty = true;
-      window.setTimeout(() => {
+      // Strike once the player has walked round and got down on the shot.
+      const started = performance.now();
+      const go = () => {
         if (match !== m) return;
+        const p = players[t.player];
+        if (p && showPlayer && (p.busy || !p.isDown) && performance.now() - started < 4000) {
+          window.setTimeout(go, 100);
+          return;
+        }
         aiBusy = false;
         strike(ai.shot, ai.decl, 0.5);
-      }, 900);
+      };
+      window.setTimeout(go, 900);
     }, wait);
   });
 }
@@ -646,9 +726,11 @@ const menu: Menu = new Menu(
     onOption: (name, on) => {
       if (name === 'guide') showGuide = on;
       else if (name === 'squirt') guideSquirt = on;
-      else useOverview = on;
+      else showPlayer = on;
       dirty = true;
     },
+    onShotCamera: (mode) => (shotCamMode = mode),
+    onStroke: (mode) => hud.setStrokeMode(mode),
     onVisible: (open) => {
       app.classList.toggle('menu-open', open);
       if (open) {
@@ -675,7 +757,9 @@ const menu: Menu = new Menu(
 );
 showGuide = menu.settings.guide;
 guideSquirt = menu.settings.squirt;
-useOverview = menu.settings.overview;
+shotCamMode = menu.settings.shotCam;
+showPlayer = menu.settings.player;
+hud.setStrokeMode(menu.settings.stroke);
 app.append(menu.root);
 
 /** Back to a practice rack behind the home screen. */
@@ -982,6 +1066,7 @@ function frame(now: number): void {
       phase === 'aim' ? withClearance(shot).elevation : phase === 'striking' ? shot.elevation : 0;
     const moving = rig.update(dt, cue.pos, cue.radius, shot.aim, cueElevation);
     if (moving) dirty = true;
+    if (phase === 'playing' && shotCam) rig.shotView = shotCam.view(playT);
     if (phase !== 'playing') {
       // The cue draws back as the power bar is pulled, then drives through during the strike.
       const back = 0.015 + pull * 0.22;
@@ -991,6 +1076,7 @@ function frame(now: number): void {
       if (phase === 'aim') hud.setForcedElevation((live.elevation * 180) / Math.PI);
     }
   }
+  updatePlayers(dt, cue);
   const guide =
     phase === 'aim' && cue
       ? computeGuide(game.table, balls, 'cue', guideSquirt ? launchDirection(cue, shot) : shot.aim)
@@ -1017,6 +1103,24 @@ function frame(now: number): void {
     dirty = false;
   }
   requestAnimationFrame(frame);
+}
+
+function updatePlayers(dt: number, cue: BallState | undefined): void {
+  const back = 0.015 + pull * 0.22;
+  const gap = phase === 'striking' ? Math.max(0, back * (1 - (strikeT / 0.09) ** 2)) : back;
+  players.forEach((p, i) => {
+    const inMatch = match !== null;
+    // Practice has one player; the chairs come out for matches.
+    p.chair.visible = inMatch;
+    const here = i === 0 || inMatch;
+    const want = playerWants(i, cue, gap);
+    if (p.update(menu.isOpen ? 0 : dt, here ? want : { kind: 'sit' })) dirty = true;
+    // The player at the table would block the aim cam while aiming: cue only.
+    const blocks = i === activePlayer() && rig.mode === 'aim' && phase !== 'playing' && !menu.isOpen;
+    p.group.visible = showPlayer && here && !blocks;
+    // The shot cue takes over from the player's own cue in the stance.
+    p.ownCue = !(p.isDown && cueView.group.visible && i === activePlayer());
+  });
 }
 
 function adaptQuality(ms: number): void {
