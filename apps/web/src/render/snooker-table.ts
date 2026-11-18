@@ -212,7 +212,10 @@ export function buildSnookerBody(q: SnookerBodyParams): {
   roomLit(dark, 0.8);
 
   // Rails: from the slate's edge up to the rail top, rounded along the top.
-  const rail = roundedRect(hx, hy, B.cornerRadius);
+  // The corners are rounded about the corner pockets, so the leather round each one is even.
+  const corner = q.pockets.find((k) => k.pocket.kind === 'corner')?.pocket.position;
+  const cornerRadius = corner ? Math.min(hx - Math.abs(corner.x), hy - Math.abs(corner.y)) : B.cornerRadius;
+  const rail = roundedRect(hx, hy, cornerRadius);
   rail.holes.push(new Path(q.railHole.map((p) => new Vector2(p.x, p.y))));
   g.add(slab(rail, B.railBottom, q.railTop, 0.006, wood));
 
@@ -321,7 +324,7 @@ export function buildSnookerBody(q: SnookerBodyParams): {
         railTop: q.railTop,
         hx,
         hy,
-        cornerRadius: B.cornerRadius,
+        cornerRadius,
         railWidth: q.trim.railWidth,
         slate: B.slate,
         // Just inside the rail edge, under its overhang, well clear of the frieze.

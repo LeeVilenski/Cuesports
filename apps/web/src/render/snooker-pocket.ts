@@ -168,7 +168,7 @@ export interface SnookerPocketMaterials {
 }
 
 export function snookerPocketMaterials(): SnookerPocketMaterials {
-  const leatherMap = leatherTexture('#c48d62');
+  const leatherMap = leatherTexture('#bf7d4c');
   leatherMap.wrapS = leatherMap.wrapT = RepeatWrapping;
   const net = netTexture();
   net.wrapS = net.wrapT = RepeatWrapping;
@@ -293,16 +293,20 @@ export function buildSnookerPocket(
   const p = q.pocket;
   const R = q.ballRadius;
   const at = Math.atan2(p.axis.y, p.axis.x);
-  const span = ((p.kind === 'corner' ? 70 : 96) * Math.PI) / 180;
+  // The leather runs round the back of the hole from one rail end to the other.
+  const span = Math.PI / 2;
   const rIn = q.backRadius;
-  const top = q.railTop + 0.004;
+  const top = q.railTop + 0.002;
 
-  // ---- The pocket is a separate part from the rails. A cast brass pocket iron caps the rail round
-  // the back of the hole and joins the two rail ends (its flanges are screwed down onto them, below).
-  // The leather lines the inside of the iron and hangs beneath it as a stitched cup, with the net
-  // below that. Both are swept round the back of the hole, one profile per row.
+  // ---- The pocket is a separate part from the rails, which end square against it. On top, a band
+  // of leather of even width runs round the back of the hole, flush with the rails; at the corners
+  // the table is rounded to follow it. Underneath, the brass pocket iron joins the two rail ends; it
+  // shows only as a strip on the outside, below the leather. The leather also lines the hole and
+  // hangs beneath the rail as a stitched cup above the net. All three are swept round the back of
+  // the hole, one profile per row.
   const rows = 64;
   const grid: Vector3[][] = [];
+  const band: Vector3[][] = [];
   const cup: Vector3[][] = [];
   const stitchTop: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
   const stitchFlap: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
@@ -314,20 +318,29 @@ export function buildSnookerPocket(
     const dx = Math.cos(th);
     const dy = Math.sin(th);
     const edge = rayToRoundedBox(p.position.x, p.position.y, dx, dy, q.hx, q.hy, q.cornerRadius);
-    // Along the rail (at the ends of a middle pocket's iron) it stops on the rail top and its outer
-    // face runs down into the wood, out of sight.
-    const reach = p.kind === 'corner' ? 0.2 : 0.075;
-    const rOut = Math.min(edge + 0.003, rIn + reach);
+    // At a corner the band runs out to the table's rounded edge. A middle pocket's runs out to the
+    // edge at the back, and towards its ends lies on the rail top.
+    const rOut = p.kind === 'corner' ? edge + 0.001 : Math.min(edge + 0.001, rIn + 0.05);
+    band.push(
+      (
+        [
+          [rIn + 0.002, q.railTop - 0.016],
+          [rIn - 0.002, q.railTop - 0.006],
+          [rIn - 0.001, top - 0.002],
+          [rIn + 0.004, top],
+          [rOut - 0.005, top],
+          [rOut - 0.001, top - 0.002],
+          [rOut, top - 0.007],
+          [rOut, top - 0.012],
+        ] as [number, number][]
+      ).map(([r, z]) => at3(r, th, z)),
+    );
     grid.push(
       (
         [
-          [rIn - 0.002, q.railTop - 0.014],
-          [rIn - 0.002, top - 0.003],
-          [rIn + 0.003, top],
-          [rOut - 0.006, top],
-          [rOut - 0.001, top - 0.003],
-          [rOut, top - 0.008],
-          [rOut, railBottom + 0.004],
+          [rOut - 0.002, top - 0.011],
+          [rOut + 0.0005, top - 0.012],
+          [rOut + 0.0005, railBottom + 0.003],
           [rOut - 0.004, railBottom],
         ] as [number, number][]
       ).map(([r, z]) => at3(r, th, z)),
@@ -351,6 +364,7 @@ export function buildSnookerPocket(
     if (i > 1 && i < rows - 1)
       stitchFlap.push({ p: at3(rIn + 0.0047, th, railBottom - depth + 0.012), t, n });
   }
+  g.add(new Mesh(gridMesh(band, 0.05), m.leather));
   g.add(new Mesh(gridMesh(grid, 0.05), m.iron));
   g.add(new Mesh(gridMesh(cup, 0.05), m.leather));
   // Stitching: short cream dashes along the top and round the bottom of the flap.
@@ -367,49 +381,6 @@ export function buildSnookerPocket(
   };
   dash(stitchTop, true);
   dash(stitchFlap, false);
-
-  // ---- Brass pocket-iron flanges either side, lying along the rail and screwed to it.
-  for (const side of [-1, 1]) {
-    const th = at + side * span;
-    const e = at3(rIn + 0.03, th, 0);
-    // Which rail the end of the leather lies on, and which way along it is away from the pocket.
-    const onLong = q.hy - Math.abs(e.y) < q.hx - Math.abs(e.x);
-    const dir = onLong
-      ? new Vector3(Math.sign(e.x - p.position.x) || 1, 0, 0)
-      : new Vector3(0, Math.sign(e.y - p.position.y) || 1, 0);
-    const mid = onLong
-      ? new Vector3(e.x, Math.sign(e.y) * (q.hy - q.railWidth / 2), 0)
-      : new Vector3(Math.sign(e.x) * (q.hx - q.railWidth / 2), e.y, 0);
-    const w = 0.042;
-    const h = 0.02;
-    const c = mid.clone().addScaledVector(dir, w / 2 - 0.004);
-    const s = new Shape();
-    s.moveTo(-w / 2 + h / 2, -h / 2);
-    s.lineTo(w / 2 - h / 2, -h / 2);
-    s.absarc(w / 2 - h / 2, 0, h / 2, -Math.PI / 2, Math.PI / 2, false);
-    s.lineTo(-w / 2 + h / 2, h / 2);
-    s.absarc(-w / 2 + h / 2, 0, h / 2, Math.PI / 2, (3 * Math.PI) / 2, false);
-    const plate = new Mesh(
-      new ExtrudeGeometry(s, {
-        depth: 0.0015,
-        bevelEnabled: true,
-        bevelSize: 0.0006,
-        bevelThickness: 0.0006,
-        bevelSegments: 2,
-      }),
-      m.brass,
-    );
-    plate.position.set(c.x, c.y, q.railTop + 0.0006);
-    plate.rotation.z = Math.atan2(dir.y, dir.x);
-    g.add(plate);
-    for (const k of [-1, 1]) {
-      const screw = new Mesh(new CylinderGeometry(0.0026, 0.0026, 0.0012, 14), m.brass);
-      screw.rotation.x = Math.PI / 2;
-      const sc = c.clone().addScaledVector(dir, k * 0.012);
-      screw.position.set(sc.x, sc.y, q.railTop + 0.0029);
-      g.add(screw);
-    }
-  }
 
   // ---- The cloth lines the hole down through the slate.
   const lining = new Shape(q.outline.map((v) => ({ x: v.x, y: v.y }) as never));
