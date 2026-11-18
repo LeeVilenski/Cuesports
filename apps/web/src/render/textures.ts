@@ -259,7 +259,7 @@ export function netTexture(): Texture {
   return t;
 }
 
-/** Pebbled leather grain, for pocket leathers. */
+/** Seamless, fine-grain leather texture for pocket leathers. */
 export function leatherTexture(base: string): Texture {
   const s = 128;
   const c = document.createElement('canvas');
@@ -267,16 +267,57 @@ export function leatherTexture(base: string): Texture {
   const g = c.getContext('2d')!;
   g.fillStyle = base;
   g.fillRect(0, 0, s, s);
+
   let seed = 7;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 900; i++) {
-    const v = rnd();
-    g.fillStyle = v < 0.5 ? `rgba(0,0,0,${0.05 + rnd() * 0.08})` : `rgba(255,235,210,${0.03 + rnd() * 0.05})`;
+  // Low-contrast cloudy variation gives the hide a little natural colour depth.
+  for (let i = 0; i < 180; i++) {
+    const x = rnd() * s;
+    const y = rnd() * s;
+    const r = 3 + rnd() * 12;
+    g.fillStyle = rnd() < 0.55 ? 'rgba(53,27,13,0.035)' : 'rgba(255,224,190,0.045)';
     g.beginPath();
-    g.arc(rnd() * s, rnd() * s, 0.8 + rnd() * 2.2, 0, Math.PI * 2);
+    g.ellipse(x, y, r * 1.25, r * 0.7, rnd() * Math.PI, 0, Math.PI * 2);
     g.fill();
   }
+
+  // Draw each pebble over the tile edges as well, so RepeatWrapping has no hard seams.
+  const pebble = (x: number, y: number, rx: number, ry: number, angle: number, colour: string) => {
+    for (const ox of [-s, 0, s]) for (const oy of [-s, 0, s]) {
+      if (x + ox < -rx || x + ox > s + rx || y + oy < -ry || y + oy > s + ry) continue;
+      g.fillStyle = colour;
+      g.beginPath();
+      g.ellipse(x + ox, y + oy, rx, ry, angle, 0, Math.PI * 2);
+      g.fill();
+    }
+  };
+  for (let i = 0; i < 1050; i++) {
+    const x = rnd() * s;
+    const y = rnd() * s;
+    const size = 0.45 + rnd() * 1.35;
+    const angle = rnd() * Math.PI;
+    const shade = rnd();
+    const alpha = 0.035 + rnd() * 0.075;
+    const colour = shade < 0.52
+      ? `rgba(48,25,13,${alpha})`
+      : `rgba(255,232,207,${alpha * 0.8})`;
+    pebble(x, y, size * 1.35, size * 0.72, angle, colour);
+  }
+  // Sparse, short grain creases break up the regularity without looking scratched.
+  for (let i = 0; i < 90; i++) {
+    const x = rnd() * s;
+    const y = rnd() * s;
+    const len = 1.5 + rnd() * 4;
+    g.strokeStyle = rnd() < 0.5 ? 'rgba(55,29,16,0.07)' : 'rgba(255,235,215,0.06)';
+    g.lineWidth = 0.35 + rnd() * 0.45;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.quadraticCurveTo(x + len * 0.5, y - 0.5 + rnd(), x + len, y + rnd() - 0.5);
+    g.stroke();
+  }
+
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 8;
   return t;
 }

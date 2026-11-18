@@ -175,10 +175,10 @@ export function snookerPocketMaterials(): SnookerPocketMaterials {
   return {
     leather: new MeshStandardMaterial({
       map: leatherMap,
-      roughness: 0.62,
+      roughness: 0.76,
       metalness: 0,
       side: DoubleSide,
-      envMapIntensity: 3,
+      envMapIntensity: 2.2,
     }),
     stitch: new MeshStandardMaterial({ color: '#efe3cc', roughness: 0.8, envMapIntensity: 3 }),
     brass: new MeshStandardMaterial({
@@ -291,43 +291,62 @@ export function buildSnookerPocket(
 
   // ---- Leather: swept round the back of the hole. Each row is a profile across the leather: up
   // the inside of the hole, over the rail, and down the outside as a flap.
-  const rows = 64;
+  const rows = 80;
   const grid: Vector3[][] = [];
   const stitchTop: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
   const stitchFlap: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
   const at3 = (r: number, th: number, z: number) =>
     new Vector3(p.position.x + Math.cos(th) * r, p.position.y + Math.sin(th) * r, z);
+  // Keep the brass flange span and all gameplay geometry independent of the leather silhouette.
+  // The hide itself is broader: corner aprons have a generous rounded shoulder, while the
+  // middle-pocket apron is wider and flatter across the rail.
+  const leatherSpan = ((p.kind === 'corner' ? 82 : 112) * Math.PI) / 180;
   for (let i = 0; i <= rows; i++) {
-    const th = at - span + (2 * span * i) / rows;
+    const th = at - leatherSpan + (2 * leatherSpan * i) / rows;
     const dx = Math.cos(th);
     const dy = Math.sin(th);
     const edge = rayToRoundedBox(p.position.x, p.position.y, dx, dy, q.hx, q.hy, q.cornerRadius);
-    // Along the rail (at the ends of a middle pocket's leather) it stops on the rail top and the
-    // "flap" runs down into the wood, out of sight.
-    const reach = p.kind === 'corner' ? 0.2 : 0.075;
-    const overEdge = edge + 0.003 <= rIn + reach;
-    const rOut = Math.min(edge + 0.003, rIn + reach);
-    // The flap is deepest in the middle and rounds off towards the ends.
-    const f = Math.cos(((th - at) / span) * (Math.PI / 2));
-    const flap = 0.02 + 0.045 * Math.pow(Math.max(0, f), 1.3);
+    const f = Math.cos(((th - at) / leatherSpan) * (Math.PI / 2));
+    const fullness = Math.pow(Math.max(0, f), p.kind === 'corner' ? 1.15 : 0.8);
+    // A little leather turns over the outside arris before falling down the rail face.
+    const reach = p.kind === 'corner' ? 0.22 : 0.11;
+    const rOut = Math.min(edge + 0.012, rIn + reach);
+    const overEdge = edge + 0.012 <= rIn + reach;
+    // Long, shaped valance: deeper at the pocket's centre and progressively shallower at
+    // the shoulders. This is the visible hanging leather, not a change to the pocket cut-out.
+    const drop = p.kind === 'corner' ? 0.105 : 0.078;
+    const flap = 0.012 + drop * fullness;
+    const shoulder = p.kind === 'corner' ? 0.0045 : 0.003;
+    const crown = p.kind === 'corner' ? 0.004 : 0.0025;
+    // Cross-section runs from the inner wall, up onto a softly crowned apron, across the
+    // rail cap, around a rolled outside edge and down to a rounded stitched hem.
     const prof: [number, number][] = [
-      [rIn + 0.001, -0.003],
-      [rIn - 0.002, q.railTop - 0.02],
-      [rIn - 0.002, top - 0.004],
-      [rIn + 0.003, top],
-      [rIn + 0.01, top + 0.0008],
-      [rOut - 0.01, top + 0.0008],
-      [rOut - 0.003, top - 0.001],
-      [rOut, top - 0.006],
-      [rOut, q.railTop - flap + 0.006],
-      [rOut - 0.002, q.railTop - flap],
+      [rIn + 0.001, -0.004],
+      [rIn - 0.002, q.railTop - 0.028],
+      [rIn - 0.001, top - 0.006],
+      [rIn + 0.004, top + crown * 0.45],
+      [rIn + 0.014, top + crown],
+      [rIn + 0.028, top + crown * 0.82],
+      [rOut - 0.030, top + crown * 0.72],
+      [rOut - 0.016, top + crown * 0.55],
+      [rOut - 0.006, top + crown * 0.2],
+      [rOut + 0.002, top - 0.003],
+      [rOut + 0.010, q.railTop - 0.014],
+      [rOut + 0.012, q.railTop - 0.026],
+      [rOut + 0.010, q.railTop - flap + shoulder],
+      [rOut + 0.006, q.railTop - flap + 0.004],
+      [rOut - 0.001, q.railTop - flap],
     ];
     grid.push(prof.map(([r, z]) => at3(r, th, z)));
     const t = new Vector3(-dy, dx, 0);
     const n = new Vector3(dx, dy, 0);
     if (i > 1 && i < rows - 1) {
-      if (rOut - rIn > 0.03) stitchTop.push({ p: at3(rOut - 0.009, th, top + 0.0014), t, n });
-      if (overEdge) stitchFlap.push({ p: at3(rOut + 0.0006, th, q.railTop - flap + 0.01), t, n });
+      if (rOut - rIn > 0.035) {
+        stitchTop.push({ p: at3(rOut - 0.022, th, top + crown * 0.6 + 0.001), t, n });
+      }
+      if (overEdge) {
+        stitchFlap.push({ p: at3(rOut + 0.0105, th, q.railTop - flap + 0.012), t, n });
+      }
     }
   }
   g.add(new Mesh(gridMesh(grid, 0.05), m.leather));
