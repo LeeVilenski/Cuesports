@@ -1,3 +1,4 @@
+import { wellCentre } from './well';
 import {
   dropEdgePoints,
   dropOutline,
@@ -123,21 +124,6 @@ function clothLip(edge: Vec2[], centre: Vec2, material: MeshStandardMaterial): M
   return new Mesh(g, lipMat);
 }
 
-/** Centre of a polygon's area (where potted balls come to rest in the well). */
-function centroid(pts: Vec2[]): Vec2 {
-  let a = 0;
-  let cx = 0;
-  let cy = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const p = pts[i]!;
-    const q = pts[(i + 1) % pts.length]!;
-    const c = p.x * q.y - q.x * p.y;
-    a += c;
-    cx += (p.x + q.x) * c;
-    cy += (p.y + q.y) * c;
-  }
-  return a === 0 ? pts[0]! : { x: cx / (3 * a), y: cy / (3 * a) };
-}
 const mod = (a: number) => ((a % TAU) + TAU) % TAU;
 
 /** Points on a circle from the direction of `from` to the direction of `to`, passing `through`. */
@@ -281,7 +267,7 @@ export function buildTableView(table: TableSpec): TableView {
   const rest = new Map<string, Vec2>();
   for (const p of table.pockets) {
     const outline = drops.get(p.id)!;
-    rest.set(p.id, centroid(outline));
+    rest.set(p.id, wellCentre(outline));
     // Cloth lip: the cloth rolls over the rounded slate edge (BCA: 1/8–1/4" radius) into the hole.
     const edgeInfo = geo.drops.get(p.id);
     const edge = dropEdgePoints(geo, p.id);
