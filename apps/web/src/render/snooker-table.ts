@@ -27,15 +27,16 @@ export const SNOOKER_BODY = {
   slate: 0.045,
   /** Radius of the rounded outer corners of the rails. */
   cornerRadius: 0.03,
-  railBottom: -0.055,
-  mouldingBottom: -0.075,
+  /** The rail comes down just over the slate's edge, no further. */
+  railBottom: -0.047,
+  mouldingBottom: -0.047,
   /** How far the frieze is set in from the outside of the rails. */
-  friezeInset: 0.03,
+  friezeInset: 0.12,
   friezeBottom: -0.3,
   /** Recesses in the frieze: square at the corners, and at the middle pockets. */
-  cornerRecess: 0.2,
-  middleRecessHalfWidth: 0.14,
-  middleRecessDepth: 0.18,
+  cornerRecess: 0.09,
+  middleRecessHalfWidth: 0.12,
+  middleRecessDepth: 0.08,
   /** Centre of a ball on the ball rails under the ring, below the cloth. */
   wellDepth: 0.21,
 };
@@ -204,24 +205,15 @@ export function buildSnookerBody(q: SnookerBodyParams): {
   // Rails: from the slate's edge up to the rail top, rounded along the top.
   const rail = roundedRect(hx, hy, B.cornerRadius);
   rail.holes.push(new Path(q.railHole.map((p) => new Vector2(p.x, p.y))));
-  g.add(slab(rail, B.railBottom, q.railTop, 0.005, wood));
+  g.add(slab(rail, B.railBottom, q.railTop, 0.006, wood));
 
-  // A moulding under the rails, stepped in, and the frieze below that.
+  // The frieze, set well back under the rails (so the corner nets and ball rails hang clear of it),
+  // with small recesses where the nets need room.
   const fx = hx - B.friezeInset;
   const fy = hy - B.friezeInset;
   const n = B.cornerRecess;
   const mw = B.middleRecessHalfWidth;
   const md = B.middleRecessDepth;
-  const step = B.friezeInset * 0.55;
-  g.add(
-    slab(
-      toShape(friezePlan(hx - step, hy - step, n - step, mw - step, md - step)),
-      B.mouldingBottom,
-      B.railBottom,
-      0.006,
-      dark,
-    ),
-  );
   g.add(slab(toShape(friezePlan(fx, fy, n, mw, md)), B.friezeBottom, B.mouldingBottom, 0, dark));
   // Base moulding, standing proud of the frieze.
   const lip = 0.012;

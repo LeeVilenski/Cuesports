@@ -311,7 +311,7 @@ export function buildSnookerPocket(
     const rOut = Math.min(edge + 0.003, rIn + reach);
     // The flap is deepest in the middle and rounds off towards the ends.
     const f = Math.cos(((th - at) / span) * (Math.PI / 2));
-    const flap = 0.022 + 0.05 * Math.pow(Math.max(0, f), 1.3);
+    const flap = 0.02 + 0.045 * Math.pow(Math.max(0, f), 1.3);
     const prof: [number, number][] = [
       [rIn + 0.001, -0.003],
       [rIn - 0.002, q.railTop - 0.02],
