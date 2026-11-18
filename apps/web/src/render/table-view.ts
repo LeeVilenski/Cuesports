@@ -341,7 +341,6 @@ export function buildTableView(table: TableSpec, env?: Texture | null): TableVie
       cushionTop,
       hx,
       hy,
-      railHole,
       pockets: snookerPockets,
       wood: woodMat,
       cloth: cushionMat,

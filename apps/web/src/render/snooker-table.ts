@@ -6,7 +6,6 @@ import {
   LatheGeometry,
   Mesh,
   MeshStandardMaterial,
-  Path,
   Shape,
   type Texture,
   Vector2,
@@ -74,20 +73,6 @@ function friezePlan(hx: number, hy: number, n: number, mw: number, md: number): 
     const q = pts[(i + pts.length - 1) % pts.length]!;
     return Math.hypot(p.x - q.x, p.y - q.y) > 1e-6;
   });
-}
-
-function roundedRect(hx: number, hy: number, r: number): Shape {
-  const s = new Shape();
-  s.moveTo(-hx + r, -hy);
-  s.lineTo(hx - r, -hy);
-  s.absarc(hx - r, -hy + r, r, -Math.PI / 2, 0, false);
-  s.lineTo(hx, hy - r);
-  s.absarc(hx - r, hy - r, r, 0, Math.PI / 2, false);
-  s.lineTo(-hx + r, hy);
-  s.absarc(-hx + r, hy - r, r, Math.PI / 2, Math.PI, false);
-  s.lineTo(-hx, -hy + r);
-  s.absarc(-hx + r, -hy + r, r, Math.PI, 1.5 * Math.PI, false);
-  return s;
 }
 
 const toShape = (pts: readonly Vec2[]): Shape => new Shape(pts.map((p) => new Vector2(p.x, p.y)));
@@ -175,8 +160,6 @@ export interface SnookerBodyParams {
   /** Outer half-sizes of the rails. */
   hx: number;
   hy: number;
-  /** The cut-out in the rails for the cushions and pockets. */
-  railHole: readonly Vec2[];
   pockets: readonly {
     pocket: PocketSpec;
     outline: readonly Vec2[];
@@ -215,9 +198,52 @@ export function buildSnookerBody(q: SnookerBodyParams): {
   // The corners are rounded about the corner pockets, so the leather round each one is even.
   const corner = q.pockets.find((k) => k.pocket.kind === 'corner')?.pocket.position;
   const cornerRadius = corner ? Math.min(hx - Math.abs(corner.x), hy - Math.abs(corner.y)) : B.cornerRadius;
-  const rail = roundedRect(hx, hy, cornerRadius);
-  rail.holes.push(new Path(q.railHole.map((p) => new Vector2(p.x, p.y))));
-  g.add(slab(rail, B.railBottom, q.railTop, 0.006, wood));
+  // The rails are separate pieces between the pockets, cut square at each corner pocket's centre
+  // line (where the leather takes over) and notched round the holes. Each is a simple outline: the
+  // inner edge, along the cushions, pushed out round any hole it passes.
+  const cw = q.trim.cushionWidth;
+  const hl = q.table.playfield.length / 2;
+  const hw = q.table.playfield.width / 2;
+  const holes = q.pockets.map((k) => ({
+    c: k.pocket.position,
+    r: Math.max(k.pocket.fallRadius + 0.012, k.backRadius + 0.004),
+  }));
+  const corner0 = q.pockets.find((k) => k.pocket.kind === 'corner')!.pocket.position;
+  const cx = Math.abs(corner0.x);
+  const cy = Math.abs(corner0.y);
+  const railPiece = (long: boolean, s: number): Shape => {
+    // Along x (long rails) or y (end rails), from -end to +end; `inner`/`outer` across it.
+    const end = long ? cx : cy;
+    const inner = long ? hw + cw : hl + cw;
+    const outer = long ? hy : hx;
+    const pts: Vec2[] = [];
+    const n = Math.ceil((2 * end) / 0.003);
+    for (let i = 0; i <= n; i++) {
+      const u = -end + (2 * end * i) / n;
+      let v = inner;
+      for (const h of holes) {
+        const du = u - (long ? h.c.x : h.c.y);
+        const hv = (long ? h.c.y : h.c.x) * s;
+        if (Math.abs(du) < h.r && hv > 0) v = Math.max(v, hv + Math.sqrt(h.r * h.r - du * du));
+      }
+      v = Math.min(v, outer - 0.003);
+      pts.push(long ? { x: u, y: s * v } : { x: s * v, y: u });
+    }
+    pts.push(long ? { x: end, y: s * outer } : { x: s * outer, y: end });
+    pts.push(long ? { x: -end, y: s * outer } : { x: s * outer, y: -end });
+    // Wind anticlockwise.
+    let area = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const p0 = pts[i]!;
+      const p1 = pts[(i + 1) % pts.length]!;
+      area += p0.x * p1.y - p1.x * p0.y;
+    }
+    return toShape(area < 0 ? pts.reverse() : pts);
+  };
+  for (const s of [-1, 1]) {
+    g.add(slab(railPiece(true, s), B.railBottom, q.railTop, 0.006, wood));
+    g.add(slab(railPiece(false, s), B.railBottom, q.railTop, 0.006, wood));
+  }
 
   // The frieze, set well back under the rails (so the corner nets and ball rails hang clear of it),
   // with small recesses where the nets need room.

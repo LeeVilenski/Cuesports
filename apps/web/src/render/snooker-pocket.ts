@@ -16,7 +16,6 @@ import {
   MeshStandardMaterial,
   RepeatWrapping,
   Shape,
-  TorusGeometry,
   TubeGeometry,
   Vector3,
 } from 'three';
@@ -165,6 +164,7 @@ export interface SnookerPocketMaterials {
   wire: MeshStandardMaterial;
   strap: MeshStandardMaterial;
   iron: MeshStandardMaterial;
+  ring: MeshStandardMaterial;
 }
 
 export function snookerPocketMaterials(): SnookerPocketMaterials {
@@ -199,6 +199,13 @@ export function snookerPocketMaterials(): SnookerPocketMaterials {
     iron: new MeshStandardMaterial({
       color: '#c39645',
       roughness: 0.32,
+      metalness: 0.95,
+      side: DoubleSide,
+      envMapIntensity: 4,
+    }),
+    ring: new MeshStandardMaterial({
+      color: '#c99a3e',
+      roughness: 0.28,
       metalness: 0.95,
       side: DoubleSide,
       envMapIntensity: 4,
@@ -294,79 +301,116 @@ export function buildSnookerPocket(
   const R = q.ballRadius;
   const at = Math.atan2(p.axis.y, p.axis.x);
   // The leather runs round the back of the hole from one rail end to the other.
-  const span = Math.PI / 2;
+  // Its ends are cut square across the rails: a quarter round a corner hole, a half round a middle one.
+  const span = p.kind === 'corner' ? Math.PI / 4 : Math.PI / 2;
   const rIn = q.backRadius;
-  const top = q.railTop + 0.002;
 
-  // ---- The pocket is a separate part from the rails, which end square against it. On top, a band
-  // of leather of even width runs round the back of the hole, flush with the rails; at the corners
-  // the table is rounded to follow it. Underneath, the brass pocket iron joins the two rail ends; it
-  // shows only as a strip on the outside, below the leather. The leather also lines the hole and
-  // hangs beneath the rail as a stitched cup above the net. All three are swept round the back of
-  // the hole, one profile per row.
+  // ---- The pocket is a separate part from the rails. A leather-wrapped iron runs round the back of
+  // the hole from one rail end to the other, making the corner of the table: a rounded roll on top,
+  // flush with the rail edge outside, carried on down inside the hole and outside the table as the
+  // leather bucket, with the net hung beneath it. Brass plates (below) join it to the rails.
+  // Swept round the back of the hole, one profile per row.
   const rows = 64;
   const grid: Vector3[][] = [];
-  const band: Vector3[][] = [];
-  const cup: Vector3[][] = [];
   const stitchTop: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
   const stitchFlap: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
   const at3 = (r: number, th: number, z: number) =>
     new Vector3(p.position.x + Math.cos(th) * r, p.position.y + Math.sin(th) * r, z);
-  const railBottom = -q.slate - 0.002;
+  const roll = q.railTop + 0.008;
+  const bucketBottom = -q.slate - 0.022;
   for (let i = 0; i <= rows; i++) {
     const th = at - span + (2 * span * i) / rows;
     const dx = Math.cos(th);
     const dy = Math.sin(th);
     const edge = rayToRoundedBox(p.position.x, p.position.y, dx, dy, q.hx, q.hy, q.cornerRadius);
-    // At a corner the band runs out to the table's rounded edge. A middle pocket's runs out to the
-    // edge at the back, and towards its ends lies on the rail top.
-    const rOut = p.kind === 'corner' ? edge + 0.001 : Math.min(edge + 0.001, rIn + 0.05);
-    band.push(
-      (
-        [
-          [rIn + 0.002, q.railTop - 0.016],
-          [rIn - 0.002, q.railTop - 0.006],
-          [rIn - 0.001, top - 0.002],
-          [rIn + 0.004, top],
-          [rOut - 0.005, top],
-          [rOut - 0.001, top - 0.002],
-          [rOut, top - 0.007],
-          [rOut, top - 0.012],
-        ] as [number, number][]
-      ).map(([r, z]) => at3(r, th, z)),
+    // At a corner it runs out to the table's rounded edge. A middle pocket's reaches the edge at the
+    // back; towards its ends it lies on the rail, its outer face down in the wood, out of sight.
+    // At the back of a middle pocket the hole nearly reaches the edge, so there the leather stands
+    // out a little past the rail line.
+    const rOut = Math.max(
+      rIn + 0.022,
+      p.kind === 'corner' ? edge + 0.002 : Math.min(edge + 0.002, rIn + 0.045),
     );
+    const crown = (rIn + rOut) / 2;
+    // Inside the hole the leather lines the back of it.
+    const wall = rIn - 0.005;
     grid.push(
       (
         [
-          [rOut - 0.002, top - 0.011],
-          [rOut + 0.0005, top - 0.012],
-          [rOut + 0.0005, railBottom + 0.003],
-          [rOut - 0.004, railBottom],
-        ] as [number, number][]
-      ).map(([r, z]) => at3(r, th, z)),
-    );
-    // The cup is deepest at the back and rounds off towards the jaws.
-    const f = Math.max(0, Math.cos(((th - at) / span) * (Math.PI / 2)));
-    const depth = 0.025 + 0.045 * Math.pow(f, 1.2);
-    cup.push(
-      (
-        [
-          [rIn - 0.004, q.railTop - 0.012],
-          [rIn - 0.004, railBottom],
-          [rIn + 0.003, railBottom - 0.02],
-          [rIn + 0.004, railBottom - depth + 0.008],
-          [rIn - 0.004, railBottom - depth],
+          [wall + 0.01, bucketBottom + 0.002],
+          [wall, bucketBottom + 0.01],
+          [wall - 0.001, q.railTop - 0.012],
+          [wall + 0.001, roll - 0.005],
+          [rIn + 0.003, roll - 0.001],
+          [rIn + 0.009, roll + 0.001],
+          [crown, roll + 0.002],
+          [rOut - 0.009, roll + 0.001],
+          [rOut - 0.003, roll - 0.001],
+          [rOut + 0.001, roll - 0.006],
+          [rOut + 0.002, roll - 0.014],
+          [rOut + 0.002, bucketBottom + 0.01],
+          [rOut - 0.002, bucketBottom + 0.002],
+          [rOut - 0.01, bucketBottom],
         ] as [number, number][]
       ).map(([r, z]) => at3(r, th, z)),
     );
     const t = new Vector3(-dy, dx, 0);
     const n = new Vector3(dx, dy, 0);
-    if (i > 1 && i < rows - 1)
-      stitchFlap.push({ p: at3(rIn + 0.0047, th, railBottom - depth + 0.012), t, n });
+    if (i > 1 && i < rows - 1) {
+      stitchTop.push({ p: at3(rIn + 0.008, th, roll + 0.0018), t, n });
+      stitchTop.push({ p: at3(rOut - 0.008, th, roll + 0.0018), t, n });
+      if (rOut >= edge || p.kind === 'corner')
+        stitchFlap.push({ p: at3(rOut + 0.0026, th, bucketBottom + 0.012), t, n });
+    }
   }
-  g.add(new Mesh(gridMesh(band, 0.05), m.leather));
-  g.add(new Mesh(gridMesh(grid, 0.05), m.iron));
-  g.add(new Mesh(gridMesh(cup, 0.05), m.leather));
+  g.add(new Mesh(gridMesh(grid, 0.05), m.leather));
+
+  // ---- Brass pocket plates: one along each rail at the ends of the leather, screwed to the rail.
+  for (const side of [-1, 1]) {
+    const th = at + side * span;
+    const e = at3(rIn + 0.025, th, 0);
+    // Which rail the end of the leather lies on, and which way along it is away from the pocket.
+    const onLong = q.hy - Math.abs(e.y) < q.hx - Math.abs(e.x);
+    // A middle pocket's ends point along the rail, away from the pocket; a corner pocket's point
+    // across a rail, and away is further round past the end.
+    const away =
+      p.kind === 'corner' ? at3(rIn + 0.025, th + side * 0.4, 0).sub(e) : e.clone().sub(at3(0, th, 0));
+    const dir = onLong
+      ? new Vector3(Math.sign(away.x) || 1, 0, 0)
+      : new Vector3(0, Math.sign(away.y) || 1, 0);
+    const mid = onLong
+      ? new Vector3(e.x, Math.sign(e.y) * (q.hy - q.railWidth / 2), 0)
+      : new Vector3(Math.sign(e.x) * (q.hx - q.railWidth / 2), e.y, 0);
+    const w = 0.05;
+    const h = 0.019;
+    const c = mid.clone().addScaledVector(dir, w / 2 + 0.002);
+    const s = new Shape();
+    s.moveTo(-w / 2 + h / 2, -h / 2);
+    s.lineTo(w / 2 - h / 2, -h / 2);
+    s.absarc(w / 2 - h / 2, 0, h / 2, -Math.PI / 2, Math.PI / 2, false);
+    s.lineTo(-w / 2 + h / 2, h / 2);
+    s.absarc(-w / 2 + h / 2, 0, h / 2, Math.PI / 2, (3 * Math.PI) / 2, false);
+    const plate = new Mesh(
+      new ExtrudeGeometry(s, {
+        depth: 0.0018,
+        bevelEnabled: true,
+        bevelSize: 0.0007,
+        bevelThickness: 0.0007,
+        bevelSegments: 2,
+      }),
+      m.brass,
+    );
+    plate.position.set(c.x, c.y, q.railTop + 0.0007);
+    plate.rotation.z = Math.atan2(dir.y, dir.x);
+    g.add(plate);
+    for (const k of [-1, 1]) {
+      const screw = new Mesh(new CylinderGeometry(0.0028, 0.0028, 0.0014, 14), m.brass);
+      screw.rotation.x = Math.PI / 2;
+      const sc = c.clone().addScaledVector(dir, k * 0.014);
+      screw.position.set(sc.x, sc.y, q.railTop + 0.0034);
+      g.add(screw);
+    }
+  }
   // Stitching: short cream dashes along the top and round the bottom of the flap.
   const dash = (pts: typeof stitchTop, onTop: boolean) => {
     if (pts.length === 0) return;
@@ -397,7 +441,7 @@ export function buildSnookerPocket(
   const floorZ = -q.wellDepth + R;
   const ringR = R * 1.12;
   const ringZ = floorZ + R * 0.35;
-  const netTop = -q.slate - 0.002;
+  const netTop = -q.slate - 0.02;
   const around = 48;
   const down = 16;
   const rim: Vec2[] = [];
@@ -439,7 +483,8 @@ export function buildSnookerPocket(
     for (let j = 0; j <= down; j++)
       uvs.setXY(k * (down + 1) + j, (k / around) * reps, (j / down) * depthReps);
   g.add(new Mesh(netGeo, m.net));
-  const ring = new Mesh(new TorusGeometry(ringR, 0.004, 10, 40), m.brass);
+  const ring = new Mesh(new CylinderGeometry(ringR + 0.003, ringR + 0.003, 0.014, 40, 1, true), m.ring);
+  ring.rotation.x = Math.PI / 2;
   ring.position.set(q.centre.x, q.centre.y, ringZ);
   g.add(ring);
 
@@ -508,14 +553,14 @@ export function buildSnookerPocket(
       { x: end.x + (ex / el) * 0.012, y: end.y + (ey / el) * 0.012, z: end.z + 0.008 },
       stop,
     ];
-    g.add(new Mesh(new TubeGeometry(polyCurve(wire), wire.length * 6, 0.0028, 8, false), m.wire));
+    g.add(new Mesh(new TubeGeometry(polyCurve(wire), wire.length * 6, 0.003, 8, false), m.brass));
     ends.push(new Vector3(stop.x, stop.y, stop.z));
   }
   // The far end hangs from a leather strap screwed to the underside of the rail.
   const e = ends[0]!.clone().add(ends[1]!).multiplyScalar(0.5);
   const anchor = new Vector3(e.x, e.y, -q.slate - 0.002);
   g.add(bar(e, anchor, 0.014, 0.003, new Vector3(0, sy, 0), m.strap));
-  const cross = bar(ends[0]!, ends[1]!, 0.006, 0.006, new Vector3(0, 0, 1), m.wire);
+  const cross = bar(ends[0]!, ends[1]!, 0.006, 0.006, new Vector3(0, 0, 1), m.brass);
   g.add(cross);
   const screw = new Mesh(new CylinderGeometry(0.004, 0.004, 0.003, 14), m.brass);
   screw.position.set(anchor.x, anchor.y + sy * 0.003, anchor.z - 0.008);
