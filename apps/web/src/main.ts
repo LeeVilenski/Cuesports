@@ -1,5 +1,7 @@
 import {
   cloneBall,
+  dropOutline,
+  tableGeometry,
   cueClearElevation,
   layout,
   type BallState,
@@ -177,7 +179,11 @@ function setTable(def: GameDef): void {
   }
   tableView = buildTableView(def.table);
   world.add(tableView.group);
-  ballsView.setPockets(tableView.pocketRest, WELL_DEPTH);
+  ballsView.setPockets(
+    tableView.pocketRest,
+    WELL_DEPTH,
+    new Map(def.table.pockets.map((p) => [p.id, dropOutline(tableGeometry(def.table), p.id)])),
+  );
   placeCanopy(def.table.playfield.length);
   rig.setTable(def.table);
 }

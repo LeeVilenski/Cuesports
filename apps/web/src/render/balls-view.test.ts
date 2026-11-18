@@ -1,16 +1,34 @@
-import { makeBall, simulate } from '@cuesports/physics';
+import { dropOutline, makeBall, simulate, tableGeometry } from '@cuesports/physics';
 import { AMERICAN_POOL_9FT as T } from '@cuesports/shared';
 import type { Mesh } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { BallsView } from './balls-view';
+import { wellCentre } from './well';
 
 // Textures need a canvas; the ball paths don't.
 vi.mock('./textures', () => ({ ballTexture: () => null, shadowTexture: () => null }));
 
 const WELL = 0.16;
-const rest = new Map(
-  T.pockets.map((p) => [p.id, { x: p.position.x + p.axis.x * 0.03, y: p.position.y + p.axis.y * 0.03 }]),
-);
+
+const outlines = new Map(T.pockets.map((p) => [p.id, dropOutline(tableGeometry(T), p.id)]));
+const rest = new Map([...outlines].map(([id, o]) => [id, wellCentre(o)]));
+
+/** How far a ball's surface is from the edge of the hole (slate lip above, well wall below); < 0 = cutting into it. */
+function clearance(pocket: string, p: { x: number; y: number; z: number }, R: number): number {
+  const o = outlines.get(pocket)!;
+  let d2 = Infinity;
+  for (let i = 0; i < o.length; i++) {
+    const a = o[i]!;
+    const b = o[(i + 1) % o.length]!;
+    const ex = b.x - a.x;
+    const ey = b.y - a.y;
+    const k = Math.max(0, Math.min(1, ((p.x - a.x) * ex + (p.y - a.y) * ey) / (ex * ex + ey * ey)));
+    d2 = Math.min(d2, (p.x - a.x - ex * k) ** 2 + (p.y - a.y - ey * k) ** 2);
+  }
+  const d = Math.sqrt(d2);
+  // Above the slate only the lip (at z = 0) can be hit; below it, the wall all the way down.
+  return (p.z > 0 ? Math.hypot(d, p.z) : d) - R;
+}
 
 describe('a cue ball dropping into a pocket', () => {
   for (const pk of T.pockets) {
@@ -29,20 +47,27 @@ describe('a cue ball dropping into a pocket', () => {
         expect(pot, 'potted').toBeDefined();
 
         const view = new BallsView();
-        view.setPockets(rest, WELL);
+        view.setPockets(rest, WELL, outlines);
         view.setBalls([cue]);
         const mesh = (view as unknown as { balls: { mesh: Mesh }[] }).balls[0]!.mesh;
         const R = cue.radius;
         const step = 0.001;
         let prev: { x: number; y: number; z: number } | null = null;
+        let lowest = Infinity;
         for (let t = Math.max(0, pot!.t - 0.15); t < pot!.t + 0.6; t += step) {
           view.showFrame(r, t);
           expect(mesh.visible, `visible at pot${(t - pot!.t).toFixed(3)}s`).toBe(true);
           const p = { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z };
+          if (p.z < R - 1e-6)
+            expect(
+              clearance(pk.id, p, R),
+              `cuts the cloth at pot${(t - pot!.t).toFixed(3)}s`,
+            ).toBeGreaterThan(-2e-4);
           if (prev) {
-            // Once it starts to sink it never pops back up towards the slate.
-            if (prev.z < R - 1e-6)
-              expect(p.z, `rises at pot${(t - pot!.t).toFixed(3)}s`).toBeLessThanOrEqual(prev.z + 1e-6);
+            // Once it starts to sink it never pops back up towards the slate (rolling over the lip
+            // may lift it a fraction of a millimetre).
+            lowest = Math.min(lowest, p.z);
+            expect(p.z, `rises at pot${(t - pot!.t).toFixed(3)}s`).toBeLessThanOrEqual(lowest + 5e-4);
             // No teleporting: never faster than the shot itself (plus the fall).
             const d = Math.hypot(p.x - prev.x, p.y - prev.y, p.z - prev.z);
             expect(d, `jumps at pot${(t - pot!.t).toFixed(3)}s`).toBeLessThan(
@@ -68,7 +93,7 @@ describe('balls potted into the same pocket', () => {
     const strike = (ball: string) => ({ ball, aim, elevation: 0, tip: { a: 0, b: 0 }, speed: 1 });
     const cue = makeBall('cue', T.balls.cue, { x: 0.8, y: 0.3 });
     const view = new BallsView();
-    view.setPockets(rest, WELL);
+    view.setPockets(rest, WELL, outlines);
     let balls = [
       cue,
       makeBall('1', T.balls.object, from),
