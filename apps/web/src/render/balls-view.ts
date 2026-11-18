@@ -229,7 +229,6 @@ export class BallsView {
       this.hide(b);
       return;
     }
-    const z = Math.max(target.z, zFall);
     let x: number;
     let y: number;
     if (t < f.t) {
@@ -243,6 +242,13 @@ export class BallsView {
       x = f.from.x + (target.x - f.from.x) * e;
       y = f.from.y + (target.y - f.from.y) * e;
     }
+    // It lands on the balls already in the well rather than falling through them.
+    let z = Math.max(target.z, zFall);
+    for (let k = 0; k < Math.min(f.slot, MAX_STACK); k++) {
+      const below = this.slotPosition(b, f.pocket, k)!;
+      const d2 = (x - below.x) ** 2 + (y - below.y) ** 2;
+      if (d2 < 4 * b.radius * b.radius) z = Math.max(z, below.z + Math.sqrt(4 * b.radius * b.radius - d2));
+    }
     this.place(b, x, y, z, true);
     b.shadow.visible = false;
   }
@@ -254,13 +260,17 @@ export class BallsView {
   ): { x: number; y: number; z: number } | null {
     const c = this.rest.get(pocket);
     if (!c || slot >= MAX_STACK) return null;
-    // Balls stack in the well, each settling slightly to one side of the one below.
-    const side = slot === 0 ? 0 : slot % 2 ? 0.25 : -0.25;
-    return {
-      x: c.x + side * b.radius,
-      y: c.y - side * b.radius,
-      z: -this.wellDepth + b.radius + slot * 1.75 * b.radius,
-    };
+    // Balls stack in the well, each settling slightly to one side of the one below and touching it
+    // (never overlapping it).
+    const R = b.radius;
+    const sideOf = (k: number) => (k === 0 ? 0 : k % 2 ? 0.35 : -0.35) * R;
+    let z = -this.wellDepth + R;
+    for (let k = 1; k <= slot; k++) {
+      const dh = Math.abs(sideOf(k) - sideOf(k - 1)) * Math.SQRT2;
+      z += Math.sqrt(4 * R * R - dh * dh);
+    }
+    const side = sideOf(slot);
+    return { x: c.x + side, y: c.y - side, z };
   }
 
   private placeInWell(b: BallMesh, pocket: string, slot: number, _settled: number): void {

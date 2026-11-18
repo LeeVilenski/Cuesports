@@ -59,3 +59,43 @@ describe('a cue ball dropping into a pocket', () => {
     }
   }
 });
+
+describe('balls potted into the same pocket', () => {
+  it('land on top of each other instead of passing through', () => {
+    const pk = T.pockets.find((p) => p.id === 'bottom-left')!;
+    const from = { x: pk.position.x * 0.5, y: pk.position.y * 0.3 };
+    const aim = Math.atan2(pk.position.y - from.y, pk.position.x - from.x);
+    const strike = (ball: string) => ({ ball, aim, elevation: 0, tip: { a: 0, b: 0 }, speed: 1 });
+    const cue = makeBall('cue', T.balls.cue, { x: 0.8, y: 0.3 });
+    const view = new BallsView();
+    view.setPockets(rest, WELL);
+    let balls = [
+      cue,
+      makeBall('1', T.balls.object, from),
+      makeBall('2', T.balls.object, { x: 0.6, y: -0.3 }),
+    ];
+    view.setBalls(balls);
+    const meshes = (view as unknown as { balls: { id: string; mesh: Mesh }[] }).balls;
+    const m1 = meshes.find((b) => b.id === '1')!.mesh;
+    const m2 = meshes.find((b) => b.id === '2')!.mesh;
+    const R = T.balls.object.radius;
+    const gap = () => m1.position.distanceTo(m2.position);
+
+    const r1 = simulate(T, balls, strike('1'), { sampleRate: 120 });
+    expect(r1.final.find((b) => b.id === '1')!.state).toBe('pocketed');
+    view.commit(r1);
+    balls = r1.final.map((b) => (b.id === '2' ? { ...b, pos: { ...from } } : b));
+    view.showState(balls);
+
+    for (const speed of [0.6, 1, 3]) {
+      const r2 = simulate(T, balls, { ...strike('2'), speed }, { sampleRate: 120 });
+      const pot = r2.events.find((e) => e.type === 'pocket' && e.ball === '2');
+      expect(pot).toBeDefined();
+      for (let t = pot!.t - 0.1; t < pot!.t + 0.6; t += 0.001) {
+        view.showFrame(r2, t);
+        expect(gap(), `overlap at pot${(t - pot!.t).toFixed(3)}s`).toBeGreaterThan(2 * R - 1e-4);
+      }
+      expect(m2.position.z).toBeGreaterThan(m1.position.z + R);
+    }
+  });
+});
