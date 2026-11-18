@@ -1,7 +1,6 @@
 import { CUE_SHAPE, type ShotInput } from '@cuesports/physics';
 import {
   BoxGeometry,
-  CylinderGeometry,
   Group,
   Matrix4,
   Mesh,
@@ -11,6 +10,17 @@ import {
   type Material,
   type Object3D,
 } from 'three';
+import {
+  buildCross,
+  buildCue,
+  buildRestShaft,
+  buildSpider,
+  CROSS_H,
+  CROSS_SOCKET,
+  SPIDER_H,
+  SPIDER_SOCKET,
+  tracker,
+} from './equipment';
 import { buildFigure, type FigureParts, type Look } from './figure';
 import {
   add,
@@ -112,9 +122,6 @@ const FOOT_Z = 0.06;
 /** Clearance kept between the body and the outside of the rail. */
 const BODY_CLEAR = 0.14;
 const CUE_LEN = CUE_SHAPE.length;
-/** Height the cue sits at on the rest's cross head, and on the spider. */
-const CROSS_H = 0.03;
-const SPIDER_H = 0.11;
 
 const WALK_SPEED = 1.6;
 const DOWN_RATE = 2.4;
@@ -168,7 +175,7 @@ const POSE_KEYS = Object.keys({
   cueButt: 0,
   restHead: 0,
   restButt: 0,
-} satisfies Record<keyof Pose, number>) as (keyof Pose)[];
+} satisfies Record<Exclude<keyof Pose, 'tool'>, number>) as Exclude<keyof Pose, 'tool'>[];
 
 function blend(a: Pose, b: Pose, k: number): Pose {
   if (k <= 0) return a;
@@ -501,6 +508,7 @@ export class Character {
   private readonly fig: FigureParts;
   private readonly cue = new Group();
   private readonly restMesh: Mesh;
+  private readonly kit = tracker();
   private readonly restHead = new Group();
   private readonly cross = new Group();
   private readonly spider = new Group();
@@ -539,38 +547,13 @@ export class Character {
     this.group.add(f.torso, f.hips, f.head, f.neck);
     for (const side of ['l', 'r'] as const) this.group.add(...Object.values(f.limbs[side]));
 
-    // The player's own cue, shown while standing, walking and sitting.
-    const cueGeo = geo(new CylinderGeometry(CUE_SHAPE.tipRadius, CUE_SHAPE.buttRadius, CUE_LEN, 10));
-    cueGeo.translate(0, CUE_LEN / 2, 0);
-    const cueMesh = new Mesh(cueGeo, mat('#b9905a', 0.4));
-    this.cue.add(cueMesh);
+    // The player's own cue (shown while standing, walking and sitting), the rest and the spider.
+    this.cue.add(buildCue(this.kit));
     this.group.add(this.cue);
-    // Snooker rest: a long stick with a cross head.
-    const restGeo = geo(new CylinderGeometry(0.006, 0.008, 1, 8));
-    this.restMesh = new Mesh(restGeo, mat('#6b4a2a', 0.5));
+    this.restMesh = buildRestShaft(this.kit);
     this.group.add(this.restMesh, this.restHead);
-    // Heads at real size, the cue resting on top (z = CROSS_H or SPIDER_H) and the shaft arriving
-    // from −y. Cross: an X standing across the cue line. Spider: a tall arch with splayed legs.
-    const brass = mat('#b89a5a', 0.35);
-    const arm = geo(new BoxGeometry(0.008, 0.008, 0.075));
-    for (const sgn of [-1, 1]) {
-      const a = new Mesh(arm, brass);
-      a.rotation.y = sgn * 0.75;
-      a.position.z = CROSS_H / 2 + 0.005;
-      this.cross.add(a);
-    }
-    const leg = geo(new CylinderGeometry(0.004, 0.004, SPIDER_H * 1.08, 6));
-    for (const sgn of [-1, 1]) {
-      const l = new Mesh(leg, brass);
-      l.rotation.x = Math.PI / 2;
-      l.rotation.order = 'YXZ';
-      l.rotation.y = sgn * 0.45;
-      l.position.set(sgn * 0.033, 0, SPIDER_H / 2);
-      this.spider.add(l);
-    }
-    const top = new Mesh(geo(new BoxGeometry(0.09, 0.01, 0.012)), brass);
-    top.position.z = SPIDER_H - 0.006;
-    this.spider.add(top);
+    this.cross.add(buildCross(this.kit));
+    this.spider.add(buildSpider(this.kit));
     this.restHead.add(this.cross, this.spider);
 
     // Chair: seat, back and four legs.
@@ -783,9 +766,9 @@ export class Character {
       L.shoe.rotation.set(0, 0, Math.atan2(p.toes.y, p.toes.x) - Math.PI / 2);
     }
     // Own cue from butt to tip.
-    tmpA.set(p.cueButt.x, p.cueButt.y, p.cueButt.z);
-    tmpB.set(p.cueTip.x - p.cueButt.x, p.cueTip.y - p.cueButt.y, p.cueTip.z - p.cueButt.z).normalize();
-    // Built tip-down from 0..L with the narrow end at the top: point +y at the tip.
+    tmpA.set(p.cueTip.x, p.cueTip.y, p.cueTip.z);
+    tmpB.set(p.cueButt.x - p.cueTip.x, p.cueButt.y - p.cueTip.y, p.cueButt.z - p.cueTip.z).normalize();
+    // Built from the tip (origin) along +y to the butt.
     this.cue.position.copy(tmpA);
     this.cue.quaternion.setFromUnitVectors(UP, tmpB);
     // Rest.
@@ -799,9 +782,9 @@ export class Character {
       const foot = v3(p.restHead.x, p.restHead.y, spider ? 0 : Math.max(0, h - CROSS_H));
       // A spider's shaft meets it at the back of the arch, clear of the ball underneath.
       const toHead = norm(v3(p.restHead.x - p.restButt.x, p.restHead.y - p.restButt.y, 0));
-      const end = spider
-        ? v3(foot.x - toHead.x * 0.02, foot.y - toHead.y * 0.02, h * 0.8)
-        : add(foot, v3(0, 0, 0.012));
+      const sock = spider ? SPIDER_SOCKET : CROSS_SOCKET;
+      const zs = spider ? h / SPIDER_H : 1;
+      const end = v3(foot.x + toHead.x * sock.y, foot.y + toHead.y * sock.y, foot.z + sock.z * zs);
       span(this.restMesh, p.restButt, end, 1);
       this.restHead.position.set(foot.x, foot.y, foot.z);
       this.restHead.rotation.set(
@@ -820,6 +803,7 @@ export class Character {
   dispose(): void {
     for (const g of this.geos) g.dispose();
     for (const m of this.mats) m.dispose();
+    this.kit.dispose();
   }
 }
 
