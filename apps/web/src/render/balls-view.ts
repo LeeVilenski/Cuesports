@@ -20,10 +20,14 @@ interface BallMesh {
 
 /** How a ball potted during a shot falls into the well. */
 interface Fall {
-  /** Time it was potted, and where (centre position, how far it had already sunk). */
+  /** Last recorded frame before it was potted: time and centre position. */
+  t0: number;
+  p0: Vec2;
+  /** Time it was potted, and where its centre was then. */
   t: number;
   from: Vec2;
-  sunk: number;
+  /** Time its free fall started (when its centre went over the hole, or the pot itself). */
+  fallStart: number;
   pocket: string;
   slot: number;
 }
@@ -148,8 +152,8 @@ export class BallsView {
       bm.mesh.quaternion.slerpQuaternions(qa, qb, k);
 
       const fall = falls.get(i);
-      if (fall && t >= fall.t) {
-        this.animateFall(bm, fall, t - fall.t);
+      if (fall && t >= fall.t0) {
+        this.animateFall(bm, fall, t);
         return;
       }
       if (a.pocketed[i] === 1) {
@@ -175,25 +179,31 @@ export class BallsView {
     const out = new Map<number, Fall>();
     const fr = result.frames;
     const shot: { i: number; t: number; pocket: string }[] = [];
-    result.ids.forEach((_, i) => {
+    result.ids.forEach((id, i) => {
       if (fr[0]!.pocketed[i] === 1) return;
-      const k = fr.findIndex((f) => f.pocketed[i] === 1);
       const pocket = result.final[i]?.pocket;
-      if (k < 0 || !pocket) return;
-      shot.push({ i, t: fr[k]!.t, pocket });
+      const e = result.events.find((x) => x.type === 'pocket' && x.ball === id);
+      if (!pocket || !e) return;
+      shot.push({ i, t: e.t, pocket });
     });
     shot.sort((p, q) => p.t - q.t);
     const before = this.potted.filter((p) => !shot.some((s) => result.ids[s.i] === p.id));
     for (const s of shot) {
       const k = fr.findIndex((f) => f.pocketed[s.i] === 1);
+      if (k < 0) continue;
       const prev = fr[Math.max(0, k - 1)]!;
       const slot =
         before.filter((p) => p.pocket === s.pocket).length +
         shot.filter((o) => o.pocket === s.pocket && o.t < s.t).length;
+      // The recorded sink depth is a free fall from when the centre went over the hole; carry it on
+      // rather than restarting (the frame that marks the pot reports no sink at all).
+      const sunk = Math.min(0, prev.drop[s.i]!);
       out.set(s.i, {
+        t0: Math.min(prev.t, s.t),
+        p0: { x: prev.pos[2 * s.i]!, y: prev.pos[2 * s.i + 1]! },
         t: s.t,
         from: { x: fr[k]!.pos[2 * s.i]!, y: fr[k]!.pos[2 * s.i + 1]! },
-        sunk: prev.drop[s.i]!,
+        fallStart: Math.min(prev.t, s.t) - Math.sqrt((-2 * sunk) / G),
         pocket: s.pocket,
         slot,
       });
@@ -202,19 +212,38 @@ export class BallsView {
     return out;
   }
 
-  /** A potted ball keeps falling (continuing its drop) and drifts to its resting place in the well. */
-  private animateFall(b: BallMesh, f: Fall, tau: number): void {
-    const target = this.slotPosition(b, f.pocket, f.slot);
+  /**
+   * A potted ball keeps falling (continuing the drop it had started over the hole) and drifts from
+   * where it went in to its resting place in the well. Balls beyond the visible stack fall to the
+   * top of it and are then hidden.
+   */
+  private animateFall(b: BallMesh, f: Fall, t: number): void {
+    const target = this.slotPosition(b, f.pocket, Math.min(f.slot, MAX_STACK - 1));
     if (!target) {
       this.hide(b);
       return;
     }
-    // Free fall from where the physics left it, already moving down after sinking `sunk`.
-    const v0 = Math.sqrt(Math.max(0, -2 * G * f.sunk));
-    const z = Math.max(target.z, b.radius + f.sunk - v0 * tau - 0.5 * G * tau * tau);
-    const s = Math.min(1, tau / 0.22);
-    const e = s * s * (3 - 2 * s);
-    this.place(b, f.from.x + (target.x - f.from.x) * e, f.from.y + (target.y - f.from.y) * e, z, true);
+    const dt = t - f.fallStart;
+    const zFall = b.radius - 0.5 * G * dt * dt;
+    if (f.slot >= MAX_STACK && zFall <= target.z) {
+      this.hide(b);
+      return;
+    }
+    const z = Math.max(target.z, zFall);
+    let x: number;
+    let y: number;
+    if (t < f.t) {
+      // Between the last frame on the cloth and the pot: carry on towards where it went in.
+      const k = f.t > f.t0 ? (t - f.t0) / (f.t - f.t0) : 1;
+      x = f.p0.x + (f.from.x - f.p0.x) * k;
+      y = f.p0.y + (f.from.y - f.p0.y) * k;
+    } else {
+      const s = Math.min(1, (t - f.t) / 0.22);
+      const e = s * s * (3 - 2 * s);
+      x = f.from.x + (target.x - f.from.x) * e;
+      y = f.from.y + (target.y - f.from.y) * e;
+    }
+    this.place(b, x, y, z, true);
     b.shadow.visible = false;
   }
 
