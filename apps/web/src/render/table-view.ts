@@ -240,26 +240,80 @@ export function buildTableView(table: TableSpec, env?: Texture | null): TableVie
     color: new Color(clothColour(table)).multiplyScalar(0.92),
     roughness: 0.9,
   });
-  const cushionOuter = railOutline(geo, hl + CUSHION_WIDTH + 0.01, hw + CUSHION_WIDTH + 0.01, 0.012);
-  const cushionShape = toShape(cushionOuter.slice().reverse());
-  cushionShape.holes.push(toPath(innerOutline(geo)));
-  // Snooker cushions have a rounded nose: the bevel rounds the top edge back from the nose line,
-  // which stays where the physics has it.
   const nose = snooker ? 0.005 : 0;
   const below = 0.01;
-  const cushions = new Mesh(
-    new ExtrudeGeometry(cushionShape, {
-      depth: cushionTop + below - 2 * nose,
-      bevelEnabled: nose > 0,
-      bevelThickness: nose,
-      bevelSize: nose,
-      bevelOffset: -nose,
-      bevelSegments: 4,
-    }),
-    cushionMat,
-  );
-  cushions.position.z = -below + nose;
-  group.add(cushions);
+  if (snooker) {
+    // Six separate cloth-covered cushion blocks, not one continuous ring. Each block
+    // terminates at the pocket jaws with a mitred end; the narrow gaps leave the leather
+    // pocket assemblies visually independent. These are render meshes only: collision
+    // and ball response continue to come from TableGeometry.
+    const addCushionBlock = (points: Vec2[]) => {
+      const shape = toShape(points);
+      const block = new Mesh(
+        new ExtrudeGeometry(shape, {
+          depth: cushionTop + below - 2 * nose,
+          bevelEnabled: true,
+          bevelThickness: nose,
+          bevelSize: nose,
+          bevelOffset: -nose,
+          bevelSegments: 4,
+        }),
+        cushionMat,
+      );
+      block.position.z = -below + nose;
+      group.add(block);
+    };
+    for (const sign of [-1, 1] as const) {
+      const longSide = geo.pockets
+        .filter((p) => Math.abs(p.position.y - sign * hy) < 0.16)
+        .sort((a, b) => a.position.x - b.position.x);
+      for (let i = 0; i < longSide.length - 1; i++) {
+        const a = longSide[i]!;
+        const b = longSide[i + 1]!;
+        const ra = a.fallRadius + 0.012;
+        const rb = b.fallRadius + 0.012;
+        const innerY = sign * (hw + 0.001);
+        const outerY = sign * (hw + CUSHION_WIDTH + 0.01);
+        addCushionBlock([
+          { x: a.position.x + ra, y: innerY },
+          { x: b.position.x - rb, y: innerY },
+          { x: b.position.x - rb * 0.55, y: outerY },
+          { x: a.position.x + ra * 0.55, y: outerY },
+        ]);
+      }
+      const endSide = geo.pockets
+        .filter((p) => Math.abs(p.position.x - sign * hx) < 0.16)
+        .sort((a, b) => a.position.y - b.position.y);
+      if (endSide.length >= 2) {
+        const a = endSide[0]!;
+        const b = endSide[endSide.length - 1]!;
+        const ra = a.fallRadius + 0.012;
+        const rb = b.fallRadius + 0.012;
+        const innerX = sign * (hl + 0.001);
+        const outerX = sign * (hl + CUSHION_WIDTH + 0.01);
+        addCushionBlock([
+          { x: innerX, y: a.position.y + ra },
+          { x: innerX, y: b.position.y - rb },
+          { x: outerX, y: b.position.y - rb * 0.55 },
+          { x: outerX, y: a.position.y + ra * 0.55 },
+        ]);
+      }
+    }
+  } else {
+    // Pool tables retain their existing continuous cushion geometry.
+    const cushionOuter = railOutline(geo, hl + CUSHION_WIDTH + 0.01, hw + CUSHION_WIDTH + 0.01, 0.012);
+    const cushionShape = toShape(cushionOuter.slice().reverse());
+    cushionShape.holes.push(toPath(innerOutline(geo)));
+    const cushions = new Mesh(
+      new ExtrudeGeometry(cushionShape, {
+        depth: cushionTop + below,
+        bevelEnabled: false,
+      }),
+      cushionMat,
+    );
+    cushions.position.z = -below;
+    group.add(cushions);
+  }
 
   // Wooden rails with cut-outs around the pockets.
   const wood = woodTexture();
