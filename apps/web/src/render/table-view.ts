@@ -26,7 +26,7 @@ import {
   RepeatWrapping,
   Shape,
 } from 'three';
-import { clothColour, clothTexture, woodTexture } from './textures';
+import { clothColour, clothTexture, leatherTexture, netTexture, woodTexture } from './textures';
 
 /** Visual dimensions of the table around the playfield (metres). */
 export const CUSHION_WIDTH = TABLE_TRIM.cushionWidth;
@@ -258,13 +258,35 @@ export function buildTableView(table: TableSpec): TableView {
   ]);
   group.add(rails);
 
-  // Pockets: a hole dropping below the slate, and a black liner that wraps the rail around the
-  // back of the hole (open towards the table), like the leathers on a real table.
-  const linerMat = new MeshStandardMaterial({ color: '#111111', roughness: 0.5, metalness: 0 });
+  // Pockets: a hole dropping below the slate, and a liner that wraps the rail around the back of
+  // the hole (open towards the table). Pool tables have black liners over a dark well; snooker
+  // tables have tan leathers draped over the rail edge, brass plates and a string net.
+  const snooker = table.id.startsWith('snooker');
+  const linerMat = snooker
+    ? new MeshStandardMaterial({ map: leatherTexture('#6f2a1e'), roughness: 0.55, metalness: 0 })
+    : new MeshStandardMaterial({ color: '#111111', roughness: 0.5, metalness: 0 });
+  if (snooker) {
+    linerMat.map!.wrapS = linerMat.map!.wrapT = RepeatWrapping;
+    linerMat.map!.repeat.set(12, 12);
+  }
   const wallMat = new MeshStandardMaterial({ color: '#0b0b0b', roughness: 0.9, side: BackSide });
   const floorMat = new MeshStandardMaterial({ color: '#151210', roughness: 1 });
+  let netMat: MeshStandardMaterial | null = null;
+  if (snooker) {
+    const net = netTexture();
+    net.wrapS = net.wrapT = RepeatWrapping;
+    // One diamond about every 2cm (the side UVs are in metres).
+    net.repeat.set(50, 50);
+    netMat = new MeshStandardMaterial({ map: net, alphaTest: 0.4, roughness: 0.95, side: DoubleSide });
+  }
+  const brassMat = new MeshStandardMaterial({ color: '#c9a24a', roughness: 0.3, metalness: 0.9 });
   const hidden = new MeshBasicMaterial({ visible: false });
   const rest = new Map<string, Vec2>();
+  /** Keeps a point on the table (leathers fold over the edge rather than overhanging it). */
+  const onTable = (x: number, y: number): Vec2 => ({
+    x: Math.max(-hx - 0.003, Math.min(hx + 0.003, x)),
+    y: Math.max(-hy - 0.003, Math.min(hy + 0.003, y)),
+  });
   for (const p of table.pockets) {
     const outline = drops.get(p.id)!;
     rest.set(p.id, wellCentre(outline));
@@ -272,7 +294,8 @@ export function buildTableView(table: TableSpec): TableView {
     const edgeInfo = geo.drops.get(p.id);
     const edge = dropEdgePoints(geo, p.id);
     if (edgeInfo && edge.length > 1) group.add(clothLip(edge, edgeInfo.centre, cushionMat));
-    // Well: the drop outline extruded down below the slate, seen from inside.
+    // Well: the drop outline extruded down below the slate, seen from inside. On a snooker table
+    // it is a string net with dark below, so balls in it show through the mesh.
     const wellShape = toShape(outline);
     const well = new Mesh(new ExtrudeGeometry(wellShape, { depth: WELL_DEPTH, bevelEnabled: false }), [
       hidden,
@@ -282,20 +305,83 @@ export function buildTableView(table: TableSpec): TableView {
     const floor = new Mesh(new ShapeGeometry(wellShape), floorMat);
     floor.position.z = -WELL_DEPTH + 0.001;
     group.add(well, floor);
+    if (netMat) {
+      // The net hangs just inside the dark well, so the dark shows between its strings.
+      const inset = toShape(
+        outline.map((q) => ({
+          x: q.x + (rest.get(p.id)!.x - q.x) * 0.04,
+          y: q.y + (rest.get(p.id)!.y - q.y) * 0.04,
+        })),
+      );
+      const net = new Mesh(new ExtrudeGeometry(inset, { depth: WELL_DEPTH - 0.004, bevelEnabled: false }), [
+        hidden,
+        netMat,
+      ]);
+      net.position.z = -WELL_DEPTH + 0.002;
+      const bottom = new Mesh(new ShapeGeometry(inset), netMat);
+      bottom.position.z = -WELL_DEPTH + 0.003;
+      group.add(net, bottom);
+    }
 
     // Liner: wraps the rail round the back of the hole, open towards the table.
     const inner = backRadius(geo, p.id);
-    const outer = Math.max(inner + 0.032, p.fallRadius + 0.02);
     const at = Math.atan2(p.axis.y, p.axis.x);
     const half = (115 * Math.PI) / 180;
-    const u = new Shape();
-    u.absarc(p.position.x, p.position.y, outer, at - half, at + half, false);
-    u.absarc(p.position.x, p.position.y, inner, at + half, at - half, true);
-    const liner = new Mesh(
-      new ExtrudeGeometry(u, { depth: railTop + 0.003, bevelEnabled: false, curveSegments: 32 }),
+    if (!snooker) {
+      const outer = Math.max(inner + 0.032, p.fallRadius + 0.02);
+      const u = new Shape();
+      u.absarc(p.position.x, p.position.y, outer, at - half, at + half, false);
+      u.absarc(p.position.x, p.position.y, inner, at + half, at - half, true);
+      const liner = new Mesh(
+        new ExtrudeGeometry(u, { depth: railTop + 0.003, bevelEnabled: false, curveSegments: 32 }),
+        linerMat,
+      );
+      group.add(liner);
+      continue;
+    }
+    // Snooker leather: covers the rail from the hole out to the table edge and folds down over
+    // the outside of the rail as a flap.
+    const outer = Math.max(
+      inner + 0.05,
+      Math.hypot(
+        Math.abs(p.axis.x) > 0.1 ? hx - Math.abs(p.position.x) : 0,
+        Math.abs(p.axis.y) > 0.1 ? hy - Math.abs(p.position.y) : 0,
+      ) + 0.02,
+    );
+    const pts: Vec2[] = [];
+    const n = 40;
+    // The outer edge spans less than the liner round the hole, so the leather tapers along the rails.
+    const span = p.kind === 'corner' ? (75 * Math.PI) / 180 : half;
+    for (let i = 0; i <= n; i++) {
+      const a = at - span + (2 * span * i) / n;
+      pts.push(onTable(p.position.x + Math.cos(a) * outer, p.position.y + Math.sin(a) * outer));
+    }
+    for (let i = n; i >= 0; i--) {
+      const a = at - half + (2 * half * i) / n;
+      pts.push({ x: p.position.x + Math.cos(a) * inner, y: p.position.y + Math.sin(a) * inner });
+    }
+    // Clamping puts runs of identical points at the table corner, which the triangulator mishandles.
+    const shape = pts.filter((q, i) => {
+      const r = pts[(i + pts.length - 1) % pts.length]!;
+      return Math.hypot(q.x - r.x, q.y - r.y) > 1e-5;
+    });
+    const flap = 0.075;
+    const leather = new Mesh(
+      new ExtrudeGeometry(toShape(shape), { depth: railTop + 0.004 + flap, bevelEnabled: false }),
       linerMat,
     );
-    group.add(liner);
+    leather.position.z = -flap;
+    group.add(leather);
+    // Brass plates either side of the leather, on the rail top.
+    for (const side of [-1, 1]) {
+      const a = at + side * (half - 0.08);
+      const r = (inner + Math.min(outer, inner + 0.07)) / 2;
+      const plate = new Mesh(new BoxGeometry(0.045, 0.018, 0.003), brassMat);
+      const c = onTable(p.position.x + Math.cos(a) * r, p.position.y + Math.sin(a) * r);
+      plate.position.set(c.x, c.y, railTop + 0.003);
+      plate.rotation.z = a + Math.PI / 2;
+      group.add(plate);
+    }
   }
 
   // Body: a wooden apron round the edge down to below the pocket wells, then the base.
