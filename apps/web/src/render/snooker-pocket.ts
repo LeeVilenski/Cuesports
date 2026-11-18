@@ -307,27 +307,34 @@ export function buildSnookerPocket(
     const reach = p.kind === 'corner' ? 0.2 : 0.075;
     const overEdge = edge + 0.003 <= rIn + reach;
     const rOut = Math.min(edge + 0.003, rIn + reach);
-    // The flap is deepest in the middle and rounds off towards the ends.
+    // The apron is deeper through the centre of the pocket and tapers cleanly into
+    // the rail at each end. Corner pockets have a slightly fuller drop than middles.
     const f = Math.cos(((th - at) / span) * (Math.PI / 2));
-    const flap = 0.02 + 0.045 * Math.pow(Math.max(0, f), 1.3);
+    const fullness = Math.pow(Math.max(0, f), 1.35);
+    const flap = p.kind === 'corner' ? 0.018 + 0.052 * fullness : 0.012 + 0.038 * fullness;
+    // A rolled outer edge gives the hide a real return over the iron rather than the
+    // thin, square-edged sheet produced by a single vertical fold.
     const prof: [number, number][] = [
       [rIn + 0.001, -0.003],
       [rIn - 0.002, q.railTop - 0.02],
       [rIn - 0.002, top - 0.004],
       [rIn + 0.003, top],
       [rIn + 0.01, top + 0.0008],
-      [rOut - 0.01, top + 0.0008],
-      [rOut - 0.003, top - 0.001],
-      [rOut, top - 0.006],
-      [rOut, q.railTop - flap + 0.006],
-      [rOut - 0.002, q.railTop - flap],
+      [rOut - 0.014, top + 0.0008],
+      [rOut - 0.007, top + 0.0005],
+      [rOut - 0.001, top - 0.002],
+      [rOut + 0.003, top - 0.007],
+      [rOut + 0.005, top - 0.013],
+      [rOut + 0.005, q.railTop - flap + 0.009],
+      [rOut + 0.003, q.railTop - flap + 0.003],
+      [rOut - 0.001, q.railTop - flap],
     ];
     grid.push(prof.map(([r, z]) => at3(r, th, z)));
     const t = new Vector3(-dy, dx, 0);
     const n = new Vector3(dx, dy, 0);
     if (i > 1 && i < rows - 1) {
-      if (rOut - rIn > 0.03) stitchTop.push({ p: at3(rOut - 0.009, th, top + 0.0014), t, n });
-      if (overEdge) stitchFlap.push({ p: at3(rOut + 0.0006, th, q.railTop - flap + 0.01), t, n });
+      if (rOut - rIn > 0.03) stitchTop.push({ p: at3(rOut - 0.012, th, top + 0.0014), t, n });
+      if (overEdge) stitchFlap.push({ p: at3(rOut + 0.0055, th, q.railTop - flap + 0.012), t, n });
     }
   }
   g.add(new Mesh(gridMesh(grid, 0.05), m.leather));
