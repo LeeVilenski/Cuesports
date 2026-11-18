@@ -231,8 +231,8 @@ export function netTexture(): Texture {
   c.width = c.height = s;
   const g = c.getContext('2d')!;
   g.clearRect(0, 0, s, s);
-  g.strokeStyle = '#e8e4d6';
-  g.lineWidth = 5;
+  g.strokeStyle = '#ece8dc';
+  g.lineWidth = 3.2;
   g.lineCap = 'round';
   g.beginPath();
   // Diamond mesh: lines corner to corner, so tiles join up.
@@ -251,7 +251,7 @@ export function netTexture(): Texture {
     [0, s / 2],
   ] as const) {
     g.beginPath();
-    g.arc(x, y, 5, 0, Math.PI * 2);
+    g.arc(x, y, 3.8, 0, Math.PI * 2);
     g.fill();
   }
   const t = new CanvasTexture(c);

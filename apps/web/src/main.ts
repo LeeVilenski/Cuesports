@@ -183,6 +183,7 @@ function setTable(def: GameDef): void {
     tableView.pocketRest,
     WELL_DEPTH,
     new Map(def.table.pockets.map((p) => [p.id, dropOutline(tableGeometry(def.table), p.id)])),
+    tableView.pocketRunners,
   );
   placeCanopy(def.table.playfield.length);
   rig.setTable(def.table);
@@ -351,7 +352,7 @@ function startPlayback(): void {
 }
 
 /** A potted ball takes this long to drop and settle in the pocket. */
-const POT_SETTLE = 0.5;
+const POT_SETTLE = 0.8;
 
 /** The shot is over when every ball is at rest, including balls still dropping into a pocket. */
 function playbackEnd(result: ShotResult): number {
@@ -1095,6 +1096,11 @@ registerSW({ immediate: true });
     dirty = true;
   },
   /** Sets the aim angle in radians. */
+  /** Opens a practice table for a game (no rules), e.g. 'snooker'. */
+  practice: (id: string) => {
+    match = null;
+    setGame(GAMES.find((g) => g.id === id) ?? GAMES[0]!);
+  },
   /** Sets the cue elevation in degrees. */
   elevation: (deg: number) => {
     shot.elevation = (deg * Math.PI) / 180;
