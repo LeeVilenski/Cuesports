@@ -1,7 +1,15 @@
 import { makeBall, simulate, type ShotInput } from '@cuesports/physics';
 import { AMERICAN_POOL_9FT as T } from '@cuesports/shared';
 import { describe, expect, it } from 'vitest';
-import { Character, cueLine, stancePose, stanceSpot, type StanceInput, type TableFrame } from './character';
+import {
+  Character,
+  chooseTool,
+  cueLine,
+  stancePose,
+  stanceSpot,
+  type StanceInput,
+  type TableFrame,
+} from './character';
 import { lookFor, PRESETS } from './figure';
 import { exitDistance, len, sub, twoBone, v3, walkPath } from './ik';
 import { ballAt, ShotCamera } from './shot-camera';
@@ -86,6 +94,21 @@ describe('stance', () => {
     const big = { ...frame, hl: 1.78, hw: 0.89, hx: 1.95, hy: 1.06 };
     const pose = stancePose({ ball: { x: 0, y: 0 }, R, shot: shotAt(0), gap: 0.015 }, big);
     expect(len(sub(pose.restButt, pose.restHead))).toBeGreaterThan(0.5);
+  });
+
+  it('picks the hand, the rest or the spider', () => {
+    const snooker = { ...frame, hl: 1.78, hw: 0.89, hx: 1.95, hy: 1.06, restReach: 0.55 };
+    const near = { ball: { x: 1.5, y: 0 }, R, shot: shotAt(Math.PI), gap: 0.015 };
+    expect(chooseTool(near, snooker).tool).toBe('hand');
+    const far = { ball: { x: 0, y: 0 }, R, shot: shotAt(0), gap: 0.015 };
+    expect(chooseTool(far, snooker).tool).toBe('rest');
+    // A ball just behind the cue ball, where the rest head would go.
+    const tucked = { ...far, others: [{ x: -0.09, y: 0.01 }] };
+    const pick = chooseTool(tucked, snooker);
+    expect(pick.tool).toBe('spider');
+    expect(pick.kb).toBeGreaterThan(0.09 - 2 * R);
+    // A ball well off to the side doesn't need the spider.
+    expect(chooseTool({ ...far, others: [{ x: -0.1, y: 0.3 }] }, snooker).tool).toBe('rest');
   });
 
   it('the grip hand follows the stroke', () => {

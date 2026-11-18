@@ -40,6 +40,11 @@ export interface TableFrame {
   hy: number;
   railTop: number;
   floorZ: number;
+  /**
+   * How far past the outside of the rail a player will stretch to bridge by hand before reaching
+   * for the rest (snooker players use it much sooner than pool players). Default 0.75 m.
+   */
+  restReach?: number;
 }
 
 /** What the player is lining up: the cue ball and the shot (elevation already raised to clear). */
@@ -49,6 +54,44 @@ export interface StanceInput {
   shot: ShotInput;
   /** How far the tip is drawn back from the ball right now (the stroke). */
   gap: number;
+  /** Other balls on the table, which may be in the way of the bridge hand. */
+  others?: P2[];
+}
+
+export type Tool = 'hand' | 'rest' | 'spider';
+
+/** Bridge distance behind the tip for each tool. */
+const BRIDGE_HAND = 0.26;
+const BRIDGE_REST = 0.32;
+
+/**
+ * How the player will bridge: by hand, with the rest when the bridge is out of reach, or with the
+ * spider when that is out of reach too and a ball sits where the rest head would go.
+ */
+export function chooseTool(st: StanceInput, t: TableFrame): { tool: Tool; kb: number } {
+  const b = { x: -Math.cos(st.shot.aim), y: -Math.sin(st.shot.aim) };
+  const s = { x: Math.sin(st.shot.aim), y: -Math.cos(st.shot.aim) };
+  const ce = Math.max(Math.cos(st.shot.elevation), 0.2);
+  const edge = exitDistance(st.ball, b, t.hx, t.hy);
+  const kbHand = Math.max(0.06, Math.min(BRIDGE_HAND, (edge - 0.04 - st.R) / ce));
+  // How far past the outside of the rail the hand would have to reach.
+  const stretch = edge - st.R - kbHand * ce;
+  if (stretch <= (t.restReach ?? 0.75)) return { tool: 'hand', kb: kbHand };
+  // A ball close behind the cue ball, under where the rest head would sit.
+  let kb = BRIDGE_REST;
+  let blocked = false;
+  for (const o of st.others ?? []) {
+    const dx = o.x - st.ball.x;
+    const dy = o.y - st.ball.y;
+    const along = dx * b.x + dy * b.y;
+    const lateral = Math.abs(dx * s.x + dy * s.y);
+    if (!blocked && along > st.R && along < st.R + (BRIDGE_REST + 0.06) * ce && lateral < st.R * 3) {
+      blocked = true;
+      // The spider straddles the ball.
+      kb = (along - st.R) / ce;
+    }
+  }
+  return { tool: blocked ? 'spider' : 'rest', kb };
 }
 
 export type { Look } from './figure';
@@ -69,6 +112,9 @@ const FOOT_Z = 0.06;
 /** Clearance kept between the body and the outside of the rail. */
 const BODY_CLEAR = 0.14;
 const CUE_LEN = CUE_SHAPE.length;
+/** Height the cue sits at on the rest's cross head, and on the spider. */
+const CROSS_H = 0.03;
+const SPIDER_H = 0.11;
 
 const WALK_SPEED = 1.6;
 const DOWN_RATE = 2.4;
@@ -97,6 +143,8 @@ interface Pose {
   /** A mechanical rest (snooker), head and butt, or the same point twice when not used. */
   restHead: P3;
   restButt: P3;
+  /** What the rest head is, when on the rest. */
+  tool?: Tool;
 }
 
 const POSE_KEYS = Object.keys({
@@ -127,6 +175,7 @@ function blend(a: Pose, b: Pose, k: number): Pose {
   if (k >= 1) return b;
   const out = {} as Pose;
   for (const key of POSE_KEYS) out[key] = lerp3(a[key], b[key], k);
+  if (b.tool) out.tool = b.tool;
   return out;
 }
 
@@ -280,8 +329,12 @@ export function stanceSpot(st: StanceInput, t: TableFrame): P2 {
   const back = { x: -Math.cos(st.shot.aim), y: -Math.sin(st.shot.aim) };
   const side = { x: Math.sin(st.shot.aim), y: -Math.cos(st.shot.aim) };
   const edge = exitDistance(st.ball, back, t.hx, t.hy);
-  const D = Math.max(edge + BODY_CLEAR, 0.95);
-  const p = { x: st.ball.x + back.x * D - side.x * 0.1, y: st.ball.y + back.y * D - side.y * 0.1 };
+  // With the rest the player stands back by the butt of the cue, the cue past the right hip.
+  const onRest = chooseTool(st, t).tool !== 'hand';
+  const ce = Math.cos(st.shot.elevation);
+  const D = Math.max(edge + BODY_CLEAR, onRest ? st.R + (CUE_LEN - 0.3) * ce : 0.95);
+  const off = onRest ? 0.2 : 0.1;
+  const p = { x: st.ball.x + back.x * D - side.x * off, y: st.ball.y + back.y * D - side.y * off };
   return outsideTable(p, t, BODY_CLEAR * 0.7);
 }
 
@@ -295,24 +348,27 @@ export function stancePose(st: StanceInput, t: TableFrame): Pose {
   const h = v3(Math.cos(aim), Math.sin(aim), 0);
   const b = scale(h, -1);
   const s = v3(Math.sin(aim), -Math.cos(aim), 0);
-  const ce = Math.cos(st.shot.elevation);
   // The cue as it lies before the stroke (the bridge and grip stay where they are on it).
   const rest = cueLine({ ...st, gap: 0.015 });
   const live = cueLine(st);
   const at = (k: number, line = rest) => add(line.tip, scale(line.u, k));
 
-  // Bridge: about a quarter of a metre behind the tip, but never past the outside of the rail.
-  const edge = exitDistance(st.ball, b, t.hx, t.hy);
-  const kb = Math.max(0.06, Math.min(0.26, (edge - 0.04 - st.R) / Math.max(ce, 0.2)));
+  const { tool, kb } = chooseTool(st, t);
+  const onRest = tool !== 'hand';
   const cb = at(kb);
   const onCloth = Math.abs(cb.x) <= t.hl && Math.abs(cb.y) <= t.hw;
   const surface = onCloth ? 0 : t.railTop;
+  // Bridge hand under the cue (raised as high as the cue is, e.g. over a ball in the way).
   const bridge = v3(cb.x - s.x * 0.01, cb.y - s.y * 0.01, Math.max(cb.z - 0.03, surface + 0.02));
 
-  // Pelvis outside the table, torso leaning so the chin is just over the cue.
+  // Pelvis outside the table, torso leaning so the chin is just over the cue: near the bridge
+  // normally, back near the butt on the rest.
   const spot = stanceSpot(st, t);
-  let pelvis = flat(spot, t.floorZ + PELVIS_Z - 0.11);
-  const chin = add(at(kb + 0.24), add(v3(0, 0, 0.1), scale(s, -0.02)));
+  let pelvis = flat(spot, t.floorZ + PELVIS_Z - (onRest ? 0.05 : 0.11));
+  const chin = add(
+    at(onRest ? CUE_LEN - 0.42 : kb + 0.24),
+    add(v3(0, 0, onRest ? 0.14 : 0.1), scale(s, -0.02)),
+  );
   const neckGoal = add(chin, add(scale(b, 0.12), v3(0, 0, -0.04)));
   const short = TORSO - len(sub(neckGoal, pelvis));
   if (short > 0) pelvis = add(pelvis, scale(b, short));
@@ -329,46 +385,50 @@ export function stancePose(st: StanceInput, t: TableFrame): Pose {
   const lSh = add(neck, add(scale(s, -SHOULDER), scale(dir, -0.04)));
   const rSh = add(neck, add(scale(s, SHOULDER * 0.8), scale(dir, -0.04)));
 
-  // Bridge arm, or a rest when the bridge is out of reach.
+  // Bridge hand, or the rest: its head under the cue on the cloth (z is the height of the cue on
+  // it), its shaft back to the left hand holding it down on the table.
   let lHand = bridge;
   let restHead = bridge;
   let restButt = bridge;
-  if (len(sub(bridge, lSh)) > UPPER_ARM + FOREARM - 0.02) {
-    restHead = v3(cb.x, cb.y, cb.z - 0.012);
-    const toward = norm(sub(flat(spot), flat(cb)));
-    restButt = v3(cb.x + toward.x * 1.2 - s.x * 0.12, cb.y + toward.y * 1.2 - s.y * 0.12, t.railTop + 0.12);
-    // Hold the rest at the point on it nearest the left shoulder.
-    const axis = sub(restButt, restHead);
-    const k = Math.min(
-      1,
-      Math.max(
-        0,
-        ((lSh.x - restHead.x) * axis.x + (lSh.y - restHead.y) * axis.y + (lSh.z - restHead.z) * axis.z) /
-          len(axis) ** 2,
-      ),
+  if (onRest) {
+    restHead = v3(
+      cb.x,
+      cb.y,
+      tool === 'spider' ? Math.max(cb.z - 0.006, 2 * st.R + 0.012) : Math.min(cb.z - 0.006, SPIDER_H - 0.03),
     );
-    lHand = add(restHead, scale(axis, k));
+    const toward = norm(sub(flat(lSh), flat(cb)));
+    const reachBack = Math.min(1.35, Math.hypot(lSh.x - cb.x, lSh.y - cb.y) - 0.2);
+    restButt = v3(cb.x + toward.x * reachBack, cb.y + toward.y * reachBack, 0);
+    const butt = flat(restButt);
+    const z = Math.abs(butt.x) <= t.hl && Math.abs(butt.y) <= t.hw ? 0.03 : t.railTop + 0.03;
+    restButt = v3(butt.x, butt.y, z);
+    lHand = add(lerp3(restHead, restButt, 0.9), v3(0, 0, 0.03));
   }
   const lArm = twoBone(lSh, lHand, UPPER_ARM, FOREARM, add(lSh, add(scale(s, -0.4), v3(0, 0, -0.25))));
 
-  // Grip hand: on the cue a little behind the right shoulder, moving with the stroke.
-  const kg = Math.min(
-    CUE_LEN - 0.05,
-    Math.max(
-      kb + 0.4,
-      (rSh.x - rest.tip.x) * rest.u.x +
-        (rSh.y - rest.tip.y) * rest.u.y +
-        (rSh.z - rest.tip.z) * rest.u.z +
-        0.14,
-    ),
-  );
+  // Grip hand: on the cue a little behind the right shoulder (right at the butt on the rest),
+  // moving with the stroke.
+  const kg = onRest
+    ? CUE_LEN - 0.1
+    : Math.min(
+        CUE_LEN - 0.05,
+        Math.max(
+          kb + 0.4,
+          (rSh.x - rest.tip.x) * rest.u.x +
+            (rSh.y - rest.tip.y) * rest.u.y +
+            (rSh.z - rest.tip.z) * rest.u.z +
+            0.14,
+        ),
+      );
   const grip = at(kg, live);
   const rArm = twoBone(
     rSh,
     grip,
     UPPER_ARM,
     FOREARM,
-    add(rSh, add(scale(b, 0.25), add(scale(s, 0.12), v3(0, 0, 0.35)))),
+    onRest
+      ? add(rSh, add(scale(s, 0.45), v3(0, 0, 0.05)))
+      : add(rSh, add(scale(b, 0.25), add(scale(s, 0.12), v3(0, 0, 0.35)))),
   );
 
   // Feet: right foot behind on the cue line, left foot forward and to the left.
@@ -404,6 +464,7 @@ export function stancePose(st: StanceInput, t: TableFrame): Pose {
       cueButt: at(CUE_LEN, live),
       restHead,
       restButt,
+      tool,
     },
     h,
   );
@@ -440,6 +501,9 @@ export class Character {
   private readonly fig: FigureParts;
   private readonly cue = new Group();
   private readonly restMesh: Mesh;
+  private readonly restHead = new Group();
+  private readonly cross = new Group();
+  private readonly spider = new Group();
   private readonly geos: BufferGeometry[] = [];
   private readonly mats: Material[] = [];
 
@@ -484,9 +548,30 @@ export class Character {
     // Snooker rest: a long stick with a cross head.
     const restGeo = geo(new CylinderGeometry(0.006, 0.008, 1, 8));
     this.restMesh = new Mesh(restGeo, mat('#6b4a2a', 0.5));
-    this.restMesh.add(new Mesh(geo(new BoxGeometry(0.1, 0.012, 0.02)), mat('#888', 0.3)));
-    this.restMesh.children[0]!.position.y = -0.5;
-    this.group.add(this.restMesh);
+    this.group.add(this.restMesh, this.restHead);
+    // Heads at real size, the cue resting on top (z = CROSS_H or SPIDER_H) and the shaft arriving
+    // from −y. Cross: an X standing across the cue line. Spider: a tall arch with splayed legs.
+    const brass = mat('#b89a5a', 0.35);
+    const arm = geo(new BoxGeometry(0.008, 0.008, 0.075));
+    for (const sgn of [-1, 1]) {
+      const a = new Mesh(arm, brass);
+      a.rotation.y = sgn * 0.75;
+      a.position.z = CROSS_H / 2 + 0.005;
+      this.cross.add(a);
+    }
+    const leg = geo(new CylinderGeometry(0.004, 0.004, SPIDER_H * 1.08, 6));
+    for (const sgn of [-1, 1]) {
+      const l = new Mesh(leg, brass);
+      l.rotation.x = Math.PI / 2;
+      l.rotation.order = 'YXZ';
+      l.rotation.y = sgn * 0.45;
+      l.position.set(sgn * 0.033, 0, SPIDER_H / 2);
+      this.spider.add(l);
+    }
+    const top = new Mesh(geo(new BoxGeometry(0.09, 0.01, 0.012)), brass);
+    top.position.z = SPIDER_H - 0.006;
+    this.spider.add(top);
+    this.restHead.add(this.cross, this.spider);
 
     // Chair: seat, back and four legs.
     const wood = mat('#3a2416', 0.6);
@@ -705,10 +790,31 @@ export class Character {
     this.cue.quaternion.setFromUnitVectors(UP, tmpB);
     // Rest.
     const restLen = len(sub(p.restButt, p.restHead));
-    this.restMesh.visible = restLen > 0.2;
-    if (this.restMesh.visible) span(this.restMesh, p.restButt, p.restHead, 1);
-    // Keep the rest's head the right size whatever the stretch.
-    this.restMesh.children[0]!.scale.set(1, 1 / Math.max(restLen, 1e-3), 1);
+    const using = restLen > 0.2;
+    this.restMesh.visible = this.restHead.visible = using;
+    if (using) {
+      // The head stands on the cloth (or rail) under the cue; the pose's head z is the cue height.
+      const h = p.restHead.z;
+      const spider = p.tool === 'spider';
+      const foot = v3(p.restHead.x, p.restHead.y, spider ? 0 : Math.max(0, h - CROSS_H));
+      // A spider's shaft meets it at the back of the arch, clear of the ball underneath.
+      const toHead = norm(v3(p.restHead.x - p.restButt.x, p.restHead.y - p.restButt.y, 0));
+      const end = spider
+        ? v3(foot.x - toHead.x * 0.02, foot.y - toHead.y * 0.02, h * 0.8)
+        : add(foot, v3(0, 0, 0.012));
+      span(this.restMesh, p.restButt, end, 1);
+      this.restHead.position.set(foot.x, foot.y, foot.z);
+      this.restHead.rotation.set(
+        0,
+        0,
+        Math.atan2(p.restHead.y - p.restButt.y, p.restHead.x - p.restButt.x) - Math.PI / 2,
+      );
+      // The spider goes over a ball; the cross for an ordinary rest shot.
+      // A tall spider (for a steep cue) stretches up to the cue.
+      this.restHead.scale.set(1, 1, spider ? h / SPIDER_H : 1);
+      this.cross.visible = !spider;
+      this.spider.visible = spider;
+    }
   }
 
   dispose(): void {
