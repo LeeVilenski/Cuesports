@@ -1,34 +1,17 @@
-import { CUE_SHAPE, type ShotInput } from '@cuesports/physics';
-import { CylinderGeometry, Group, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
-
-const LENGTH = CUE_SHAPE.length;
-const TIP_R = CUE_SHAPE.tipRadius;
-const BUTT_R = CUE_SHAPE.buttRadius;
+import { type ShotInput } from '@cuesports/physics';
+import { Group, Quaternion, Vector3 } from 'three';
+import { buildCue, tracker } from './equipment';
 
 /**
- * Placeholder cue. Built along +y with the tip at the origin, then aligned to the shot: the tip sits
- * on the cue ball at the chosen tip offset, pulled back by `gap`.
+ * The cue. Built along +y with the tip at the origin, then aligned to the shot: the tip sits on the
+ * cue ball at the chosen tip offset, pulled back by `gap`.
  */
 export class CueView {
   readonly group = new Group();
-  private readonly stick = new Group();
+  private readonly stick: Group;
 
   constructor() {
-    const part = (r0: number, r1: number, len: number, y: number, color: string, rough = 0.4) => {
-      const m = new Mesh(
-        new CylinderGeometry(r0, r1, len, 24),
-        new MeshStandardMaterial({ color, roughness: rough }),
-      );
-      m.position.y = y + len / 2;
-      this.stick.add(m);
-    };
-    // Tip, ferrule, maple shaft, dark butt (radii taper linearly from tip to butt).
-    const r = (y: number) => TIP_R + ((BUTT_R - TIP_R) * y) / LENGTH;
-    part(TIP_R, TIP_R, 0.008, 0, '#2c5d8f', 0.9);
-    part(r(0.008), r(0.028), 0.02, 0.008, '#f2efe6', 0.3);
-    part(r(0.028), r(0.86), 0.832, 0.028, '#d9b98a', 0.35);
-    part(r(0.86), r(0.88), 0.02, 0.86, '#111', 0.3);
-    part(r(0.88), BUTT_R, LENGTH - 0.88, 0.88, '#3b1d0e', 0.3);
+    this.stick = buildCue(tracker());
     this.group.add(this.stick);
   }
 
