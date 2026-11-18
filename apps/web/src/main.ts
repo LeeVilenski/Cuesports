@@ -131,7 +131,11 @@ let strikeT = 0;
 let pending: { result: ShotResult; ms: number } | null = null;
 let playing: ShotResult | null = null;
 let playT = 0;
-let last: { before: BallState[]; shot: ShotInput; result: ShotResult } | null = null;
+let last: { before: BallState[]; shot: ShotInput; result: ShotResult; shooter: number } | null = null;
+/** During a replay, the player who played the shot (they take it again at the table). */
+let replayShooter: number | null = null;
+/** A replay shows the player down on the shot for this long before the stroke. */
+const REPLAY_PREROLL = 0.9;
 let showGuide = true;
 /** The guide follows the cue ball's real launch direction, including squirt from side. */
 let guideSquirt = true;
@@ -212,6 +216,8 @@ function buildPlayers(): void {
     hy: tableView.outer.hy,
     railTop: tableView.railTop,
     floorZ: tableView.floorZ,
+    // Snooker players take the rest much sooner than pool players stretch.
+    restReach: game.table.id.startsWith('snooker') ? 0.55 : 0.8,
   };
   const picks = presetsFor(match ? match.config.players : ['Player 1', 'Player 2']);
   players = picks.map((pi, i) => {
@@ -225,7 +231,7 @@ function buildPlayers(): void {
 }
 
 /** The player at the table now. */
-const activePlayer = (): number => (match ? match.turn.player : 0);
+const activePlayer = (): number => replayShooter ?? (match ? match.turn.player : 0);
 
 /** What each player should be doing this frame. */
 function playerWants(i: number, cue: BallState | undefined, gap: number): Want {
@@ -244,6 +250,7 @@ function playerWants(i: number, cue: BallState | undefined, gap: number): Want {
     R: cue.radius,
     shot: phase === 'aim' ? withClearance(shot) : shot,
     gap,
+    others: balls.filter((b) => b.id !== cue.id && b.state !== 'pocketed').map((b) => b.pos),
   };
   lastStance = stance;
   return { kind: 'shoot', stance };
@@ -399,9 +406,10 @@ function strike(input: ShotInput, declaration: ShotDeclaration, pullVisual: numb
   pending = null;
   hud.setBusy(true);
   const s = structuredClone(shot);
+  const shooter = activePlayer();
   void sim.run(simTable, before, s).then((r) => {
     pending = r;
-    last = { before, shot: s, result: r.result };
+    last = { before, shot: s, result: r.result, shooter };
   });
   dirty = true;
 }
@@ -446,6 +454,7 @@ function endPlayback(): void {
   if (replaying || match) {
     if (match && !replaying && last) match.judge(decl, last.before, result);
     replaying = false;
+    replayShooter = null;
     balls = match ? match.balls.map(cloneBall) : result.final.map(cloneBall);
     if (match?.reracked) ballsView.setBalls(balls);
     else {
@@ -608,7 +617,14 @@ function replay(): void {
   pending = { result: last.result, ms: 0 };
   replaying = true;
   hud.setBusy(true);
-  startPlayback();
+  // The shooter takes the shot again: down on it for a moment, then the stroke.
+  replayShooter = last.shooter;
+  phase = 'striking';
+  strikeT = -REPLAY_PREROLL;
+  pull = 0.5;
+  cueView.group.visible = true;
+  placePlayers();
+  dirty = true;
 }
 
 function undo(): void {
@@ -1054,6 +1070,16 @@ function frame(now: number): void {
     strikeT += dt;
     dirty = true;
     if (strikeT >= 0.09 && pending) startPlayback();
+    else if (replaying && strikeT < 0 && cue) {
+      // Replay: side-on to the player down on the shot.
+      const c = Math.cos(shot.aim);
+      const sn = Math.sin(shot.aim);
+      rig.shotView = {
+        eye: { x: cue.pos.x - sn * 1.5 - c * 0.5, y: cue.pos.y + c * 1.5 - sn * 0.5, z: 0.75 },
+        look: { x: cue.pos.x - c * 0.55, y: cue.pos.y - sn * 0.55, z: 0.05 },
+        cut: strikeT + dt <= -REPLAY_PREROLL + 1e-6,
+      };
+    }
   }
   if (phase === 'playing' && playing) {
     if (!frozen) playT += dt;
@@ -1074,7 +1100,7 @@ function frame(now: number): void {
     if (phase !== 'playing') {
       // The cue draws back as the power bar is pulled, then drives through during the strike.
       const back = 0.015 + pull * 0.22;
-      const gap = phase === 'striking' ? Math.max(0, back * (1 - (strikeT / 0.09) ** 2)) : back;
+      const gap = phase === 'striking' ? Math.max(0, back * (1 - (Math.max(0, strikeT) / 0.09) ** 2)) : back;
       const live = phase === 'aim' ? withClearance(shot) : shot;
       cueView.pose(cue.pos.x, cue.pos.y, cue.radius, live, gap);
       if (phase === 'aim') hud.setForcedElevation((live.elevation * 180) / Math.PI);
@@ -1111,7 +1137,7 @@ function frame(now: number): void {
 
 function updatePlayers(dt: number, cue: BallState | undefined): void {
   const back = 0.015 + pull * 0.22;
-  const gap = phase === 'striking' ? Math.max(0, back * (1 - (strikeT / 0.09) ** 2)) : back;
+  const gap = phase === 'striking' ? Math.max(0, back * (1 - (Math.max(0, strikeT) / 0.09) ** 2)) : back;
   players.forEach((p, i) => {
     const inMatch = match !== null;
     // Practice has one player; the chairs come out for matches.
@@ -1120,11 +1146,15 @@ function updatePlayers(dt: number, cue: BallState | undefined): void {
     const want = playerWants(i, cue, gap);
     if (p.update(menu.isOpen ? 0 : dt, here ? want : { kind: 'sit' })) dirty = true;
     // The player at the table would block the aim cam while aiming: cue only.
-    const blocks = i === activePlayer() && rig.mode === 'aim' && phase !== 'playing' && !menu.isOpen;
+    const blocks =
+      i === activePlayer() && rig.mode === 'aim' && phase !== 'playing' && !menu.isOpen && !replaying;
     p.group.visible = showPlayer && here && !blocks;
-    // The shot cue takes over from the player's own cue in the stance.
-    p.ownCue = !(p.isDown && cueView.group.visible && i === activePlayer());
   });
+  // One cue: while the player is up and walking they carry their own; once down on the shot the
+  // shot cue (which follows the aim and stroke exactly) takes over.
+  const a = players[activePlayer()];
+  if (phase !== 'playing') cueView.group.visible = !(a && a.group.visible && !a.isDown);
+  players.forEach((p, i) => (p.ownCue = !(i === activePlayer() && p.isDown && cueView.group.visible)));
 }
 
 function adaptQuality(ms: number): void {
