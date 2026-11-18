@@ -6,6 +6,10 @@ import { toWorld } from './coords';
 export type CameraMode = 'aim' | 'top' | 'free';
 
 const tmp = new Vector3();
+/** Highest cue elevation (degrees) the aim cam follows with the eye over the cue. */
+const CHIN_MAX_ELEVATION = 30;
+/** How far above the cue line the eye sits, degrees as seen from the cue ball. */
+const CHIN_ABOVE_CUE = 4;
 
 /**
  * Aim cam (behind the cue ball, pinch/scroll to zoom, two-finger drag to pitch), orthographic
@@ -105,7 +109,7 @@ export class CameraRig {
   }
 
   /** Updates the aim camera for a cue ball at `ball` aiming along `aim`. Returns true while moving. */
-  update(dt: number, ball: Vec2, R: number, aim: number): boolean {
+  update(dt: number, ball: Vec2, R: number, aim: number, cueElevation = 0): boolean {
     if (this.mode === 'free') {
       this.orbit.update(dt);
       return true;
@@ -114,6 +118,11 @@ export class CameraRig {
     const dir = { x: Math.cos(aim), y: Math.sin(aim) };
     let dist = this.distance;
     let pitch = this.portrait ? this.pitch + 10 : this.pitch;
+    // A raised cue would fill the screen from behind: sit just above it instead, like a player with
+    // their chin on the cue. Only up to the elevations you'd sight along (not massé or jump shots);
+    // beyond that the camera stays at that height and the cue rises above it.
+    const elev = MathUtils.radToDeg(cueElevation);
+    if (elev > 0.5) pitch = Math.max(pitch, Math.min(elev, CHIN_MAX_ELEVATION) + CHIN_ABOVE_CUE);
     if (this.overview) {
       // During a shot, rise up and back so the whole table is in view.
       dist = Math.max(dist, 2.1);
