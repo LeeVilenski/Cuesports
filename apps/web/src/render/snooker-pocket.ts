@@ -16,6 +16,7 @@ import {
   MeshStandardMaterial,
   RepeatWrapping,
   Shape,
+  SphereGeometry,
   TorusGeometry,
   TubeGeometry,
   Vector3,
@@ -29,6 +30,22 @@ export interface Vec3 {
 }
 
 const hiddenMat = new MeshBasicMaterial({ visible: false });
+
+/** Height of the padded leather roll above the rail, and of the brass collar under the net. */
+const PAD = 0.007;
+const BAND = 0.02;
+
+function smooth(x: number): number {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+}
+
+/** Height of the padded leather top at radius r: a flat crown with rolled edges either side. */
+function domeZ(r: number, r0: number, r1: number, top: number, pad: number): number {
+  const roll = Math.min(0.018, (r1 - r0) / 2);
+  const e = Math.min(1, Math.max(0, Math.min(r - r0, r1 - r) / roll));
+  return top + pad * Math.sqrt(e * (2 - e));
+}
 
 /** Balls the wire runners under a snooker pocket hold before the net starts to fill. */
 export const RUNNER_BALLS = 6;
@@ -167,7 +184,7 @@ export interface SnookerPocketMaterials {
 }
 
 export function snookerPocketMaterials(): SnookerPocketMaterials {
-  const leatherMap = leatherTexture('#c48d62');
+  const leatherMap = leatherTexture('#74301a');
   leatherMap.wrapS = leatherMap.wrapT = RepeatWrapping;
   const net = netTexture();
   net.wrapS = net.wrapT = RepeatWrapping;
@@ -175,7 +192,7 @@ export function snookerPocketMaterials(): SnookerPocketMaterials {
   return {
     leather: new MeshStandardMaterial({
       map: leatherMap,
-      roughness: 0.62,
+      roughness: 0.48,
       metalness: 0,
       side: DoubleSide,
       envMapIntensity: 3,
@@ -194,7 +211,8 @@ export function snookerPocketMaterials(): SnookerPocketMaterials {
       side: DoubleSide,
       envMapIntensity: 4,
     }),
-    wire: new MeshStandardMaterial({ color: '#1c1c1c', roughness: 0.3, metalness: 0.1, envMapIntensity: 4 }),
+    // The ball-return rails are polished brass, like the plates and collar.
+    wire: new MeshStandardMaterial({ color: '#b8893a', roughness: 0.3, metalness: 0.9, envMapIntensity: 4 }),
     strap: new MeshStandardMaterial({ color: '#4a2a1a', roughness: 0.6, envMapIntensity: 4 }),
   };
 }
@@ -307,26 +325,35 @@ export function buildSnookerPocket(
     const reach = p.kind === 'corner' ? 0.2 : 0.075;
     const overEdge = edge + 0.003 <= rIn + reach;
     const rOut = Math.min(edge + 0.003, rIn + reach);
-    // The flap is deepest in the middle and rounds off towards the ends.
+    // The flap hangs like a bucket: deep across the middle, rounding off towards the ends.
     const f = Math.cos(((th - at) / span) * (Math.PI / 2));
-    const flap = 0.02 + 0.045 * Math.pow(Math.max(0, f), 1.3);
+    const flap = 0.03 + 0.055 * Math.pow(Math.max(0, f), 0.8);
+    // The top is padded over the iron: a raised roll that flattens out under the brass plates.
+    const pad = PAD * smooth(Math.min(i, rows - i) / (rows * 0.12));
+    const z = (r: number) => domeZ(r, rIn, rOut, top, pad);
     const prof: [number, number][] = [
       [rIn + 0.001, -0.003],
       [rIn - 0.002, q.railTop - 0.02],
-      [rIn - 0.002, top - 0.004],
-      [rIn + 0.003, top],
-      [rIn + 0.01, top + 0.0008],
-      [rOut - 0.01, top + 0.0008],
-      [rOut - 0.003, top - 0.001],
-      [rOut, top - 0.006],
-      [rOut, q.railTop - flap + 0.006],
-      [rOut - 0.002, q.railTop - flap],
+      [rIn - 0.003, top - 0.006],
     ];
+    for (let k = 0; k <= 10; k++) {
+      const r = rIn + ((rOut - rIn) * k) / 10;
+      prof.push([r, z(r)]);
+    }
+    prof.push(
+      [rOut + 0.001, top - 0.006],
+      [rOut + 0.001, q.railTop - flap + 0.006],
+      [rOut - 0.002, q.railTop - flap],
+    );
     grid.push(prof.map(([r, z]) => at3(r, th, z)));
     const t = new Vector3(-dy, dx, 0);
     const n = new Vector3(dx, dy, 0);
     if (i > 1 && i < rows - 1) {
-      if (rOut - rIn > 0.03) stitchTop.push({ p: at3(rOut - 0.009, th, top + 0.0014), t, n });
+      if (rOut - rIn > 0.03) {
+        // Two rows of saddle stitching: round the lip of the hole and along the outer edge.
+        stitchTop.push({ p: at3(rIn + 0.008, th, z(rIn + 0.008) + 0.0005), t, n });
+        stitchTop.push({ p: at3(rOut - 0.008, th, z(rOut - 0.008) + 0.0005), t, n });
+      }
       if (overEdge) stitchFlap.push({ p: at3(rOut + 0.0006, th, q.railTop - flap + 0.01), t, n });
     }
   }
@@ -358,8 +385,8 @@ export function buildSnookerPocket(
     const mid = onLong
       ? new Vector3(e.x, Math.sign(e.y) * (q.hy - q.railWidth / 2), 0)
       : new Vector3(Math.sign(e.x) * (q.hx - q.railWidth / 2), e.y, 0);
-    const w = 0.042;
-    const h = 0.02;
+    const w = 0.056;
+    const h = 0.024;
     const c = mid.clone().addScaledVector(dir, w / 2 - 0.004);
     const s = new Shape();
     s.moveTo(-w / 2 + h / 2, -h / 2);
@@ -377,14 +404,16 @@ export function buildSnookerPocket(
       }),
       m.brass,
     );
-    plate.position.set(c.x, c.y, q.railTop + 0.0006);
+    plate.position.set(c.x, c.y, top + 0.0012);
     plate.rotation.z = Math.atan2(dir.y, dir.x);
     g.add(plate);
     for (const k of [-1, 1]) {
-      const screw = new Mesh(new CylinderGeometry(0.0026, 0.0026, 0.0012, 14), m.brass);
+      // Domed screw heads.
+      const screw = new Mesh(new SphereGeometry(0.0034, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2), m.brass);
       screw.rotation.x = Math.PI / 2;
-      const sc = c.clone().addScaledVector(dir, k * 0.012);
-      screw.position.set(sc.x, sc.y, q.railTop + 0.0029);
+      screw.scale.set(1, 0.55, 1);
+      const sc = c.clone().addScaledVector(dir, k * 0.017);
+      screw.position.set(sc.x, sc.y, top + 0.0039);
       g.add(screw);
     }
   }
@@ -427,12 +456,12 @@ export function buildSnookerPocket(
     for (let j = 0; j <= down; j++) {
       const t = j / down;
       // The bag sags outward a little between the rim and the ring.
-      const bulge = 0.014 * Math.sin(Math.PI * Math.pow(t, 0.8));
+      const bulge = 0.006 * Math.sin(Math.PI * Math.pow(t, 0.7));
       const bx = q.centre.x + Math.cos(th) * ringR;
       const by = q.centre.y + Math.sin(th) * ringR;
       const x = top0.x + (bx - top0.x) * t + Math.cos(th) * bulge;
       const y = top0.y + (by - top0.y) * t + Math.sin(th) * bulge;
-      const z = netTop + (ringZ + 0.002 - netTop) * t;
+      const z = netTop + (ringZ + BAND / 2 - netTop) * t;
       col.push(new Vector3(x, y, z));
     }
     netGrid.push(col);
@@ -446,9 +475,16 @@ export function buildSnookerPocket(
     for (let j = 0; j <= down; j++)
       uvs.setXY(k * (down + 1) + j, (k / around) * reps, (j / down) * depthReps);
   g.add(new Mesh(netGeo, m.net));
-  const ring = new Mesh(new TorusGeometry(ringR, 0.004, 10, 40), m.brass);
-  ring.position.set(q.centre.x, q.centre.y, ringZ);
-  g.add(ring);
+  // A turned brass collar the net is laced to, with a rolled lip top and bottom.
+  const band = new Mesh(new CylinderGeometry(ringR + 0.003, ringR + 0.002, BAND, 40, 1, true), m.brass);
+  band.rotation.x = Math.PI / 2;
+  band.position.set(q.centre.x, q.centre.y, ringZ);
+  g.add(band);
+  for (const k of [-1, 1]) {
+    const lip = new Mesh(new TorusGeometry(ringR + 0.003, 0.0025, 8, 40), m.brass);
+    lip.position.set(q.centre.x, q.centre.y, ringZ + (k * BAND) / 2);
+    g.add(lip);
+  }
 
   // ---- Ball rails: out from under the ring past the frieze, then along the side of the table.
   const sy = Math.sign(p.position.y) || 1;
