@@ -1,17 +1,17 @@
 import { CUE_SHAPE, type ShotInput } from '@cuesports/physics';
 import {
   BoxGeometry,
-  CapsuleGeometry,
   CylinderGeometry,
   Group,
   Matrix4,
   Mesh,
   MeshStandardMaterial,
-  SphereGeometry,
   Vector3,
   type BufferGeometry,
   type Material,
+  type Object3D,
 } from 'three';
+import { buildFigure, type FigureParts, type Look } from './figure';
 import {
   add,
   alongPath,
@@ -51,15 +51,7 @@ export interface StanceInput {
   gap: number;
 }
 
-export interface Look {
-  skin: string;
-  hair: string;
-  shirt: string;
-  trousers: string;
-  shoes: string;
-  /** Snooker dress: a waistcoat over the shirt and a bow tie. */
-  waistcoat?: string;
-}
+export type { Look } from './figure';
 
 export type Want = { kind: 'shoot'; stance: StanceInput } | { kind: 'watch'; at?: P2 } | { kind: 'sit' };
 
@@ -72,7 +64,7 @@ const TORSO = 0.52;
 const NECK = 0.17;
 const SHOULDER = 0.18;
 const HIP = 0.1;
-const PELVIS_Z = 0.92;
+const PELVIS_Z = 0.97;
 const FOOT_Z = 0.06;
 /** Clearance kept between the body and the outside of the rail. */
 const BODY_CLEAR = 0.14;
@@ -426,7 +418,7 @@ const tmpB = new Vector3();
 const basis = new Matrix4();
 
 /** Points a mesh built along +y (centred) from a to b, stretching it to fit. */
-function span(m: Mesh, a: P3, b: P3, baseLen: number): void {
+function span(m: Object3D, a: P3, b: P3, baseLen: number): void {
   tmpA.set(a.x, a.y, a.z);
   tmpB.set(b.x, b.y, b.z);
   const d = tmpB.clone().sub(tmpA);
@@ -445,7 +437,7 @@ export class Character {
   readonly group = new Group();
   /** The chair, placed in the scene separately from the body. */
   readonly chair = new Group();
-  private readonly parts: Record<string, Mesh> = {};
+  private readonly fig: FigureParts;
   private readonly cue = new Group();
   private readonly restMesh: Mesh;
   private readonly geos: BufferGeometry[] = [];
@@ -474,35 +466,14 @@ export class Character {
       return m;
     };
     const geo = <G extends BufferGeometry>(g: G) => (this.geos.push(g), g);
-    const skin = mat(look.skin, 0.6);
-    const shirt = mat(look.shirt);
-    const trousers = mat(look.trousers);
-    const shoes = mat(look.shoes, 0.35);
-    const torsoMat = look.waistcoat ? mat(look.waistcoat, 0.55) : shirt;
-    const add = (name: string, g: BufferGeometry, m: Material) => {
-      const mesh = new Mesh(g, m);
-      this.parts[name] = mesh;
-      this.group.add(mesh);
-      return mesh;
-    };
-    add('torso', geo(new CapsuleGeometry(0.13, TORSO - 0.2, 4, 10)), torsoMat);
-    add('hips', geo(new SphereGeometry(0.15, 12, 8)), trousers).scale.set(1, 0.7, 1);
-    add('head', geo(new SphereGeometry(0.1, 16, 12)), skin);
-    add(
-      'hair',
-      geo(new SphereGeometry(0.104, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.55)),
-      mat(look.hair, 0.9),
+    this.fig = buildFigure(
+      look,
+      { upperArm: UPPER_ARM, forearm: FOREARM, thigh: THIGH, shin: SHIN, neck: NECK },
+      { geo, mat: (m) => (this.mats.push(m), m) },
     );
-    add('neckM', geo(new CylinderGeometry(0.045, 0.05, NECK, 8)), skin);
-    for (const side of ['l', 'r']) {
-      add(`${side}Upper`, geo(new CapsuleGeometry(0.048, UPPER_ARM - 0.06, 3, 8)), shirt);
-      add(`${side}Fore`, geo(new CapsuleGeometry(0.04, FOREARM - 0.05, 3, 8)), look.waistcoat ? shirt : skin);
-      add(`${side}HandM`, geo(new SphereGeometry(0.045, 10, 8)), skin);
-      add(`${side}Thigh`, geo(new CapsuleGeometry(0.07, THIGH - 0.1, 3, 8)), trousers);
-      add(`${side}Shin`, geo(new CapsuleGeometry(0.055, SHIN - 0.08, 3, 8)), trousers);
-      add(`${side}Shoe`, geo(new BoxGeometry(0.1, 0.07, 0.27)), shoes);
-    }
-    if (look.waistcoat) add('bow', geo(new BoxGeometry(0.09, 0.03, 0.03)), mat('#111', 0.4));
+    const f = this.fig;
+    this.group.add(f.torso, f.hips, f.head, f.neck);
+    for (const side of ['l', 'r'] as const) this.group.add(...Object.values(f.limbs[side]));
 
     // The player's own cue, shown while standing, walking and sitting.
     const cueGeo = geo(new CylinderGeometry(CUE_SHAPE.tipRadius, CUE_SHAPE.buttRadius, CUE_LEN, 10));
@@ -677,7 +648,7 @@ export class Character {
   }
 
   private apply(p: Pose): void {
-    const P = this.parts;
+    const F = this.fig;
     // Torso: centred between pelvis and neck, its width across the shoulders.
     const up = norm(sub(p.neck, p.pelvis));
     const across = norm(sub(p.rSh, p.lSh));
@@ -688,41 +659,43 @@ export class Character {
       new Vector3(up.x, up.y, up.z),
       new Vector3(fwd.x, fwd.y, fwd.z),
     );
-    const torso = P.torso!;
-    torso.quaternion.setFromRotationMatrix(basis);
+    F.torso.quaternion.setFromRotationMatrix(basis);
     const mid = lerp3(p.pelvis, p.neck, 0.5);
-    torso.position.set(mid.x, mid.y, mid.z);
-    torso.scale.set(1.25, 1, 0.8);
-    const hips = P.hips!;
-    hips.position.set(p.pelvis.x, p.pelvis.y, p.pelvis.z);
-    hips.quaternion.copy(torso.quaternion);
-    span(P.neckM!, p.neck, p.head, NECK);
-    P.head!.position.set(p.head.x, p.head.y, p.head.z);
-    P.hair!.position.copy(P.head!.position);
-    // Hair cap points away from the face: up the neck line, tilted back.
-    const back = norm(sub(p.head, p.neck));
-    P.hair!.quaternion.setFromUnitVectors(
-      UP,
-      new Vector3(back.x - fwd.x * 0.3, back.y - fwd.y * 0.3, back.z - fwd.z * 0.3).normalize(),
+    F.torso.position.set(mid.x, mid.y, mid.z);
+    F.torso.scale.set(1, len(sub(p.neck, p.pelvis)) / TORSO, 1);
+    F.hips.position.set(p.pelvis.x, p.pelvis.y, p.pelvis.z);
+    F.hips.quaternion.copy(F.torso.quaternion);
+    span(F.neck, p.neck, p.head, NECK);
+    // Head: upright, facing where the body faces (along the cue when down on a shot).
+    const face = norm(v3(fwd.x + up.x, fwd.y + up.y, 0.15 * (fwd.z + up.z)));
+    const hx = norm(cross(v3(0, 0, 1), face));
+    const hy = norm(cross(face, hx));
+    basis.makeBasis(
+      new Vector3(hx.x, hx.y, hx.z),
+      new Vector3(hy.x, hy.y, hy.z),
+      new Vector3(face.x, face.y, face.z),
     );
-    if (P.bow) {
-      const b = add(lerp3(p.neck, p.head, 0.15), scale(fwd, 0.06));
-      P.bow.position.set(b.x, b.y, b.z);
-      P.bow.quaternion.copy(torso.quaternion);
-    }
+    F.head.quaternion.setFromRotationMatrix(basis);
+    const hc = add(p.head, scale(hy, -0.035));
+    F.head.position.set(hc.x, hc.y, hc.z);
     for (const [s, sh, el, hand, hip, knee, foot] of [
       ['l', p.lSh, p.lEl, p.lHand, p.lHip, p.lKnee, p.lFoot],
       ['r', p.rSh, p.rEl, p.rHand, p.rHip, p.rKnee, p.rFoot],
     ] as const) {
-      span(P[`${s}Upper`]!, sh, el, UPPER_ARM);
-      span(P[`${s}Fore`]!, el, hand, FOREARM);
-      P[`${s}HandM`]!.position.set(hand.x, hand.y, hand.z);
-      span(P[`${s}Thigh`]!, hip, knee, THIGH);
-      span(P[`${s}Shin`]!, knee, foot, SHIN);
-      const shoe = P[`${s}Shoe`]!;
-      const toe = add(foot, scale(p.toes, 0.07));
-      shoe.position.set(toe.x, toe.y, foot.z - 0.03);
-      shoe.rotation.set(0, 0, Math.atan2(p.toes.y, p.toes.x) - Math.PI / 2);
+      const L = F.limbs[s];
+      L.shoulder.position.set(sh.x, sh.y, sh.z);
+      span(L.upper, sh, el, UPPER_ARM);
+      L.elbow.position.set(el.x, el.y, el.z);
+      span(L.fore, el, hand, FOREARM);
+      // Hand continues the forearm from the wrist.
+      const wrist = norm(sub(hand, el));
+      L.hand.position.set(hand.x, hand.y, hand.z);
+      L.hand.quaternion.setFromUnitVectors(UP, new Vector3(wrist.x, wrist.y, wrist.z));
+      span(L.thigh, hip, knee, THIGH);
+      L.knee.position.set(knee.x, knee.y, knee.z);
+      span(L.shin, knee, foot, SHIN);
+      L.shoe.position.set(foot.x, foot.y, foot.z - 0.005);
+      L.shoe.rotation.set(0, 0, Math.atan2(p.toes.y, p.toes.x) - Math.PI / 2);
     }
     // Own cue from butt to tip.
     tmpA.set(p.cueButt.x, p.cueButt.y, p.cueButt.z);
@@ -749,31 +722,4 @@ function turnToward(a: number, b: number, k: number): number {
   while (d > Math.PI) d -= 2 * Math.PI;
   while (d < -Math.PI) d += 2 * Math.PI;
   return a + d * Math.min(1, k);
-}
-
-/** Outfits for the two players at the table. */
-export function looksFor(game: string): [Look, Look] {
-  if (game.startsWith('snooker'))
-    return [
-      {
-        skin: '#e0b48f',
-        hair: '#3a2a1c',
-        shirt: '#f4f4f0',
-        trousers: '#18181c',
-        shoes: '#0d0d0d',
-        waistcoat: '#1d2a44',
-      },
-      {
-        skin: '#8d5a3b',
-        hair: '#121010',
-        shirt: '#f4f4f0',
-        trousers: '#18181c',
-        shoes: '#0d0d0d',
-        waistcoat: '#4a1620',
-      },
-    ];
-  return [
-    { skin: '#e0b48f', hair: '#3a2a1c', shirt: '#2a5bd7', trousers: '#2b2f3a', shoes: '#ececec' },
-    { skin: '#8d5a3b', hair: '#121010', shirt: '#c8382e', trousers: '#3a3328', shoes: '#1a1a1a' },
-  ];
 }
