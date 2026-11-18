@@ -15,7 +15,6 @@ export interface MatchHudCallbacks {
   onHome(): void;
 }
 
-
 /** What a snooker player is on, in words. */
 function onLabel(turn: Turn): string {
   if (turn.mustNominate) return 'a colour';
@@ -31,7 +30,7 @@ export class MatchHud {
   private toast = h('div', { className: 'toast', role: 'status', hidden: true, title: 'Tap to hide' });
   private pushBtn = h('button', { className: 'chip push', hidden: true }, 'Push out');
   private callBtn = h('button', { className: 'chip call', hidden: true, ariaLabel: 'Called shot' });
-  private picker = h('div', { className: 'sheet call-sheet', hidden: true });
+  private picker = h('div', { className: 'pick-bar', hidden: true });
   private decision = h('div', { className: 'sheet decision-sheet', hidden: true });
   private result = h('div', { className: 'sheet result-sheet', hidden: true });
   private toastTimer = 0;
@@ -44,14 +43,7 @@ export class MatchHud {
       cb.onPushOut(this.pushOn);
     });
     this.toast.addEventListener('click', () => (this.toast.hidden = true));
-    this.root.append(
-      this.toast,
-      this.pushBtn,
-      this.callBtn,
-      this.decision,
-      this.result,
-      this.picker,
-    );
+    this.root.append(this.toast, this.pushBtn, this.callBtn, this.decision, this.result, this.picker);
   }
 
   /** Shows the scoreboard for the current turn, or hides it (practice). */
@@ -143,85 +135,21 @@ export class MatchHud {
     this.callBtn.classList.toggle('on', manual);
   }
 
-  /** Lets the player nominate a ball (snooker). */
-  openNominatePicker(balls: string[], onPick: (ball: string | null) => void): void {
-    const done = (b: string | null) => {
-      this.picker.hidden = true;
-      onPick(b);
-    };
+  /**
+   * Shows the slim bar used while picking a ball/pocket on the table (top-down view), or hides it
+   * when `text` is null. The table itself stays visible and clickable.
+   */
+  showPickBar(text: string | null, actions: { label: string; run: () => void }[] = []): void {
+    this.picker.hidden = text === null;
+    if (text === null) return;
     this.picker.replaceChildren(
-      h('h2', {}, 'Nominate a ball'),
+      h('p', { className: 'help' }, text),
       h(
         'div',
         { className: 'row wrap' },
-        ...balls.map((b) => h('button', { className: 'chip', onclick: () => done(b) }, b)),
-      ),
-      h(
-        'div',
-        { className: 'row' },
-        h('button', { className: 'chip', onclick: () => done(null) }, 'Auto from aim'),
-        h('button', { className: 'chip', onclick: () => (this.picker.hidden = true) }, 'Cancel'),
+        ...actions.map((a) => h('button', { className: 'chip', onclick: a.run }, a.label)),
       ),
     );
-    this.picker.hidden = false;
-  }
-
-  /** Lets the player pick a ball and pocket, or a safety. */
-  openCallPicker(balls: string[], pockets: { id: string; label: string }[]): void {
-    let ball: string | null = null;
-    const pocketRow = h('div', { className: 'row wrap' });
-    const ballRow = h('div', { className: 'row wrap' });
-    const done = (c: CallChoice) => {
-      this.picker.hidden = true;
-      this.cb.onCall(c);
-    };
-    const showPockets = () => {
-      pocketRow.replaceChildren(
-        ...pockets.map((p) =>
-          h(
-            'button',
-            {
-              className: 'chip',
-              disabled: ball === null,
-              onclick: () => ball && done({ ball, pocket: p.id }),
-            },
-            p.label,
-          ),
-        ),
-      );
-    };
-    ballRow.append(
-      ...balls.map((b) =>
-        h(
-          'button',
-          {
-            className: 'chip',
-            onclick: (e: MouseEvent) => {
-              ball = b;
-              for (const x of ballRow.children) x.classList.remove('on');
-              (e.currentTarget as HTMLElement).classList.add('on');
-              showPockets();
-            },
-          },
-          b,
-        ),
-      ),
-    );
-    showPockets();
-    this.picker.replaceChildren(
-      h('h2', {}, 'Call your shot'),
-      h('p', { className: 'help' }, 'Pick a ball, then a pocket.'),
-      ballRow,
-      pocketRow,
-      h(
-        'div',
-        { className: 'row' },
-        h('button', { className: 'chip', onclick: () => done('safety') }, 'Safety'),
-        h('button', { className: 'chip', onclick: () => done(null) }, 'Auto from aim'),
-        h('button', { className: 'chip', onclick: () => (this.picker.hidden = true) }, 'Cancel'),
-      ),
-    );
-    this.picker.hidden = false;
   }
 
   onCallClick(handler: () => void): void {
