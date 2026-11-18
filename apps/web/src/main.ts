@@ -11,9 +11,12 @@ import {
   Color,
   Fog,
   HemisphereLight,
+  Mesh,
+  MeshBasicMaterial,
   PMREMGenerator,
   Plane,
   Raycaster,
+  RingGeometry,
   Scene,
   SpotLight,
   Vector2,
@@ -35,7 +38,7 @@ import { computeGuide, launchDirection, pocketAhead } from './game/guide';
 import { SimClient } from './game/sim-client';
 import { BallsView } from './render/balls-view';
 import { CameraRig, type CameraMode } from './render/cameras';
-import { physicsGroup, toPhysics } from './render/coords';
+import { physicsGroup, toPhysics, toWorld } from './render/coords';
 import { CueView } from './render/cue-view';
 import { GuideView } from './render/guide-view';
 import { buildTableView, WELL_DEPTH, type TableView } from './render/table-view';
@@ -206,6 +209,7 @@ function syncTurn(): void {
   const t = match.turn;
   manualCall = null;
   manualNominate = null;
+  endPick();
   matchHud.showBoard({
     players: match.config.players,
     score: match.score,
@@ -533,52 +537,50 @@ function undo(): void {
 // ---------------------------------------------------------------------------------------------
 // HUD
 
-const hud = new Hud(
-  {
-    onCamera: (mode: CameraMode) => {
-      rig.setMode(mode);
-      hud.setCamera(mode);
-      dirty = true;
-    },
-    onPull: (p) => {
-      pull = p ?? 0;
-      dirty = true;
-    },
-    onShoot: shoot,
-    onFineAim: (dx) => {
-      shot.aim -= dx * 0.00012;
-      rig.followAimInstantly();
-      dirty = true;
-    },
-    onTip: (a, b) => {
-      shot.tip = { a, b };
-      dirty = true;
-    },
-    onElevation: (deg) => {
-      shot.elevation = (deg * Math.PI) / 180;
-      dirty = true;
-    },
-    onPlaceToggle: (on) => {
-      if (match && match.turn.ballInHand === 'none') {
-        hud.setPlacing(false);
-        matchHud.say('You can only move the cue ball when you have ball in hand.');
-        return;
-      }
-      placing = on;
-      if (on && rig.mode === 'aim') {
-        rig.setMode('top');
-        hud.setCamera('top');
-      }
-      dirty = true;
-    },
-    onReplay: replay,
-    onUndo: undo,
-    onMenu: () => {
-      hud.closeSheets();
-      menu.open('pause', { inMatch: match !== null });
-    },
+const hud = new Hud({
+  onCamera: (mode: CameraMode) => {
+    rig.setMode(mode);
+    hud.setCamera(mode);
+    dirty = true;
   },
-);
+  onPull: (p) => {
+    pull = p ?? 0;
+    dirty = true;
+  },
+  onShoot: shoot,
+  onFineAim: (dx) => {
+    shot.aim -= dx * 0.00012;
+    rig.followAimInstantly();
+    dirty = true;
+  },
+  onTip: (a, b) => {
+    shot.tip = { a, b };
+    dirty = true;
+  },
+  onElevation: (deg) => {
+    shot.elevation = (deg * Math.PI) / 180;
+    dirty = true;
+  },
+  onPlaceToggle: (on) => {
+    if (match && match.turn.ballInHand === 'none') {
+      hud.setPlacing(false);
+      matchHud.say('You can only move the cue ball when you have ball in hand.');
+      return;
+    }
+    placing = on;
+    if (on && rig.mode === 'aim') {
+      rig.setMode('top');
+      hud.setCamera('top');
+    }
+    dirty = true;
+  },
+  onReplay: replay,
+  onUndo: undo,
+  onMenu: () => {
+    hud.closeSheets();
+    menu.open('pause', { inMatch: match !== null });
+  },
+});
 app.append(hud.root);
 
 const matchHud: MatchHud = new MatchHud({
@@ -676,19 +678,128 @@ function quitToHome(): void {
 }
 // The scoreboard lives in the top bar, next to the menu button.
 hud.placeInTop(matchHud.board);
-matchHud.onCallClick(() => {
-  if (match?.turn.mustNominate) {
-    matchHud.openNominatePicker(match.turn.targets, (b) => {
-      manualNominate = b;
-      dirty = true;
-    });
+// ---------------------------------------------------------------------------------------------
+// Calling a shot / nominating a ball by tapping the table in the top-down view
+
+interface Pick {
+  kind: 'call' | 'nominate';
+  /** Balls that may be picked. */
+  candidates: string[];
+  ball: string | null;
+  /** Camera to return to when done. */
+  back: CameraMode;
+}
+let picking: Pick | null = null;
+
+const pickRing = new Mesh(
+  new RingGeometry(1.35, 1.75, 40),
+  new MeshBasicMaterial({ color: '#ffd84a', transparent: true, opacity: 0.9, depthTest: false }),
+);
+pickRing.renderOrder = 10;
+pickRing.visible = false;
+world.add(pickRing);
+
+function markBall(id: string | null): void {
+  const b = id ? balls.find((x) => x.id === id) : undefined;
+  pickRing.visible = !!b;
+  if (b) {
+    pickRing.scale.setScalar(b.radius);
+    pickRing.position.set(b.pos.x, b.pos.y, b.radius * 2.2);
+  }
+  dirty = true;
+}
+
+function updatePickBar(): void {
+  if (!picking) return matchHud.showPickBar(null);
+  const cancel = { label: 'Cancel', run: () => endPick() };
+  const auto = {
+    label: 'Auto from aim',
+    run: () => {
+      if (picking?.kind === 'nominate') manualNominate = null;
+      else manualCall = null;
+      endPick();
+    },
+  };
+  if (picking.kind === 'nominate') {
+    matchHud.showPickBar('Tap the ball you are nominating.', [auto, cancel]);
     return;
   }
-  matchHud.openCallPicker(
-    numberedOnTable(balls),
-    game.table.pockets.map((p) => ({ id: p.id, label: pocketName(p.id) })),
-  );
-});
+  const text = picking.ball ? `Ball ${picking.ball}: now tap the pocket.` : 'Tap the ball you are calling.';
+  const actions = [{ label: 'Safety', run: () => ((manualCall = 'safety'), endPick()) }, auto, cancel];
+  if (picking.ball && picking.candidates.length > 1)
+    actions.unshift({
+      label: 'Change ball',
+      run: () => ((picking!.ball = null), markBall(null), updatePickBar()),
+    });
+  matchHud.showPickBar(text, actions);
+}
+
+function startPick(): void {
+  if (!match || phase !== 'aim' || aiTurn()) return;
+  const nominate = !!match.turn.mustNominate;
+  const candidates = nominate ? match.turn.targets : numberedOnTable(balls);
+  if (candidates.length === 0) return;
+  picking = {
+    kind: nominate ? 'nominate' : 'call',
+    candidates,
+    // With only one ball left the choice of ball is irrelevant: go straight to the pocket.
+    ball: !nominate && candidates.length === 1 ? candidates[0]! : null,
+    back: picking?.back ?? rig.mode,
+  };
+  rig.setMode('top');
+  hud.setCamera('top');
+  markBall(picking.ball);
+  updatePickBar();
+}
+
+function endPick(): void {
+  if (!picking) return;
+  const back = picking.back;
+  picking = null;
+  pickRing.visible = false;
+  matchHud.showPickBar(null);
+  if (back !== 'top') {
+    rig.setMode(back);
+    hud.setCamera(back);
+  }
+  dirty = true;
+}
+
+/** Handles a tap on the table while picking. */
+function pickAt(p: { x: number; y: number }): void {
+  if (!picking) return;
+  const near = (id: string) => {
+    const b = balls.find((x) => x.id === id && x.state !== 'pocketed');
+    return b ? Math.hypot(b.pos.x - p.x, b.pos.y - p.y) / b.radius : Infinity;
+  };
+  let best: string | null = null;
+  for (const id of picking.candidates) if (near(id) < 2.5 && (!best || near(id) < near(best))) best = id;
+  if (picking.kind === 'nominate') {
+    if (!best) return;
+    manualNominate = best;
+    endPick();
+    return;
+  }
+  // A tap on a ball (re)selects the ball; otherwise, with a ball chosen, it picks the nearest pocket.
+  if (best && (!picking.ball || best !== picking.ball)) {
+    picking.ball = best;
+    markBall(best);
+    updatePickBar();
+    return;
+  }
+  if (!picking.ball) return;
+  let pocket: string | null = null;
+  let dist = Infinity;
+  for (const pk of game.table.pockets) {
+    const d = Math.hypot(pk.position.x - p.x, pk.position.y - p.y);
+    if (d < dist) [pocket, dist] = [pk.id, d];
+  }
+  if (!pocket || dist > game.table.playfield.width * 0.3) return;
+  manualCall = { ball: picking.ball, pocket };
+  endPick();
+}
+
+matchHud.onCallClick(() => (picking ? endPick() : startPick()));
 hud.setCamera('aim');
 
 // ---------------------------------------------------------------------------------------------
@@ -726,7 +837,9 @@ canvas.addEventListener('pointerdown', (e) => {
     pinch = { d: Math.hypot(a!.x - b!.x, a!.y - b!.y), y: (a!.y + b!.y) / 2 };
   } else if (phase === 'aim') {
     const p = tablePoint(e.clientX, e.clientY);
-    if (p && placing) placeCue(p);
+    if (picking) {
+      if (p) pickAt(p);
+    } else if (p && placing) placeCue(p);
     else if (p && rig.mode === 'top') aimAtPoint(p);
   }
   dirty = true;
@@ -751,7 +864,7 @@ canvas.addEventListener('pointermove', (e) => {
     dirty = true;
     return;
   }
-  if (phase !== 'aim') return;
+  if (phase !== 'aim' || picking) return;
   if (placing) {
     const p = tablePoint(e.clientX, e.clientY);
     if (p) placeCue(p);
@@ -876,7 +989,7 @@ function frame(now: number): void {
   if (match && phase === 'aim') {
     const pocket = guide?.object ? pocketAhead(game.table, guide.object.from, guide.object.dir) : null;
     autoCall = guide?.object && pocket ? { ball: guide.object.id, pocket } : null;
-    const free = !match.turn.decision && !match.rackResult && !aiTurn();
+    const free = !match.turn.decision && !match.rackResult && !aiTurn() && !picking;
     if (match.turn.mustNominate) {
       const aimed = guide?.object?.id ?? null;
       autoNominate = aimed && match.turn.targets.includes(aimed) ? aimed : null;
@@ -937,9 +1050,13 @@ registerSW({ immediate: true });
         }
       : null,
   }),
-  /** Starts a 9-ball match with default settings. */
-  startMatch: (players?: [string, string]) =>
-    startMatch({ ...DEFAULT_MATCH, players: players ?? DEFAULT_MATCH.players }),
+  /** Starts a match with default settings (9-ball unless another game is given). */
+  startMatch: (players?: [string, string], game?: MatchConfig['game']) =>
+    startMatch({
+      ...DEFAULT_MATCH,
+      players: players ?? DEFAULT_MATCH.players,
+      game: game ?? DEFAULT_MATCH.game,
+    }),
   /** Takes a decision offered to the player at the table (e.g. 'play' or 'pass' after a push out). */
   decide: (choice: string) => {
     if (!match) return;
@@ -985,6 +1102,12 @@ registerSW({ immediate: true });
   /** Jumps to the end of the shot being played. */
   fastForward: () => {
     if (playing) playT = playbackEnd(playing);
+  },
+  /** Screen (client) position of a physics-space point on the table, for driving taps in tests. */
+  screenOf: (x: number, y: number) => {
+    const v = toWorld(x, y, cueBall()?.radius ?? 0.028).project(rig.camera);
+    const r = canvas.getBoundingClientRect();
+    return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
   },
   setCamera: (m: CameraMode) => {
     rig.setMode(m);
