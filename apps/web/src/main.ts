@@ -976,7 +976,10 @@ function frame(now: number): void {
 
   if (menu.isOpen) dirty = true;
   if (cue) {
-    const moving = rig.update(dt, cue.pos, cue.radius, shot.aim);
+    // While aiming the camera rides just above the cue when it is raised (chin on the cue).
+    const cueElevation =
+      phase === 'aim' ? withClearance(shot).elevation : phase === 'striking' ? shot.elevation : 0;
+    const moving = rig.update(dt, cue.pos, cue.radius, shot.aim, cueElevation);
     if (moving) dirty = true;
     if (phase !== 'playing') {
       // The cue draws back as the power bar is pulled, then drives through during the strike.
@@ -1092,6 +1095,11 @@ registerSW({ immediate: true });
     dirty = true;
   },
   /** Sets the aim angle in radians. */
+  /** Sets the cue elevation in degrees. */
+  elevation: (deg: number) => {
+    shot.elevation = (deg * Math.PI) / 180;
+    dirty = true;
+  },
   aim: (rad: number) => {
     shot.aim = rad;
     rig.followAimInstantly();
