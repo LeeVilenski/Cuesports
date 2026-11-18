@@ -36,6 +36,8 @@ const hiddenMat = new MeshBasicMaterial({ visible: false });
 /** Height of the padded leather roll above the rail, and of the brass collar under the net. */
 const PAD = 0.007;
 const BAND = 0.02;
+/** Length of each lobe of the scalloped hem of the leather skirt. */
+const SCALLOP = 0.024;
 
 /** Height of the padded leather top at radius r: a flat crown with rolled edges either side. */
 function domeZ(r: number, r0: number, r1: number, top: number, pad: number): number {
@@ -178,6 +180,7 @@ export interface SnookerPocketMaterials {
   net: MeshStandardMaterial;
   wire: MeshStandardMaterial;
   strap: MeshStandardMaterial;
+  hole: MeshStandardMaterial;
 }
 
 export function snookerPocketMaterials(): SnookerPocketMaterials {
@@ -211,6 +214,7 @@ export function snookerPocketMaterials(): SnookerPocketMaterials {
     // The ball-return rails are polished brass, like the plates and collar.
     wire: new MeshStandardMaterial({ color: '#b8893a', roughness: 0.3, metalness: 0.9, envMapIntensity: 4 }),
     strap: new MeshStandardMaterial({ color: '#4a2a1a', roughness: 0.6, envMapIntensity: 4 }),
+    hole: new MeshStandardMaterial({ color: '#120804', roughness: 0.9 }),
   };
 }
 
@@ -306,13 +310,18 @@ export function buildSnookerPocket(
 
   // ---- Leather: swept round the back of the hole. Each row is a profile across the leather: up
   // the inside of the hole, over the rail, and down the outside as a flap.
-  const rows = 64;
+  const rows = 180;
   const cuts: [number, number][][] = [];
   const grid: Vector3[][] = [];
   const stitchTop: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
   const stitchFlap: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
   const at3 = (r: number, th: number, z: number) =>
     new Vector3(p.position.x + Math.cos(th) * r, p.position.y + Math.sin(th) * r, z);
+  // Lace holes punched along the skirt, one over each scallop of its hem.
+  const eyelets: { p: Vector3; t: Vector3; n: Vector3 }[] = [];
+  let arc = 0;
+  let lastOut: Vector3 | null = null;
+  let lastLobe = Math.floor(-0.5);
   for (let i = 0; i <= rows; i++) {
     const th = at - span + (2 * span * i) / rows;
     const dx = Math.cos(th);
@@ -326,6 +335,12 @@ export function buildSnookerPocket(
     // The flap hangs like a bucket: deep across the middle, rounding off towards the ends.
     const f = Math.cos(((th - at) / span) * (Math.PI / 2));
     const flap = 0.03 + 0.055 * Math.pow(Math.max(0, f), 0.8);
+    // Scalloped hem: a run of shallow rounded lobes along the bottom of the skirt.
+    const outer = at3(rOut, th, 0);
+    if (lastOut) arc += outer.distanceTo(lastOut);
+    lastOut = outer;
+    const phase = arc / SCALLOP;
+    const hem = q.railTop - flap - 0.005 * Math.sqrt(Math.abs(Math.sin(Math.PI * phase)));
     // The top is padded over the iron: a raised roll that flattens out under the brass plates.
     const pad = PAD;
     const z = (r: number) => domeZ(r, rIn, rOut, top, pad);
@@ -338,11 +353,7 @@ export function buildSnookerPocket(
       const r = rIn + ((rOut - rIn) * k) / 10;
       prof.push([r, z(r)]);
     }
-    prof.push(
-      [rOut + 0.001, top - 0.006],
-      [rOut + 0.001, q.railTop - flap + 0.006],
-      [rOut - 0.002, q.railTop - flap],
-    );
+    prof.push([rOut + 0.001, top - 0.006], [rOut + 0.001, hem + 0.004], [rOut - 0.002, hem]);
     grid.push(prof.map(([r, z]) => at3(r, th, z)));
     if (i === 0 || i === rows) cuts.push(prof);
     const t = new Vector3(-dy, dx, 0);
@@ -353,7 +364,26 @@ export function buildSnookerPocket(
         stitchTop.push({ p: at3(rIn + 0.008, th, z(rIn + 0.008) + 0.0005), t, n });
         stitchTop.push({ p: at3(rOut - 0.008, th, z(rOut - 0.008) + 0.0005), t, n });
       }
-      if (overEdge) stitchFlap.push({ p: at3(rOut + 0.0006, th, q.railTop - flap + 0.01), t, n });
+      if (overEdge) {
+        stitchFlap.push({ p: at3(rOut + 0.0006, th, q.railTop - flap + 0.008), t, n });
+        // One hole per lobe, at its middle, in a line just under the roll.
+        const here = Math.floor(phase - 0.5);
+        if (here !== lastLobe && flap > 0.04) {
+          // Face the holes square to the skirt, which follows the rail, not the pocket's radius.
+          const et = new Vector3(-dy, dx, 0);
+          const en = new Vector3(dx, dy, 0);
+          if (Math.abs(Math.abs(outer.x) - q.hx) < Math.abs(Math.abs(outer.y) - q.hy)) {
+            en.set(Math.sign(outer.x), 0, 0);
+            et.set(0, Math.sign(outer.x), 0);
+          } else {
+            en.set(0, Math.sign(outer.y), 0);
+            et.set(-Math.sign(outer.y), 0, 0);
+          }
+          const ep = at3(rOut, th, q.railTop - 0.022).addScaledVector(en, 0.0016);
+          eyelets.push({ p: ep, t: et, n: en });
+        }
+        lastLobe = here;
+      }
     }
   }
   g.add(new Mesh(gridMesh(grid, 0.05), m.leather));
@@ -397,6 +427,16 @@ export function buildSnookerPocket(
   };
   dash(stitchTop, true);
   dash(stitchFlap, false);
+  if (eyelets.length) {
+    const hole = new InstancedMesh(new CylinderGeometry(0.0026, 0.0026, 0.004, 16), m.hole, eyelets.length);
+    const mx = new Matrix4();
+    eyelets.forEach((e, k) => {
+      // Cylinder's axis is local y: point it out through the leather.
+      mx.makeBasis(e.t, e.n, new Vector3(0, 0, 1)).setPosition(e.p);
+      hole.setMatrixAt(k, mx);
+    });
+    g.add(hole);
+  }
 
   // ---- Brass pocket-iron flanges either side, lying along the rail and screwed to it.
   for (const side of [-1, 1]) {
@@ -443,10 +483,11 @@ export function buildSnookerPocket(
     }
   }
 
-  // ---- The cloth lines the hole down through the slate.
+  // ---- The leather lines the hole down through the slate; the cloth stays on the cushions and the
+  // bed, and stops at the jaws.
   const lining = new Shape(q.outline.map((v) => ({ x: v.x, y: v.y }) as never));
-  const liningMat = q.cloth.clone();
-  liningMat.side = DoubleSide;
+  const liningMat = m.leather.clone();
+  liningMat.color.multiplyScalar(0.7);
   const chute = new Mesh(new ExtrudeGeometry(lining, { depth: q.slate, bevelEnabled: false }), [
     hiddenMat,
     liningMat,
