@@ -239,7 +239,7 @@ export function buildSnookerBody(q: SnookerBodyParams): {
       .filter((pk) => Math.abs(pk.pocket.position.y - sign * hy) < 0.16)
       .map((pk) => pk.pocket.position.x)
       .sort((a, b) => a - b);
-    const cuts = [-hx, ...sidePockets, hx];
+    const cuts = sidePockets;
     for (let i = 0; i < cuts.length - 1; i++) {
       const from = cuts[i]! + railGap;
       const to = cuts[i + 1]! - railGap;
