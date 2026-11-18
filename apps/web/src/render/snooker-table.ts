@@ -31,19 +31,24 @@ export const SNOOKER_BODY = {
   railBottom: -0.047,
   mouldingBottom: -0.047,
   /** How far the frieze is set in from the outside of the rails. */
-  friezeInset: 0.12,
+  friezeInset: 0.19,
   friezeBottom: -0.3,
   /** Recesses in the frieze: square at the corners, and at the middle pockets. */
-  cornerRecess: 0.09,
-  middleRecessHalfWidth: 0.12,
-  middleRecessDepth: 0.08,
+  // Set back this far, the frieze clears the nets: no recesses needed.
+  cornerRecess: 0,
+  middleRecessHalfWidth: 0,
+  middleRecessDepth: 0,
   /** Centre of a ball on the ball rails under the ring, below the cloth. */
   wellDepth: 0.21,
 };
 
 /** The frieze's plan: a rectangle with recesses cut at the corners and the middle of the long sides. */
 function friezePlan(hx: number, hy: number, n: number, mw: number, md: number): Vec2[] {
-  return [
+  n = Math.max(0, n);
+  mw = Math.max(0, mw);
+  md = Math.max(0, md);
+  // Without recesses some of these points coincide, which the triangulator mishandles.
+  const pts: Vec2[] = [
     { x: -hx + n, y: -hy },
     { x: -mw, y: -hy },
     { x: -mw, y: -hy + md },
@@ -65,6 +70,10 @@ function friezePlan(hx: number, hy: number, n: number, mw: number, md: number): 
     { x: -hx, y: -hy + n },
     { x: -hx + n, y: -hy + n },
   ];
+  return pts.filter((p, i) => {
+    const q = pts[(i + pts.length - 1) % pts.length]!;
+    return Math.hypot(p.x - q.x, p.y - q.y) > 1e-6;
+  });
 }
 
 function roundedRect(hx: number, hy: number, r: number): Shape {
@@ -315,8 +324,8 @@ export function buildSnookerBody(q: SnookerBodyParams): {
         cornerRadius: B.cornerRadius,
         railWidth: q.trim.railWidth,
         slate: B.slate,
-        runnerOut: fy + lip + q.table.balls.object.radius + 0.006,
-        friezeOut: fy,
+        // Just inside the rail edge, under its overhang, well clear of the frieze.
+        runnerOut: hy - 0.03,
         ballRadius: q.table.balls.object.radius,
         wellDepth: B.wellDepth,
         cloth: q.cloth,

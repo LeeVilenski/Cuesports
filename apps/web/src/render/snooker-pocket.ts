@@ -218,8 +218,6 @@ export interface SnookerPocketParams {
   slate: number;
   /** Distance from the table's centre line out to the line the runners run along. */
   runnerOut: number;
-  /** The frieze face the far end of each runner is strapped to. */
-  friezeOut: number;
   ballRadius: number;
   /** Depth below the slate of the centre of a ball sitting on the runners under the ring. */
   wellDepth: number;
@@ -520,14 +518,15 @@ export function buildSnookerPocket(
     g.add(new Mesh(new TubeGeometry(polyCurve(wire), wire.length * 6, 0.0028, 8, false), m.wire));
     ends.push(new Vector3(stop.x, stop.y, stop.z));
   }
-  // The far end hangs from a leather strap screwed to the frieze.
+  // The far end hangs from a leather strap screwed to the underside of the rail.
   const e = ends[0]!.clone().add(ends[1]!).multiplyScalar(0.5);
-  const anchor = new Vector3(e.x, sy * q.friezeOut, e.z + 0.07);
+  const anchor = new Vector3(e.x, e.y, -q.slate - 0.002);
   g.add(bar(e, anchor, 0.014, 0.003, new Vector3(0, sy, 0), m.strap));
   const cross = bar(ends[0]!, ends[1]!, 0.006, 0.006, new Vector3(0, 0, 1), m.wire);
   g.add(cross);
   const screw = new Mesh(new CylinderGeometry(0.004, 0.004, 0.003, 14), m.brass);
-  screw.position.set(anchor.x, sy * (q.friezeOut + 0.002), anchor.z - 0.005);
+  screw.position.set(anchor.x, anchor.y + sy * 0.003, anchor.z - 0.008);
+  screw.rotation.x = Math.PI / 2;
   g.add(screw);
   return { group: g, runner };
 }
