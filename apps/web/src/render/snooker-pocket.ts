@@ -175,10 +175,10 @@ export function snookerPocketMaterials(): SnookerPocketMaterials {
   return {
     leather: new MeshStandardMaterial({
       map: leatherMap,
-      roughness: 0.62,
+      roughness: 0.76,
       metalness: 0,
       side: DoubleSide,
-      envMapIntensity: 3,
+      envMapIntensity: 2.2,
     }),
     stitch: new MeshStandardMaterial({ color: '#efe3cc', roughness: 0.8, envMapIntensity: 3 }),
     brass: new MeshStandardMaterial({
