@@ -25,12 +25,23 @@ physics engine works.
   matches. Snooker and English pool pockets are tighter and pace-sensitive.
 - **M5 AI:** play against the computer at five levels (Beginner to Pro) in every game. Shot search with the
   real physics and rules, run in a Web Worker. See [docs/ai.md](docs/ai.md).
+- **M6 Characters & cinematics:** first pass. Procedural placeholder players (no assets yet) with an IK
+  stance solved for every shot: bridge hand on the cloth or rail (or a rest when out of reach), chin over
+  the cue, grip hand following the stroke, feet outside the table. They walk round the table to each shot,
+  stay down through the follow-through, and the opponent sits in a chair. Shot cameras: cinematic (follow,
+  then a low cut behind the pocket for each pot; also used for replays), follow, overview or stay. A
+  pull-back stroke mode. Still to come: rigged glTF characters and a proper animation set (chalking,
+  reactions), and walking in from the chair while the AI thinks.
 
 ## Playing the prototype
 
 - **Aim:** drag sideways on the table. Slow drags turn the aim much more finely than fast ones. The strip along
   the bottom is a fine-aim wheel. In the top-down view, drag towards where you want to hit.
-- **Shoot:** pull the power bar on the right down and let go. Drag it back to the top to cancel.
+- **Shoot:** pull the power bar on the right down and let go. Drag it back to the top to cancel. With the
+  Pull back stroke (Settings), pull down to draw the cue back, then push up through the start: the faster
+  the push, the harder the shot (letting go cancels).
+- **Player and shot camera:** Settings has a switch for the player at the table (hidden in the aim view
+  while aiming) and the camera during shots (Cinematic, Follow, Overview or Stay).
 - **Spin and elevation:** tap the small cue ball in the corner.
 - **Camera:** Aim, Top and Free buttons. Pinch or scroll to zoom; drag two fingers up or down to tilt the aim cam.
 - **9-ball match:** the start screen (or the menu's New 9-ball match) sets up names, race length, who breaks

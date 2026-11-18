@@ -1380,3 +1380,8 @@ body {
     width: min(70vw, 320px);
   }
 }
+
+/* Pull-back stroke mode: the bar reads as a stroke pad. */
+.power.stroke {
+  background-image: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 2px, transparent 2px 14px);
+}

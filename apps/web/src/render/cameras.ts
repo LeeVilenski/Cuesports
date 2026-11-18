@@ -27,6 +27,12 @@ export class CameraRig {
   pitch = 13;
   /** During a shot the aim cam can rise to an overview. */
   overview = false;
+  /** During a shot, a follow or cinematic view (physics coordinates) that replaces the aim cam. */
+  shotView: {
+    eye: { x: number; y: number; z: number };
+    look: { x: number; y: number; z: number };
+    cut: boolean;
+  } | null = null;
   private aspect = 1;
   private eye = new Vector3(0, 2, 2);
   private look = new Vector3();
@@ -144,14 +150,20 @@ export class CameraRig {
       R + dist * Math.sin(p),
       tmp,
     ).clone();
-    const look = toWorld(lookAt.x, lookAt.y, lookAt.z);
+    let look = toWorld(lookAt.x, lookAt.y, lookAt.z);
+    if (this.shotView) {
+      const v = this.shotView;
+      eye.copy(toWorld(v.eye.x, v.eye.y, v.eye.z));
+      look = toWorld(v.look.x, v.look.y, v.look.z);
+      if (v.cut) this.snapNext = true;
+    }
     let moving = false;
     if (this.snapNext) {
       this.eye.copy(eye);
       this.look.copy(look);
       this.snapNext = false;
     } else {
-      const k = 1 - Math.exp(-dt * 5);
+      const k = 1 - Math.exp(-dt * (this.shotView ? 3.5 : 5));
       moving = this.eye.distanceToSquared(eye) > 1e-8 || this.look.distanceToSquared(look) > 1e-8;
       this.eye.lerp(eye, k);
       this.look.lerp(look, k);

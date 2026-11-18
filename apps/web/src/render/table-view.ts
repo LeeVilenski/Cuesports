@@ -40,6 +40,8 @@ export interface TableView {
   /** Snooker: the path a potted ball's centre rolls along the wire runners, from under the net. */
   pocketRunners: Map<string, Vec3[]>;
   outer: { hx: number; hy: number };
+  /** Height of the floor (below the cloth, so negative). */
+  floorZ: number;
   dispose(): void;
 }
 
@@ -412,6 +414,7 @@ export function buildTableView(table: TableSpec, env?: Texture | null): TableVie
     pocketRest: rest,
     pocketRunners: runners,
     outer: { hx, hy },
+    floorZ,
     dispose() {
       group.traverse((o) => {
         if (o instanceof Mesh) {

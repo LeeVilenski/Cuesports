@@ -2,8 +2,15 @@ import { DEFAULT_MATCH, type MatchConfig } from '../game/match';
 import { h, icon, iconButton, load, save, segmented, stepper, toggle, type IconName } from './kit';
 
 export type ClothSpeedId = 'fast' | 'medium' | 'slow';
-export type OptionName = 'guide' | 'squirt' | 'overview';
-export type Settings = Record<OptionName, boolean>;
+export type OptionName = 'guide' | 'squirt' | 'player';
+export type ShotCamId = 'overview' | 'follow' | 'cinematic' | 'stay';
+export type StrokeId = 'bar' | 'pull';
+export type Settings = Record<OptionName, boolean> & {
+  shotCam: ShotCamId;
+  stroke: StrokeId;
+  /** Older saves: false meant the camera stayed put during shots. */
+  overview?: boolean;
+};
 
 export interface MenuCallbacks {
   onStart(config: MatchConfig): void;
@@ -15,6 +22,8 @@ export interface MenuCallbacks {
   onQuit(): void;
   onClothSpeed(speed: ClothSpeedId): void;
   onOption(name: OptionName, on: boolean): void;
+  onShotCamera(mode: ShotCamId): void;
+  onStroke(mode: StrokeId): void;
   /** The menu covers the table (true) or has closed and play resumes (false). */
   onVisible(open: boolean): void;
 }
@@ -66,7 +75,15 @@ export class Menu {
     private practiceGames: { id: string; label: string }[],
     private cloth: ClothSpeedId,
   ) {
-    this.settings = load<Settings>(SETTINGS_KEY, { guide: true, squirt: true, overview: true });
+    const saved0 = load<Partial<Settings>>(SETTINGS_KEY, {});
+    this.settings = {
+      guide: true,
+      squirt: true,
+      player: true,
+      shotCam: saved0.overview === false ? 'stay' : 'cinematic',
+      stroke: 'bar',
+      ...saved0,
+    };
     const saved = load<Partial<MatchConfig>>(LAST_MATCH_KEY, {});
     this.config = {
       ...DEFAULT_MATCH,
@@ -214,7 +231,12 @@ export class Menu {
     );
     games.append(...gameButtons);
 
-    const name1 = h('input', { type: 'text', value: c.players[0], maxLength: 16, ariaLabel: 'Player 1 name' });
+    const name1 = h('input', {
+      type: 'text',
+      value: c.players[0],
+      maxLength: 16,
+      ariaLabel: 'Player 1 name',
+    });
     const name2 = h('input', {
       type: 'text',
       value: c.ai ? 'Player 2' : c.players[1],
@@ -270,7 +292,11 @@ export class Menu {
       'div',
       {},
       this.field('Break', breaks.el),
-      toggle('Three fouls lose the rack', c.rules.threeFoulRule, (on) => (c.rules = { ...c.rules, threeFoulRule: on })),
+      toggle(
+        'Three fouls lose the rack',
+        c.rules.threeFoulRule,
+        (on) => (c.rules = { ...c.rules, threeFoulRule: on }),
+      ),
     );
     const reds = segmented(
       'Reds',
@@ -413,6 +439,34 @@ export class Menu {
       this.cloth,
       (v) => this.setCloth(v),
     );
+    const shotCam = segmented<ShotCamId>(
+      'Camera during shots',
+      [
+        { value: 'cinematic', label: 'Cinematic' },
+        { value: 'follow', label: 'Follow' },
+        { value: 'overview', label: 'Overview' },
+        { value: 'stay', label: 'Stay' },
+      ],
+      this.settings.shotCam,
+      (v) => {
+        this.settings.shotCam = v;
+        save(SETTINGS_KEY, this.settings);
+        this.cb.onShotCamera(v);
+      },
+    );
+    const stroke = segmented<StrokeId>(
+      'Stroke control',
+      [
+        { value: 'bar', label: 'Power bar' },
+        { value: 'pull', label: 'Pull back' },
+      ],
+      this.settings.stroke,
+      (v) => {
+        this.settings.stroke = v;
+        save(SETTINGS_KEY, this.settings);
+        this.cb.onStroke(v);
+      },
+    );
     return h(
       'div',
       { className: 'sub settings' },
@@ -423,8 +477,10 @@ export class Menu {
         h('h3', {}, 'Aiming'),
         opt('guide', 'Aiming guide'),
         opt('squirt', 'Guide allows for squirt'),
+        this.field('Stroke', stroke.el),
         h('h3', {}, 'Camera'),
-        opt('overview', 'Rise to overview during shots'),
+        this.field('During shots', shotCam.el),
+        opt('player', 'Show the player at the table'),
         h('h3', {}, 'Table'),
         this.field('Cloth', cloth.el),
         h('p', { className: 'fine-print' }, h('a', { href: '/lab/' }, 'Physics lab ›')),
@@ -443,7 +499,10 @@ export class Menu {
         'div',
         { className: 'scroll' },
         row('hand', 'Drag on the table to aim. Slow drags are finer.'),
-        row('cue', 'Pull the power bar down and let go to shoot.'),
+        row(
+          'cue',
+          'Pull the power bar down and let go to shoot. With Pull back stroke (Settings), pull down, then push up to strike: the faster the push, the harder the shot.',
+        ),
         row('target', 'Tap the cue ball (bottom right) for spin and elevation.'),
         row('camera', 'Tap the camera to switch views. Pinch to zoom.'),
         row('undo', 'Undo and replay: bottom left.'),
@@ -465,7 +524,13 @@ export class Menu {
         { className: 'tiles' },
         this.tile('blue', 'play', 'Resume', '', () => this.close(), 'wide'),
         this.inMatch
-          ? this.tile('orange', 'flag', 'Concede', 'Give up this rack', done(() => this.cb.onConcede()))
+          ? this.tile(
+              'orange',
+              'flag',
+              'Concede',
+              'Give up this rack',
+              done(() => this.cb.onConcede()),
+            )
           : this.tile('green', 'grid', 'Change game', 'Practice tables', () => this.go('practice')),
         this.tile(
           'navy',
