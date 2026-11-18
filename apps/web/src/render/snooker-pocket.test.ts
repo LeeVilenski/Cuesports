@@ -35,9 +35,10 @@ describe('snooker pocket runners', () => {
         const [a, b] = [pts[k - 1]!, pts[k]!];
         expect(Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)).toBeGreaterThanOrEqual(2 * R - 1e-9);
       }
-      // The rails run outside the frieze, clear of it and its base moulding.
+      // The rails run outside the frieze, clear of it and its base moulding, under the rail.
       const frieze = view.outer.hy - SNOOKER_BODY.friezeInset;
       expect(Math.abs(pts[0]!.y) - R).toBeGreaterThan(frieze + 0.012);
+      expect(Math.abs(pts[0]!.y)).toBeLessThan(view.outer.hy);
     });
   }
 });
