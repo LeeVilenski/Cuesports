@@ -50,6 +50,20 @@ import { buildTableView, WELL_DEPTH, type TableView } from './render/table-view'
 import { Hud } from './ui/hud';
 import { MatchHud, type CallChoice } from './ui/match-hud';
 import { Menu } from './ui/menu';
+import { ReplayBar } from './ui/replay-bar';
+import {
+  ballsLabel,
+  compactBalls,
+  expandBalls,
+  firstContact,
+  recordId,
+  reelOfRack,
+  specsOf,
+  type Highlight,
+  type Reel,
+  type ShotRecord,
+} from './game/record';
+import { openStore } from './game/store';
 import '@fontsource/barlow/500.css';
 import '@fontsource/barlow/600.css';
 import '@fontsource/barlow-condensed/700.css';
@@ -166,6 +180,10 @@ let autoCall: CallChoice = null;
 let manualNominate: string | null = null;
 let autoNominate: string | null = null;
 let replaying = false;
+/** Saved shots being watched (from the Replays screen or "Watch again"), or null. */
+let viewer: { reel: Reel; i: number; auto: boolean } | null = null;
+/** Saved matches and highlights. */
+const store = openStore();
 /** Playback frozen at a fixed time (test hook). */
 let frozen = false;
 
@@ -193,6 +211,9 @@ function resetTurnState(): void {
 function setGame(def: GameDef): void {
   resetTurnState();
   match = null;
+  viewer = null;
+  replayBar.show(null);
+  app.classList.remove('viewing');
   matchHud.showBoard(null);
   matchHud.setPushAvailable(false);
   matchHud.showDecision(null);
@@ -240,7 +261,7 @@ function buildPlayers(): void {
     // line playing across the table; up the length, it's the rest.
     restReach: game.table.id.startsWith('snooker') ? 0.85 : 0.8,
   };
-  const picks = presetsFor(match ? match.config.players : ['Player 1', 'Player 2']);
+  const picks = presetsFor(viewer?.reel.players ?? (match ? match.config.players : ['Player 1', 'Player 2']));
   players = picks.map((pi, i) => {
     const c = new Character(lookFor(PRESETS[pi]!, game.table.id));
     // Chairs along one long side, facing the table.
@@ -283,7 +304,10 @@ function playerWants(i: number, cue: BallState | undefined, gap: number): Want {
 function startMatch(config: MatchConfig): void {
   resetTurnState();
   setTable(GAMES.find((g) => g.id === config.game) ?? GAMES[0]!);
-  match = new Match(config, (Math.random() * 1e9) | 0);
+  viewer = null;
+  replayBar.show(null);
+  app.classList.remove('viewing');
+  match = new Match(config, (Math.random() * 1e9) | 0, clothSpeed);
   // Each player gets their own look, chosen from their name.
   buildPlayers();
   matchHud.showResult(null);
@@ -389,7 +413,7 @@ function status(extra = ''): void {
 // Shooting
 
 function shoot(p: number): void {
-  if (phase !== 'aim' || aiTurn()) return;
+  if (phase !== 'aim' || aiTurn() || viewer) return;
   if (match && (match.turn.decision || match.rackResult)) return;
   const cue = cueBall();
   if (!cue || cue.state === 'pocketed') return;
@@ -474,7 +498,10 @@ function endPlayback(): void {
   const result = playing;
   resetSpin();
   if (replaying || match) {
-    if (match && !replaying && last) match.judge(decl, last.before, result);
+    if (match && !replaying && last) {
+      match.judge(decl, last.before, result, last.shot);
+      saveMatch();
+    }
     replaying = false;
     replayShooter = null;
     balls = match ? match.balls.map(cloneBall) : result.final.map(cloneBall);
@@ -491,6 +518,7 @@ function endPlayback(): void {
     cueView.group.visible = true;
     hud.setBusy(false);
     if (match) syncTurn();
+    if (viewer) afterViewedShot();
     dirty = true;
     return;
   }
@@ -637,6 +665,10 @@ function canPlace(cue: BallState, p: { x: number; y: number }): boolean {
 }
 
 function replay(): void {
+  if (viewer) {
+    viewShot(viewer.i, true);
+    return;
+  }
   if (!last || phase !== 'aim') return;
   balls = last.before.map(cloneBall);
   ballsView.showState(balls);
@@ -655,6 +687,7 @@ function replay(): void {
 }
 
 function undo(): void {
+  if (viewer) return;
   if (match) {
     matchHud.say('Undo is only available in practice.');
     return;
@@ -712,7 +745,7 @@ const hud = new Hud({
   onUndo: undo,
   onMenu: () => {
     hud.closeSheets();
-    menu.open('pause', { inMatch: match !== null });
+    menu.open('pause', { inMatch: match !== null, canSave: last !== null && !viewer });
   },
 });
 app.append(hud.root);
@@ -738,6 +771,12 @@ const matchHud: MatchHud = new MatchHud({
     loadRack();
   },
   onNewMatch: () => menu.open('play'),
+  onWatch: () => {
+    if (!match) return;
+    // The match is kept as it was saved: watching leaves it.
+    saveMatch();
+    watch(reelOfRack(match.record, match.rack - 1), true);
+  },
   onHome: () => {
     quitToHome();
     menu.open('home');
@@ -758,6 +797,7 @@ const menu: Menu = new Menu(
     onConcede: () => {
       if (!match || phase !== 'aim') return;
       match.concede();
+      saveMatch();
       syncTurn();
     },
     onQuit: quitToHome,
@@ -777,6 +817,14 @@ const menu: Menu = new Menu(
       dirty = true;
     },
     onShotCamera: (mode) => (shotCamMode = mode),
+    saved: async () => {
+      const st = await store;
+      const [matches, highlights] = await Promise.all([st.matches(), st.highlights()]);
+      return { matches, highlights };
+    },
+    onWatch: (reel) => watch(reel),
+    onDeleteHighlight: async (id) => (await store).deleteHighlight(id),
+    onSaveHighlight: saveHighlight,
     onStroke: (mode) => hud.setStrokeMode(mode),
     onVisible: (open) => {
       app.classList.toggle('menu-open', open);
@@ -808,6 +856,138 @@ shotCamMode = menu.settings.shotCam;
 showPlayer = menu.settings.player;
 hud.setStrokeMode(menu.settings.stroke);
 app.append(menu.root);
+
+// ---------------------------------------------------------------------------------------------
+// Saved matches, highlights and watching them
+
+function saveMatch(): void {
+  if (!match) return;
+  const record = structuredClone(match.record);
+  void store.then((st) => st.putMatch(record)).catch(() => undefined);
+}
+
+/** Keeps the last shot played as a highlight. */
+function saveHighlight(): void {
+  if (!last) return;
+  const fromMatch = match?.rackRecord?.shots.at(-1);
+  const potted = last.result.events.flatMap((e) =>
+    e.type === 'pocket' && e.ball !== last!.shot.ball ? [e.ball] : [],
+  );
+  const rec: ShotRecord = fromMatch ?? {
+    player: 0,
+    before: compactBalls(last.before),
+    shot: structuredClone(last.shot),
+    decl: {},
+    firstHit: firstContact(last.result, last.shot.ball),
+    potted,
+    fouls: [],
+    scored: potted.length,
+    isBreak: false,
+  };
+  const players: [string, string] = match ? [...match.config.players] : ['Player 1', 'Player 2'];
+  const what = rec.potted.length ? `potted ${ballsLabel(rec.potted)}` : 'a shot';
+  const date = Date.now();
+  const h: Highlight = {
+    id: recordId(date),
+    date,
+    title: `${players[rec.player]}: ${what} (${game.label})`,
+    game: match ? match.config.game : null,
+    table: game.id,
+    cloth: clothSpeed,
+    players,
+    specs: specsOf(last.before),
+    shot: rec,
+  };
+  void store
+    .then((st) => st.putHighlight(h))
+    .then(
+      () => (match ? matchHud.say('Shot saved to Replays.') : status('shot saved to Replays')),
+      () => matchHud.say('The shot could not be saved.'),
+    );
+}
+
+/** Leaves whatever is on the table and shows the saved shots, starting from the first. */
+function watch(reel: Reel, fromMatch = false): void {
+  if (!reel.shots.length) return;
+  const def = GAMES.find((g) => g.id === reel.table) ?? GAMES[0]!;
+  setGame(def);
+  viewer = { reel, i: 0, auto: false };
+  viewerFromMatch = fromMatch;
+  simTable = withClothSpeed(def.table, reel.cloth);
+  buildPlayers();
+  app.classList.add('viewing');
+  replayBar.show(reel.title);
+  viewShot(0, false);
+}
+/** Watching was started from a finished rack, so closing goes home rather than to Replays. */
+let viewerFromMatch = false;
+
+function describeShot(s: ShotRecord, players: [string, string]): string {
+  const who = players[s.player] ?? '';
+  if (s.fouls.length) return `${who} · foul`;
+  if (s.potted.length) return `${who} · potted ${ballsLabel(s.potted)}`;
+  return `${who}${s.isBreak ? ' · break' : ''}`;
+}
+
+/** Sets up saved shot i, and plays it if asked. */
+function viewShot(i: number, play: boolean): void {
+  if (!viewer || phase !== 'aim') return;
+  const s = viewer.reel.shots[i];
+  if (!s) return;
+  viewer.i = i;
+  balls = expandBalls(s.before, viewer.reel.specs);
+  ballsView.setBalls(balls);
+  shot = structuredClone(s.shot);
+  replayShooter = s.player;
+  last = null;
+  placePlayers();
+  rig.snap();
+  replayBar.setShot(i, viewer.reel.shots.length, describeShot(s, viewer.reel.players), play);
+  dirty = true;
+  if (!play) return;
+  const v = viewer;
+  replaying = true;
+  pending = null;
+  hud.setBusy(true);
+  phase = 'striking';
+  strikeT = -REPLAY_PREROLL;
+  pull = 0.5;
+  cueView.group.visible = true;
+  void sim.run(simTable, balls.map(cloneBall), structuredClone(s.shot)).then((r) => {
+    if (viewer === v) pending = r;
+  });
+}
+
+function afterViewedShot(): void {
+  if (!viewer) return;
+  const v = viewer;
+  const s = v.reel.shots[v.i]!;
+  replayShooter = s.player;
+  const more = v.i < v.reel.shots.length - 1;
+  replayBar.setShot(v.i, v.reel.shots.length, describeShot(s, v.reel.players), false);
+  if (v.auto && more) window.setTimeout(() => viewer === v && viewShot(v.i + 1, true), 900);
+  else if (v.auto) {
+    v.auto = false;
+    replayBar.setAuto(false);
+  }
+}
+
+const replayBar = new ReplayBar({
+  onStep: (d) => viewer && viewShot(viewer.i + d, false),
+  onPlay: () => viewer && viewShot(viewer.i, true),
+  onAuto: (on) => {
+    if (!viewer) return;
+    viewer.auto = on;
+    // From the last shot, play all starts again at the first.
+    if (on && phase === 'aim') viewShot(viewer.i >= viewer.reel.shots.length - 1 ? 0 : viewer.i, true);
+  },
+  onClose: () => {
+    const home = viewerFromMatch;
+    quitToHome();
+    menu.open(home ? 'home' : 'replays');
+  },
+});
+app.append(replayBar.root);
 
 /** Back to a practice rack behind the home screen. */
 function quitToHome(): void {

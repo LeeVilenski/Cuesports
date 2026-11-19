@@ -1,4 +1,6 @@
 import { DEFAULT_MATCH, type MatchConfig } from '../game/match';
+import { reelOfHighlight, reelOfRack, type Highlight, type MatchRecord, type Reel } from '../game/record';
+import { knownPlayers, percent, playerStats } from '../game/stats';
 import { h, icon, iconButton, load, save, segmented, stepper, toggle, type IconName } from './kit';
 
 export type ClothSpeedId = 'fast' | 'medium' | 'slow';
@@ -26,9 +28,16 @@ export interface MenuCallbacks {
   onStroke(mode: StrokeId): void;
   /** The menu covers the table (true) or has closed and play resumes (false). */
   onVisible(open: boolean): void;
+  /** Saved matches and highlights, newest first. */
+  saved(): Promise<{ matches: MatchRecord[]; highlights: Highlight[] }>;
+  /** Watch a saved frame or highlight shot by shot. */
+  onWatch(reel: Reel): void;
+  onDeleteHighlight(id: string): Promise<void>;
+  /** Pause sheet: keep the last shot as a highlight. */
+  onSaveHighlight(): void;
 }
 
-type Screen = 'home' | 'play' | 'practice' | 'settings' | 'help' | 'pause';
+type Screen = 'home' | 'play' | 'practice' | 'settings' | 'help' | 'pause' | 'stats' | 'replays';
 
 const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: string }[] = [
   { id: 'nine-ball', label: '9-Ball', ball: '#f2c14e', sub: '9' },
@@ -68,6 +77,9 @@ export class Menu {
   private screen: Screen = 'home';
   private stack: Screen[] = [];
   private inMatch = false;
+  private canSave = false;
+  private statsPlayer: string | null = null;
+  private statsGame: MatchConfig['game'] | 'all' = 'all';
   private quickSub = h('small', {});
 
   constructor(
@@ -102,8 +114,9 @@ export class Menu {
     return !this.root.hidden;
   }
 
-  open(screen: Screen, ctx: { inMatch?: boolean } = {}): void {
+  open(screen: Screen, ctx: { inMatch?: boolean; canSave?: boolean } = {}): void {
     if (ctx.inMatch !== undefined) this.inMatch = ctx.inMatch;
+    this.canSave = ctx.canSave ?? false;
     this.stack = [];
     this.show(screen);
   }
@@ -137,6 +150,8 @@ export class Menu {
       settings: () => this.settingsScreen(),
       help: () => this.help(),
       pause: () => this.pause(),
+      stats: () => this.stats(),
+      replays: () => this.replays(),
     };
     const panel = build[screen]();
     panel.classList.add('panel', 'enter');
@@ -208,6 +223,8 @@ export class Menu {
         this.tile('green', 'target', 'Practice', 'Free table', () => this.go('practice')),
         this.tile('yellow', 'trophy', 'Career', 'Coming soon', null),
         this.tile('purple', 'globe', 'Online', 'Coming soon', null),
+        this.tile('navy', 'chart', 'Stats', 'Pots, breaks, wins', () => this.go('stats')),
+        this.tile('navy', 'replay', 'Replays', 'Frames and highlights', () => this.go('replays')),
       ),
       h(
         'div',
@@ -539,6 +556,15 @@ export class Menu {
           this.inMatch ? 'New match, same set-up' : 'Fresh balls',
           done(() => this.cb.onRestart()),
         ),
+        this.canSave
+          ? this.tile(
+              'navy',
+              'star',
+              'Save last shot',
+              'Keep it as a highlight',
+              done(() => this.cb.onSaveHighlight()),
+            )
+          : '',
         this.tile('navy', 'settings', 'Settings', '', () => this.go('settings')),
         this.tile('navy', 'home', 'Home', '', () => {
           this.cb.onQuit();
@@ -546,6 +572,179 @@ export class Menu {
         }),
       ),
     );
+  }
+
+  /** A screen whose body fills in once the saved data has loaded. */
+  private async(cls: string, title: string, fill: (body: HTMLElement) => Promise<void>): HTMLElement {
+    const body = h('div', { className: 'scroll' }, h('p', { className: 'fine-print' }, 'Loading…'));
+    const screen = this.screen;
+    void (async () => {
+      const out = h('div', { className: 'scroll' });
+      try {
+        await fill(out);
+      } catch {
+        out.replaceChildren(h('p', { className: 'fine-print' }, 'Saved data could not be read.'));
+      }
+      if (this.screen === screen) body.replaceWith(out);
+    })();
+    return h('div', { className: `sub ${cls}` }, this.header(title), body);
+  }
+
+  private stats(): HTMLElement {
+    return this.async('stats', 'Stats', async (out) => {
+      const { matches } = await this.cb.saved();
+      const names = knownPlayers(matches);
+      if (!names.length) {
+        out.append(h('p', { className: 'empty' }, 'Play a match and your stats appear here.'));
+        return;
+      }
+      const player = this.statsPlayer && names.includes(this.statsPlayer) ? this.statsPlayer : names[0]!;
+      const grid = h('div', { className: 'stat-grid' });
+      const draw = () => {
+        const game = this.statsGame === 'all' ? undefined : this.statsGame;
+        const s = playerStats(matches, { player: this.statsPlayer ?? player, game });
+        const cell = (label: string, value: string, sub = '') =>
+          h(
+            'div',
+            { className: 'stat' },
+            h('strong', {}, value),
+            h('span', {}, label),
+            sub ? h('small', {}, sub) : '',
+          );
+        const snooker = game === 'snooker';
+        grid.replaceChildren(
+          cell('Matches won', percent(s.matchesWon, s.matches), `${s.matchesWon} of ${s.matches}`),
+          cell(
+            snooker ? 'Frames won' : 'Racks won',
+            percent(s.racksWon, s.racks),
+            `${s.racksWon} of ${s.racks}`,
+          ),
+          cell('Pot success', percent(s.pots, s.potAttempts), `${s.pots} of ${s.potAttempts}`),
+          cell('Long pots', percent(s.longPots, s.longAttempts), `${s.longPots} of ${s.longAttempts}`),
+          cell('Safety success', percent(s.safetiesWon, s.safeties), `${s.safetiesWon} of ${s.safeties}`),
+          cell(
+            'Highest break',
+            String(s.highestBreak),
+            snooker ? 'points' : game ? 'balls' : 'points or balls',
+          ),
+          ...(game === undefined || snooker ? [cell('Centuries', String(s.centuries))] : []),
+          ...(!snooker
+            ? [cell('Run-outs', String(s.runOuts)), cell('Break and runs', String(s.breakAndRuns))]
+            : []),
+          cell('Fouls', String(s.fouls), `in ${s.shots} shots`),
+        );
+      };
+      const who = segmented(
+        'Player',
+        names.slice(0, 4).map((n) => ({ value: n, label: n })),
+        player,
+        (v) => {
+          this.statsPlayer = v;
+          draw();
+        },
+      );
+      const games = segmented<MatchConfig['game'] | 'all'>(
+        'Game',
+        [{ value: 'all', label: 'All' }, ...MATCH_GAMES.map((g) => ({ value: g.id, label: g.label }))],
+        this.statsGame,
+        (v) => {
+          this.statsGame = v;
+          draw();
+        },
+      );
+      draw();
+      out.append(
+        this.field('Player', who.el),
+        this.field('Game', games.el),
+        grid,
+        h(
+          'p',
+          { className: 'fine-print' },
+          'A pot attempt is any shot but a break, push out or declared safety. A long pot starts half a table or more from the cue ball. A safety is a legal shot that pots nothing; it works when the next shot pots nothing or fouls.',
+        ),
+      );
+    });
+  }
+
+  private replays(): HTMLElement {
+    return this.async('replays', 'Replays', async (out) => {
+      const { matches, highlights } = await this.cb.saved();
+      const watch = (reel: Reel) => () => {
+        this.close();
+        this.cb.onWatch(reel);
+      };
+      const when = (t: number) =>
+        new Date(t).toLocaleString(undefined, {
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      out.append(h('h3', {}, 'Highlights'));
+      if (!highlights.length)
+        out.append(h('p', { className: 'empty' }, 'Save a shot from the pause menu to keep it here.'));
+      for (const hl of highlights) {
+        const row: HTMLElement = h(
+          'div',
+          { className: 'saved-row' },
+          h(
+            'button',
+            { className: 'saved-main', onclick: watch(reelOfHighlight(hl)) },
+            icon('star'),
+            h('span', {}, h('strong', {}, hl.title), h('small', {}, when(hl.date))),
+          ),
+          iconButton('trash', 'Delete highlight', () => {
+            void this.cb.onDeleteHighlight(hl.id).then(() => row.remove());
+          }),
+        );
+        out.append(row);
+      }
+      out.append(h('h3', {}, 'Matches'));
+      const played = matches.filter((m) => m.racks.some((r) => r.shots.length));
+      if (!played.length) out.append(h('p', { className: 'empty' }, 'Matches you play are kept here.'));
+      for (const m of played) {
+        const [a, b] = m.config.players;
+        const result = m.winner === null ? 'unfinished' : `${m.config.players[m.winner]} won`;
+        const frames = h('div', { className: 'saved-frames', hidden: true });
+        const unit = m.config.game === 'snooker' ? 'Frame' : 'Rack';
+        m.racks.forEach((r, i) => {
+          if (!r.shots.length) return;
+          const who = r.winner === null ? 'not finished' : `${m.config.players[r.winner]} won`;
+          frames.append(
+            h(
+              'button',
+              { className: 'chip', onclick: watch(reelOfRack(m, i)) },
+              `${unit} ${i + 1} · ${who} · ${r.shots.length} shot${r.shots.length === 1 ? '' : 's'}`,
+            ),
+          );
+        });
+        out.append(
+          h(
+            'div',
+            { className: 'saved-row match' },
+            h(
+              'button',
+              {
+                className: 'saved-main',
+                ariaExpanded: 'false',
+                onclick: (e: Event) => {
+                  frames.hidden = !frames.hidden;
+                  (e.currentTarget as HTMLElement).ariaExpanded = String(!frames.hidden);
+                },
+              },
+              icon('replay'),
+              h(
+                'span',
+                {},
+                h('strong', {}, `${a} ${m.score[0]}–${m.score[1]} ${b}`),
+                h('small', {}, `${describe(m.config)} · ${result} · ${when(m.date)}`),
+              ),
+            ),
+            frames,
+          ),
+        );
+      }
+    });
   }
 
   // -------------------------------------------------------------------------------------------

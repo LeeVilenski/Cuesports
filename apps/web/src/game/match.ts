@@ -1,4 +1,4 @@
-import type { BallState, ShotResult } from '@cuesports/physics';
+import type { BallState, ShotInput, ShotResult } from '@cuesports/physics';
 import {
   ENGLISH_POOL,
   ENGLISH_PRESETS,
@@ -15,6 +15,8 @@ import {
   type Turn,
 } from '@cuesports/rules';
 import { Rng } from '@cuesports/shared';
+import type { ClothSpeed } from './games';
+import { recordId, shotRecord, specsOf, type MatchRecord, type RackRecord } from './record';
 
 export type MatchGame = 'nine-ball' | 'ten-ball' | 'snooker' | 'english';
 export type EnglishPreset = keyof typeof ENGLISH_PRESETS;
@@ -82,13 +84,27 @@ export class Match {
   winner: number | null = null;
   /** Set when the last shot or decision re-racked the balls (an illegal break, say). */
   reracked = false;
+  /** Everything played so far, for replays and stats. */
+  readonly record: MatchRecord;
   private rng: Rng;
 
   constructor(
     readonly config: MatchConfig,
     seed = 1,
+    cloth: ClothSpeed = 'medium',
+    date = Date.now(),
   ) {
     this.rng = new Rng(seed);
+    this.record = {
+      id: recordId(date),
+      date,
+      config: structuredClone(config),
+      cloth,
+      specs: {},
+      racks: [],
+      score: [0, 0],
+      winner: null,
+    };
     const games: Record<MatchGame, [AnyRuleset, unknown]> = {
       'nine-ball': [NINE_BALL as AnyRuleset, config.rules],
       'ten-ball': [TEN_BALL as AnyRuleset, config.rules],
@@ -141,6 +157,10 @@ export class Match {
     this.state = f.state;
     this.turn = f.turn;
     this.balls = f.balls;
+    // A re-rack after an illegal break carries on in the same rack record.
+    if (this.record.racks.length < this.rack)
+      this.record.racks.push({ breaker: this.breaker, shots: [], winner: null, reason: '' });
+    Object.assign(this.record.specs, specsOf(f.balls));
     const what = this.isSnooker
       ? `Frame ${this.rack}: ${this.config.players[this.breaker]} to break off.`
       : `Rack ${this.rack}: ${this.config.players[this.breaker]} to break.`;
@@ -148,9 +168,35 @@ export class Match {
     this.notable = true;
   }
 
-  judge(decl: ShotDeclaration, before: BallState[], result: ShotResult): Judgement<unknown> {
+  /** The rack or frame being played, in the record. */
+  get rackRecord(): RackRecord | undefined {
+    return this.record.racks[this.rack - 1];
+  }
+
+  /**
+   * Judges a shot. With the stroke given, the shot is also added to the match record (the AI's
+   * look-ahead and tests can leave it out).
+   */
+  judge(
+    decl: ShotDeclaration,
+    before: BallState[],
+    result: ShotResult,
+    shot?: ShotInput,
+  ): Judgement<unknown> {
+    const player = this.turn.player;
+    const isBreak = this.turn.isBreak;
+    const rack = this.rackRecord;
+    const pointsBefore = this.framePoints?.points[player] ?? 0;
     const j = this.ruleset.judge(this.state, decl, before, result, this.options);
     this.apply(j);
+    if (shot && rack) {
+      const scored = this.isSnooker
+        ? Math.max(0, (this.framePoints?.points[player] ?? 0) - pointsBefore)
+        : j.fouls.length
+          ? 0
+          : j.potted.length;
+      rack.shots.push(shotRecord(player, before, shot, decl, result, j, scored, isBreak));
+    }
     if (j.frame) this.endRack(j.frame);
     return j;
   }
@@ -183,11 +229,18 @@ export class Match {
   private endRack(frame: { winner: number; reason: string }): void {
     this.score[frame.winner] = (this.score[frame.winner] ?? 0) + 1;
     this.rackResult = frame;
+    const rack = this.rackRecord;
+    if (rack) {
+      rack.winner = frame.winner;
+      rack.reason = frame.reason;
+    }
+    this.record.score = [...this.score];
     if ((this.score[frame.winner] ?? 0) >= this.config.raceTo) this.winner = frame.winner;
     else {
       const alternate = this.isSnooker || this.config.breaks === 'alternate';
       this.breaker = alternate ? 1 - this.breaker : frame.winner;
     }
+    this.record.winner = this.winner;
   }
 
   private apply(j: Judgement<unknown>): void {
