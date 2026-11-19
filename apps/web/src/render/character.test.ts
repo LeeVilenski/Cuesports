@@ -97,11 +97,14 @@ describe('stance', () => {
   });
 
   it('picks the hand, the rest or the spider', () => {
-    const snooker = { ...frame, hl: 1.78, hw: 0.89, hx: 1.95, hy: 1.06, restReach: 0.55 };
+    const snooker = { ...frame, hl: 1.78, hw: 0.89, hx: 1.95, hy: 1.06, restReach: 0.85 };
     const near = { ball: { x: 1.5, y: 0 }, R, shot: shotAt(Math.PI), gap: 0.015 };
     expect(chooseTool(near, snooker).tool).toBe('hand');
     const far = { ball: { x: 0, y: 0 }, R, shot: shotAt(0), gap: 0.015 };
     expect(chooseTool(far, snooker).tool).toBe('rest');
+    // From the side cushion to a ball on the centre line, across the table: by hand.
+    const across = { ball: { x: 0, y: 0 }, R, shot: shotAt(Math.PI / 2), gap: 0.015 };
+    expect(chooseTool(across, snooker).tool).toBe('hand');
     // A ball just behind the cue ball, where the rest head would go.
     const tucked = { ...far, others: [{ x: -0.09, y: 0.01 }] };
     const pick = chooseTool(tucked, snooker);
