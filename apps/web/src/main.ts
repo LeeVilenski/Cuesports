@@ -236,8 +236,9 @@ function buildPlayers(): void {
     hy: tableView.outer.hy,
     railTop: tableView.railTop,
     floorZ: tableView.floorZ,
-    // Snooker players take the rest much sooner than pool players stretch.
-    restReach: game.table.id.startsWith('snooker') ? 0.55 : 0.8,
+    // How far past the rail a player stretches by hand: a snooker player can bridge at the centre
+    // line playing across the table; up the length, it's the rest.
+    restReach: game.table.id.startsWith('snooker') ? 0.85 : 0.8,
   };
   const picks = presetsFor(match ? match.config.players : ['Player 1', 'Player 2']);
   players = picks.map((pi, i) => {
