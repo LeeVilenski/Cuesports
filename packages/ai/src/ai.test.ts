@@ -160,14 +160,19 @@ describe('AI shot choice', () => {
 
   it('respects its thinking budget', () => {
     const { balls, state, turn } = NINE_BALL.newFrame(NINE_BALL.defaults, new Rng(3), 1);
-    const t0 = Date.now();
+    // A clock that moves on 5 ms each time it is read, so the check doesn't depend on how busy the
+    // machine is (a real-time limit failed now and then with the test files running in parallel).
+    let t = 0;
+    const now = () => (t += 5);
     chooseShot({
       ...nineInput(balls, 5, 2),
       state,
       turn: { ...turn, isBreak: false, ballInHand: 'anywhere', player: 1 },
       budgetMs: 200,
+      now,
     });
-    expect(Date.now() - t0).toBeLessThan(1500);
+    // It stops close to its budget: a last few checks may run past it, but not far.
+    expect(t).toBeLessThan(400);
   });
 });
 
