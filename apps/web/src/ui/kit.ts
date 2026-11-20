@@ -15,11 +15,11 @@ export const h = <K extends keyof HTMLElementTagNameMap>(
 const PATHS = {
   play: '<path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/>',
   cue: '<path d="M3 21 17 7"/><circle cx="19" cy="5" r="2.5"/>',
-  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>',
+  target:
+    '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>',
   trophy:
     '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4"/><path d="M12 13v4M8 20h8M9.5 17h5"/>',
-  globe:
-    '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>',
   settings:
     '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
@@ -28,10 +28,10 @@ const PATHS = {
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
-  replay: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M10 9v6l5-3z" fill="currentColor"/>',
+  replay:
+    '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M10 9v6l5-3z" fill="currentColor"/>',
   hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10.5V4a1.5 1.5 0 0 1 3 0v6.5M14 10.5V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.5a6 6 0 0 1-4.6-2.2L3 14.5a1.6 1.6 0 0 1 2.4-2L8 15"/>',
-  camera:
-    '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
   home: '<path d="M4 11 12 4l8 7"/><path d="M6 10v10h12V10"/>',
   flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
   restart: '<path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.5"/><path d="M20 3.5v5h-5"/>',
@@ -39,6 +39,9 @@ const PATHS = {
   cpu: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/><rect x="10" y="10" width="4" height="4"/>',
   minus: '<path d="M5 12h14"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  chart: '<path d="M4 20V4M4 20h16"/><path d="M8 16v-5M12 16V8M16 16v-3"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
   grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
 } as const;
 
@@ -51,8 +54,17 @@ export function icon(name: IconName, className = 'ico'): SVGSVGElement {
 }
 
 /** A round icon-only button; the label is for screen readers and tooltips. */
-export function iconButton(name: IconName, label: string, onclick: () => void, extra = ''): HTMLButtonElement {
-  return h('button', { className: `ibtn ${extra}`.trim(), ariaLabel: label, title: label, onclick }, icon(name));
+export function iconButton(
+  name: IconName,
+  label: string,
+  onclick: () => void,
+  extra = '',
+): HTMLButtonElement {
+  return h(
+    'button',
+    { className: `ibtn ${extra}`.trim(), ariaLabel: label, title: label, onclick },
+    icon(name),
+  );
 }
 
 /**
@@ -66,9 +78,7 @@ export function segmented<T extends string>(
   onChange: (v: T) => void,
 ): { el: HTMLElement; set(v: T): void } {
   const el = h('div', { className: 'seg', role: 'group', ariaLabel: label });
-  const buttons = options.map((o) =>
-    h('button', { type: 'button', onclick: () => pick(o.value) }, o.label),
-  );
+  const buttons = options.map((o) => h('button', { type: 'button', onclick: () => pick(o.value) }, o.label));
   const set = (v: T) =>
     buttons.forEach((b, i) => b.setAttribute('aria-pressed', String(options[i]!.value === v)));
   const pick = (v: T) => {

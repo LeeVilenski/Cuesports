@@ -13,6 +13,8 @@ export interface MatchHudCallbacks {
   /** Match over: set up another. */
   onNewMatch(): void;
   onHome(): void;
+  /** Watch the rack or frame just finished, shot by shot. */
+  onWatch(): void;
 }
 
 /** What a snooker player is on, in words. */
@@ -194,6 +196,7 @@ export class MatchHud {
         matchOver
           ? h('button', { className: 'chip on', onclick: () => this.cb.onNewMatch() }, 'New match')
           : h('button', { className: 'chip on', onclick: () => this.cb.onNextRack() }, 'Next rack'),
+        h('button', { className: 'chip', onclick: () => this.cb.onWatch() }, 'Watch again'),
         h('button', { className: 'chip', onclick: () => this.cb.onHome() }, 'Home'),
       ),
     );

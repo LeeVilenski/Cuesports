@@ -252,3 +252,49 @@ test('home screen: Quick match starts straight away and the pause menu returns h
   expect(await page.evaluate(() => window.__cuesports.state().match)).toBeNull();
   expect(errors).toEqual([]);
 });
+
+test('saves a match, shows its stats and replays its shots', async ({ page }) => {
+  test.setTimeout(300_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await setup(page);
+  await page.getByRole('button', { name: /^Start/ }).click();
+  await page.waitForFunction(() => window.__cuesports?.state().phase === 'aim');
+  for (let i = 0; i < 2; i++) {
+    await page.evaluate(() => window.__cuesports.shoot(0.8));
+    await page.waitForFunction(() => window.__cuesports.state().phase === 'playing', null, {
+      timeout: 30_000,
+    });
+    await page.evaluate(() => window.__cuesports.fastForward());
+    await page.waitForFunction(() => window.__cuesports.state().phase === 'aim', null, { timeout: 30_000 });
+    // A decision or ball in hand may follow a foul; the test hook shoots from wherever the cue ball is.
+    await page.waitForTimeout(300);
+  }
+
+  // Keep the last shot, then leave.
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: /^Save last shot/ }).click();
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: /^Home/ }).click();
+
+  await page.getByRole('button', { name: /^Stats/ }).click();
+  await expect(page.locator('.stat-grid .stat').first()).toBeVisible();
+  await expect(page.locator('.stat-grid')).toContainText('Pot success');
+  await page.getByRole('button', { name: 'Back' }).click();
+
+  await page.getByRole('button', { name: /^Replays/ }).click();
+  await expect(page.locator('.saved-row')).toHaveCount(2);
+  await page.locator('.saved-row.match .saved-main').click();
+  await page.getByRole('button', { name: /^Rack 1/ }).click();
+  await expect(page.locator('.replay-bar')).toBeVisible();
+  await expect(page.locator('.replay-bar')).toContainText('Shot 1 of 2');
+  await page.getByRole('button', { name: 'Play this shot' }).click();
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'playing', null, { timeout: 30_000 });
+  await page.evaluate(() => window.__cuesports.fastForward());
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'aim', null, { timeout: 30_000 });
+  await page.getByRole('button', { name: 'Next shot' }).click();
+  await expect(page.locator('.replay-bar')).toContainText('Shot 2 of 2');
+  await page.getByRole('button', { name: 'Close replay' }).click();
+  await expect(page.locator('.saved-row').first()).toBeVisible();
+  expect(errors).toEqual([]);
+});
