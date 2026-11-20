@@ -223,8 +223,8 @@ export class Menu {
         this.tile('green', 'target', 'Practice', 'Free table', () => this.go('practice')),
         this.tile('yellow', 'trophy', 'Career', 'Coming soon', null),
         this.tile('purple', 'globe', 'Online', 'Coming soon', null),
-        this.tile('navy', 'chart', 'Stats', 'Pots, breaks, wins', () => this.go('stats')),
-        this.tile('navy', 'replay', 'Replays', 'Frames and highlights', () => this.go('replays')),
+        this.tile('red', 'chart', 'Stats', 'Pots, breaks, wins', () => this.go('stats')),
+        this.tile('teal', 'replay', 'Replays', 'Frames and highlights', () => this.go('replays')),
       ),
       h(
         'div',
@@ -430,7 +430,11 @@ export class Menu {
                 },
               },
               ballBadge(color, num),
-              h('span', {}, g.label.replace(/^Practice: /, '')),
+              h(
+                'span',
+                {},
+                g.label.replace(/^Practice: (.)/, (_, c: string) => c.toUpperCase()),
+              ),
             );
           }),
         ),
@@ -550,7 +554,7 @@ export class Menu {
             )
           : this.tile('green', 'grid', 'Change game', 'Practice tables', () => this.go('practice')),
         this.tile(
-          'navy',
+          'teal',
           'restart',
           this.inMatch ? 'Restart' : 'Re-rack',
           this.inMatch ? 'New match, same set-up' : 'Fresh balls',
@@ -558,14 +562,14 @@ export class Menu {
         ),
         this.canSave
           ? this.tile(
-              'navy',
+              'yellow',
               'star',
               'Save last shot',
               'Keep it as a highlight',
               done(() => this.cb.onSaveHighlight()),
             )
           : '',
-        this.tile('navy', 'settings', 'Settings', '', () => this.go('settings')),
+        this.tile('purple', 'settings', 'Settings', '', () => this.go('settings')),
         this.tile('navy', 'home', 'Home', '', () => {
           this.cb.onQuit();
           this.open('home');
@@ -686,7 +690,7 @@ export class Menu {
       for (const hl of highlights) {
         const row: HTMLElement = h(
           'div',
-          { className: 'saved-row' },
+          { className: 'saved-row highlight' },
           h(
             'button',
             { className: 'saved-main', onclick: watch(reelOfHighlight(hl)) },

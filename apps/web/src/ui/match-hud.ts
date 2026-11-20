@@ -192,11 +192,11 @@ export class MatchHud {
       h('p', {}, detail),
       h(
         'div',
-        { className: 'row' },
+        { className: 'row wrap result-actions' },
         matchOver
           ? h('button', { className: 'chip on', onclick: () => this.cb.onNewMatch() }, 'New match')
           : h('button', { className: 'chip on', onclick: () => this.cb.onNextRack() }, 'Next rack'),
-        h('button', { className: 'chip', onclick: () => this.cb.onWatch() }, 'Watch again'),
+        h('button', { className: 'chip watch', onclick: () => this.cb.onWatch() }, 'Watch again'),
         h('button', { className: 'chip', onclick: () => this.cb.onHome() }, 'Home'),
       ),
     );
