@@ -35,6 +35,7 @@ import {
   type Profile,
 } from '../game/profile';
 import { FERRULES, WOODS, type CueFerrule, type CueWood } from '../render/equipment';
+import type { SoundSettings } from '../audio/sound';
 import { PRESETS } from '../render/figure';
 import { bestLabel, DRILLS, type DrillId } from '../game/drills';
 import { visitWord } from '../game/games';
@@ -56,12 +57,14 @@ import {
 } from './kit';
 
 export type ClothSpeedId = 'fast' | 'medium' | 'slow';
-export type OptionName = 'guide' | 'squirt' | 'player';
+export type OptionName = 'guide' | 'squirt' | 'player' | 'labels' | 'haptics' | 'calm';
+export type TextSize = 'normal' | 'large' | 'larger';
 export type ShotCamId = 'overview' | 'follow' | 'cinematic' | 'stay';
 export type StrokeId = 'bar' | 'pull';
 export type Settings = Record<OptionName, boolean> & {
   shotCam: ShotCamId;
   stroke: StrokeId;
+  textSize: TextSize;
   /** Older saves: false meant the camera stayed put during shots. */
   overview?: boolean;
 };
@@ -95,6 +98,8 @@ export interface MenuCallbacks {
   /** The customiser opened (true) or closed: show the player standing behind it. */
   onPreview(on: boolean): void;
   career(): CareerState;
+  sound(): SoundSettings;
+  onSound(s: SoundSettings): void;
   /** Enter a career event (abandoning any other in progress). */
   onCareerEnter(event: string): void;
   /** Play your next match in the career event. */
@@ -126,6 +131,12 @@ const LEVELS = ['Beginner', 'Amateur', 'Club', 'Semi-pro', 'Pro'];
 
 const SETTINGS_KEY = 'cuesports.settings';
 const LAST_MATCH_KEY = 'cuesports.lastMatch';
+
+/** Scales the menus and HUD (CSS zoom on their roots, set from a variable on the page). */
+function applyTextSize(size: TextSize): void {
+  const scale = size === 'larger' ? 1.3 : size === 'large' ? 1.15 : 1;
+  document.documentElement.style.setProperty('--ui-scale', String(scale));
+}
 
 /** Short description of a match set-up, for the Quick match tile. */
 function describe(c: MatchConfig): string {
@@ -173,10 +184,16 @@ export class Menu {
       guide: true,
       squirt: true,
       player: true,
+      labels: false,
+      haptics: true,
+      // Reduced motion follows the device's own setting until changed here.
+      calm: typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches,
       shotCam: saved0.overview === false ? 'stay' : 'cinematic',
       stroke: 'bar',
+      textSize: 'normal',
       ...saved0,
     };
+    applyTextSize(this.settings.textSize);
     const saved = load<Partial<MatchConfig>>(LAST_MATCH_KEY, {});
     this.config = {
       ...DEFAULT_MATCH,
@@ -875,6 +892,29 @@ export class Menu {
     );
   }
 
+  /** Effects and room-tone levels, saved as they change. */
+  private soundFields(): HTMLElement[] {
+    const s = this.cb.sound();
+    const levels = [
+      { value: '0', label: 'Off' },
+      { value: '0.35', label: 'Low' },
+      { value: '0.65', label: 'Medium' },
+      { value: '1', label: 'High' },
+    ];
+    // The nearest level to a saved value.
+    const near = (v: number) =>
+      levels.reduce((a, b) => (Math.abs(Number(b.value) - v) < Math.abs(Number(a.value) - v) ? b : a)).value;
+    const set = (k: 'effects' | 'ambience') => (v: string) => {
+      s[k] = Number(v);
+      s.muted = false;
+      this.cb.onSound({ ...s });
+    };
+    return [
+      this.field('Effects', segmented('Sound effects', levels, near(s.effects), set('effects')).el),
+      this.field('Room', segmented('Room sound', levels, near(s.ambience), set('ambience')).el),
+    ];
+  }
+
   private settingsScreen(): HTMLElement {
     const opt = (name: OptionName, label: string) =>
       toggle(label, this.settings[name], (on) => {
@@ -934,8 +974,31 @@ export class Menu {
         h('h3', {}, 'Camera'),
         this.field('During shots', shotCam.el),
         opt('player', 'Show the player at the table'),
+        h('h3', {}, 'Accessibility'),
+        opt('labels', 'Label coloured balls (Y, G, Br, Bl, P, Bk)'),
+        opt('haptics', 'Vibrate on strikes and pots'),
+        opt('calm', 'Reduce camera motion'),
+        this.field(
+          'Text size',
+          segmented<TextSize>(
+            'Text size',
+            [
+              { value: 'normal', label: 'Normal' },
+              { value: 'large', label: 'Large' },
+              { value: 'larger', label: 'Larger' },
+            ],
+            this.settings.textSize,
+            (v) => {
+              this.settings.textSize = v;
+              save(SETTINGS_KEY, this.settings);
+              applyTextSize(v);
+            },
+          ).el,
+        ),
         h('h3', {}, 'Table'),
         this.field('Cloth', cloth.el),
+        h('h3', {}, 'Sound'),
+        ...this.soundFields(),
         h('p', { className: 'fine-print' }, h('a', { href: '/lab/' }, 'Physics lab ›')),
       ),
     );

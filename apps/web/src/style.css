@@ -2114,3 +2114,12 @@ body {
 .menu .bracket .round .pair {
   margin-top: 4px;
 }
+
+/* Text size (Settings → Accessibility): the menus and the HUD scale together. */
+.menu > .panel,
+.hud,
+.match-hud,
+.replay-bar,
+.editor-bar {
+  zoom: var(--ui-scale, 1);
+}

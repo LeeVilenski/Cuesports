@@ -8,6 +8,10 @@ import {
   PlaneGeometry,
   Quaternion,
   SphereGeometry,
+  CanvasTexture,
+  SRGBColorSpace,
+  Sprite,
+  SpriteMaterial,
 } from 'three';
 import { ballTexture, shadowTexture } from './textures';
 import { alongPath, RUNNER_BALLS, runnerSlots, type Vec3 } from './snooker-pocket';
@@ -18,6 +22,53 @@ interface BallMesh {
   mesh: Mesh;
   shadow: Mesh;
   radius: number;
+  /** Colour-vision label floating over the ball (null for numbered balls and the cue ball). */
+  label: Sprite | null;
+}
+
+/**
+ * The label for a ball whose colour is all that tells it apart: snooker reds and colours, UK pool
+ * reds and yellows. Numbered pool balls and the cue ball carry their own markings.
+ */
+export function ballLabel(id: string): string | null {
+  if (/^red\d*$/.test(id) || /^r\d+$/.test(id)) return 'R';
+  if (/^y\d+$/.test(id)) return 'Y';
+  const colours: Record<string, string> = {
+    yellow: 'Y',
+    green: 'G',
+    brown: 'Br',
+    blue: 'Bl',
+    pink: 'P',
+    black: 'Bk',
+  };
+  return colours[id] ?? null;
+}
+
+function labelSprite(text: string, radius: number): Sprite | null {
+  if (typeof document === 'undefined') return null;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  if (!g) return null;
+  g.fillStyle = 'rgba(10, 14, 12, 0.82)';
+  g.beginPath();
+  g.arc(32, 32, 30, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 3;
+  g.stroke();
+  g.fillStyle = '#ffffff';
+  g.font = `bold ${text.length > 1 ? 28 : 34}px system-ui, sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 32, 34);
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  // Bigger than the ball, so it still reads from the top-down view of a full-size snooker table.
+  const s = new Sprite(new SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  s.scale.setScalar(radius * 2.6);
+  s.renderOrder = 12;
+  return s;
 }
 
 /** How a ball potted during a shot falls into the well. */
@@ -65,6 +116,8 @@ export class BallsView {
 
   /** Outline of each pocket's hole (the slate edge, jaws and back), as cut out of the cloth. */
   private outlines = new Map<string, Vec2[]>();
+  /** Show the colour-vision labels. */
+  private labels = false;
 
   /** Snooker: where a potted ball's centre rolls along each pocket's wire runners. */
   private runners = new Map<string, Vec3[]>();
@@ -104,11 +157,21 @@ export class BallsView {
     return best;
   }
 
+  /** Turns the colour-vision labels on or off. */
+  setLabels(on: boolean): void {
+    this.labels = on;
+    for (const b of this.balls) if (b.label) b.label.visible = on && b.mesh.visible && b.shadow.visible;
+  }
+
   setBalls(balls: readonly BallState[]): void {
     for (const b of this.balls) {
       b.mesh.geometry.dispose();
       (b.mesh.material as MeshPhysicalMaterial).dispose();
       b.shadow.geometry.dispose();
+      if (b.label) {
+        b.label.material.map?.dispose();
+        b.label.material.dispose();
+      }
     }
     this.group.clear();
     this.potted = [];
@@ -130,7 +193,10 @@ export class BallsView {
       );
       shadow.renderOrder = 1;
       this.group.add(mesh, shadow);
-      return { id: s.id, mesh, shadow, radius: s.radius };
+      const text = ballLabel(s.id);
+      const label = text ? labelSprite(text, s.radius) : null;
+      if (label) this.group.add(label);
+      return { id: s.id, mesh, shadow, radius: s.radius, label };
     });
     this.showState(balls);
   }
@@ -417,6 +483,7 @@ export class BallsView {
   private hide(b: BallMesh): void {
     b.mesh.visible = false;
     b.shadow.visible = false;
+    if (b.label) b.label.visible = false;
   }
 
   private place(b: BallMesh, x: number, y: number, z: number, onTable: boolean): void {
@@ -424,5 +491,10 @@ export class BallsView {
     b.mesh.position.set(x, y, z);
     b.shadow.visible = onTable && z > b.radius * 0.5;
     b.shadow.position.set(x, y, 0.0008);
+    if (b.label) {
+      // Just above the ball, only while it's on the table.
+      b.label.visible = this.labels && b.shadow.visible;
+      b.label.position.set(x, y + b.radius * 1.5, z + b.radius * 2.4);
+    }
   }
 }
