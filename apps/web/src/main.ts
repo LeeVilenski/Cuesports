@@ -26,7 +26,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import { DEFAULT_CUE } from '@cuesports/shared';
+import { DEFAULT_CUE, type TableSpec } from '@cuesports/shared';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { registerSW } from 'virtual:pwa-register';
 import {
@@ -66,6 +66,7 @@ import {
   type ShotRecord,
 } from './game/record';
 import { openStore } from './game/store';
+import { loadProfile, profilePreset, saveProfile, type Profile } from './game/profile';
 import { bestLabel, DRILLS, recordBest, type DrillId } from './game/drills';
 import {
   CHALLENGES,
@@ -137,6 +138,11 @@ world.add(ballsView.group, cueView.group, guideView.group);
 let game: GameDef = GAMES[0]!;
 let tableView: TableView | null = null;
 let clothSpeed: ClothSpeed = loadClothSpeed();
+/** The player's own look, cue and cloth colours (the customiser). */
+let profile: Profile = loadProfile();
+/** The customiser is open: player 1 stands on a turntable behind it. */
+let previewing = false;
+cueView.setStyle(profile.cue);
 /** The table the physics runs on: the game's table with the chosen cloth speed. */
 let simTable = withClothSpeed(game.table, clothSpeed);
 
@@ -245,7 +251,7 @@ function setTable(def: GameDef): void {
     world.remove(tableView.group);
     tableView.dispose();
   }
-  tableView = buildTableView(def.table, scene.environment);
+  tableView = buildTableView(def.table, scene.environment, clothFor(def.table));
   world.add(tableView.group);
   ballsView.setPockets(
     tableView.pocketRest,
@@ -275,9 +281,14 @@ function buildPlayers(): void {
     // line playing across the table; up the length, it's the rest.
     restReach: game.table.id.startsWith('snooker') ? 0.85 : 0.8,
   };
-  const picks = presetsFor(viewer?.reel.players ?? (match ? match.config.players : ['Player 1', 'Player 2']));
+  const names = viewer?.reel.players ?? (match ? match.config.players : [profile.name, 'Player 2']);
+  const picks = presetsFor(names);
+  // Seat 1 is whoever holds the device: their own look and cue (unless watching someone else's).
+  const mine = (i: number) => i === 0 && (!viewer || names[0] === profile.name);
   players = picks.map((pi, i) => {
-    const c = new Character(lookFor(PRESETS[pi]!, game.table.id));
+    const c = mine(i)
+      ? new Character(lookFor(profilePreset(profile), game.table.id), profile.cue)
+      : new Character(lookFor(PRESETS[pi]!, game.table.id));
     // Chairs along one long side, facing the table.
     c.setTable(t, { x: (i === 0 ? -1 : 1) * t.hl * 0.55, y: -(t.hy + 1.15) }, Math.PI / 2);
     world.add(c.group, c.chair);
@@ -858,6 +869,9 @@ const menu: Menu = new Menu(
     },
     onShotCamera: (mode) => (shotCamMode = mode),
     onDrill: (id) => startDrill(id),
+    profile: () => profile,
+    onProfile: (p) => applyProfile(p),
+    onPreview: (on) => setPreview(on),
     onChallenge: (id) => {
       const spec = CHALLENGES.find((c) => c.id === id);
       if (spec) startChallenge(spec);
@@ -901,6 +915,92 @@ shotCamMode = menu.settings.shotCam;
 showPlayer = menu.settings.player;
 hud.setStrokeMode(menu.settings.stroke);
 app.append(menu.root);
+
+// ---------------------------------------------------------------------------------------------
+// The player's profile (customiser)
+
+/** Cloth colour for a table, from the profile. */
+function clothFor(t: TableSpec): string {
+  return t.id.startsWith('snooker')
+    ? profile.cloth.snooker
+    : t.id.startsWith('english')
+      ? profile.cloth.english
+      : profile.cloth.pool;
+}
+
+/** Where player 1 stands for the customiser: just past the bottom end, under the table lights. */
+function previewSpot(): { x: number; y: number } {
+  return { x: -(game.table.playfield.length / 2 + 0.5), y: 0 };
+}
+
+function aimPreview(): void {
+  const s = previewSpot();
+  rig.setMode('free');
+  rig.orbit.target.copy(toWorld(s.x, s.y, 0.95));
+  // Further back on a phone: the whole figure has to fit above the panel.
+  const k = app.clientWidth > 520 ? 1 : 1.45;
+  rig.persp.position.copy(toWorld(s.x + 3.0 * k, s.y - 1.2 * k, 1.35));
+  rig.orbit.enabled = false;
+  rig.orbit.autoRotate = true;
+  rig.orbit.autoRotateSpeed = 1.6;
+  framePreview();
+}
+
+/**
+ * Shifts the picture so the player sits in the space the customiser leaves: to the right of the
+ * panel on a wide screen, above it on a phone.
+ */
+function framePreview(): void {
+  const w = app.clientWidth;
+  const h = app.clientHeight;
+  if (!previewing) {
+    rig.persp.clearViewOffset();
+    return;
+  }
+  const panel = menu.root.querySelector('.sub')?.getBoundingClientRect();
+  if (!panel) return;
+  if (w > 520) {
+    // The middle of the space right of the panel, compared with the middle of the screen.
+    const dx = (panel.right + w) / 2 - w / 2;
+    rig.persp.setViewOffset(w, h, -dx, 0, w, h);
+  } else {
+    const dy = panel.top / 2 - h / 2;
+    rig.persp.setViewOffset(w, h, 0, -dy, w, h);
+  }
+}
+
+function setPreview(on: boolean): void {
+  if (previewing === on) return;
+  previewing = on;
+  if (on) {
+    players[0]?.place({ kind: 'watch', at: previewSpot() });
+    // After the panel is laid out, so the picture can be framed beside it.
+    requestAnimationFrame(aimPreview);
+  } else {
+    framePreview();
+    // Back to the slow orbit round the table behind the menus.
+    const L = game.table.playfield.length;
+    rig.persp.position.set(L * 0.55, L * 0.42, L * 0.55);
+    rig.orbit.target.set(0, 0, 0);
+    rig.orbit.autoRotateSpeed = 0.35;
+    placePlayers();
+  }
+  dirty = true;
+}
+
+/** A change from the customiser: save it and show it straight away. */
+function applyProfile(p: Profile): void {
+  const before = clothFor(game.table);
+  profile = p;
+  const clothChanged = clothFor(game.table) !== before;
+  saveProfile(p);
+  cueView.setStyle(p.cue);
+  if (clothChanged) setTable(game);
+  else buildPlayers();
+  if (previewing) players[0]?.place({ kind: 'watch', at: previewSpot() });
+  ballsView.showState(balls);
+  dirty = true;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Challenges
@@ -1597,6 +1697,7 @@ function resize(): void {
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(w, h);
   rig.resize(w / h);
+  framePreview();
   rig.snap();
   dirty = true;
 }
@@ -1680,6 +1781,16 @@ function frame(now: number): void {
 }
 
 function updatePlayers(dt: number, cue: BallState | undefined): void {
+  if (previewing) {
+    // The customiser: player 1 stands for inspection, everyone else sits.
+    players.forEach((p, i) => {
+      p.chair.visible = false;
+      if (p.update(dt, i === 0 ? { kind: 'watch', at: previewSpot() } : { kind: 'sit' })) dirty = true;
+      p.group.visible = i === 0;
+    });
+    cueView.group.visible = false;
+    return;
+  }
   const back = 0.015 + pull * 0.22;
   const gap = phase === 'striking' ? Math.max(0, back * (1 - (Math.max(0, strikeT) / 0.09) ** 2)) : back;
   players.forEach((p, i) => {

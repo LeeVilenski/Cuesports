@@ -30,7 +30,7 @@ async function practice(page: Page, game = '9-ball'): Promise<void> {
 /** Opens the match set-up from the home menu, against a friend on the same device. */
 async function setup(page: Page, game?: string): Promise<void> {
   await page.goto('/');
-  await page.getByRole('button', { name: /^Play/ }).click();
+  await page.getByRole('button', { name: /^Play Game/ }).click();
   if (game) await page.getByRole('button', { name: game, exact: true }).click();
   await page.getByRole('button', { name: 'Friend', exact: true }).click();
 }
@@ -206,7 +206,7 @@ test('plays against the computer: it thinks in a worker and takes its own shots'
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
-  await page.getByRole('button', { name: /^Play/ }).click();
+  await page.getByRole('button', { name: /^Play Game/ }).click();
   await page.getByRole('button', { name: 'Computer', exact: true }).click();
   await page.getByRole('button', { name: 'Club', exact: true }).click();
   await page.getByRole('button', { name: 'Start' }).click();
@@ -340,5 +340,25 @@ test('practice: arranges the table and starts the drills', async ({ page }) => {
       .map((b) => b.id),
   );
   expect(challengeBalls.sort()).toEqual(['1', 'cue']);
+  expect(errors).toEqual([]);
+});
+
+test('customises the player and keeps it', async ({ page }) => {
+  test.setTimeout(300_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.getByRole('button', { name: /^Player$/ }).click();
+  await page.getByRole('button', { name: 'Kenji', exact: true }).click();
+  await page.getByRole('button', { name: 'Rosewood', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Your name' }).fill('Ann');
+  await page.getByRole('textbox', { name: 'Your name' }).press('Enter');
+  await page.getByRole('textbox', { name: 'Your name' }).blur();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('cuesports.profile') ?? '{}'));
+  expect(saved).toMatchObject({ name: 'Ann', look: { hairStyle: 'long' }, cue: { wood: 'rosewood' } });
+  // Kept after a reload, and used on the Play screen.
+  await page.reload();
+  await page.getByRole('button', { name: /^Play Game/ }).click();
+  await expect(page.getByRole('textbox', { name: 'Player 1 name' })).toHaveValue('Ann');
   expect(errors).toEqual([]);
 });

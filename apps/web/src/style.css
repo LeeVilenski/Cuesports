@@ -1966,3 +1966,62 @@ body {
   letter-spacing: 0.08em;
   font-weight: 700;
 }
+
+/* Colour swatches (the customiser) */
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.swatches button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: var(--sw, transparent);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.swatches button.none {
+  background:
+    linear-gradient(135deg, transparent 45%, #e0413a 45% 55%, transparent 55%), rgba(255, 255, 255, 0.06);
+}
+.swatches button[aria-pressed='true'] {
+  border-color: var(--yellow);
+  box-shadow:
+    0 0 0 3px var(--yellow),
+    0 3px 0 rgba(0, 0, 0, 0.45);
+}
+.swatches button:active {
+  transform: translateY(2px);
+}
+.menu .scroll .field:has(.swatches) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.menu .player .presets {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+/* The customiser leaves room to see the player: half the screen on a phone. */
+@media (max-width: 520px) {
+  .menu[data-screen='player'] {
+    align-items: flex-end;
+    background: none;
+  }
+  .menu[data-screen='player'] .sub {
+    height: 58%;
+  }
+}
+.menu .player .presets {
+  flex-wrap: nowrap;
+}
+.menu .player .presets button {
+  flex: none;
+  min-width: max-content;
+}

@@ -124,7 +124,7 @@ export function clothColour(table: TableSpec): string {
  * Cloth texture covering ±ex × ±ey metres: colour with a little noise, the table markings, and the
  * pocket holes (radial gradients, which read as holes from any camera height).
  */
-export function clothTexture(table: TableSpec, ex: number, ey: number): Texture {
+export function clothTexture(table: TableSpec, ex: number, ey: number, colour = clothColour(table)): Texture {
   const w = 2048;
   const h = Math.round((w * ey) / ex);
   const c = document.createElement('canvas');
@@ -134,7 +134,7 @@ export function clothTexture(table: TableSpec, ex: number, ey: number): Texture 
   const X = (x: number) => ((x + ex) / (2 * ex)) * w;
   const Y = (y: number) => ((ey - y) / (2 * ey)) * h;
   const S = w / (2 * ex);
-  g.fillStyle = clothColour(table);
+  g.fillStyle = colour;
   g.fillRect(0, 0, w, h);
   // Fine noise so the cloth doesn't look like plastic.
   const img = g.getImageData(0, 0, w, h);

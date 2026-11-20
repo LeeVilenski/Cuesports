@@ -1,6 +1,6 @@
 import { type ShotInput } from '@cuesports/physics';
 import { Group, Quaternion, Vector3 } from 'three';
-import { buildCue, tracker } from './equipment';
+import { buildCue, tracker, type CueStyle } from './equipment';
 
 /**
  * The cue. Built along +y with the tip at the origin, then aligned to the shot: the tip sits on the
@@ -8,10 +8,23 @@ import { buildCue, tracker } from './equipment';
  */
 export class CueView {
   readonly group = new Group();
-  private readonly stick: Group;
+  private stick: Group;
+  private kit = tracker();
 
   constructor() {
-    this.stick = buildCue(tracker());
+    this.stick = buildCue(this.kit);
+    this.group.add(this.stick);
+  }
+
+  /** Rebuilds the cue in a new style (the player's own), keeping its pose. */
+  setStyle(style: CueStyle): void {
+    const old = this.stick;
+    this.kit.dispose();
+    this.kit = tracker();
+    this.stick = buildCue(this.kit, style);
+    this.stick.position.copy(old.position);
+    this.stick.quaternion.copy(old.quaternion);
+    this.group.remove(old);
     this.group.add(this.stick);
   }
 

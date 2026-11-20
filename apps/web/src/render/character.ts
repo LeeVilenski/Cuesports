@@ -20,6 +20,8 @@ import {
   SPIDER_H,
   SPIDER_SOCKET,
   tracker,
+  DEFAULT_CUE_STYLE,
+  type CueStyle,
 } from './equipment';
 import { buildFigure, type FigureParts, type Look } from './figure';
 import {
@@ -531,7 +533,7 @@ export class Character {
   private placed = false;
   private lastStance: StanceInput | null = null;
 
-  constructor(look: Look) {
+  constructor(look: Look, cue: CueStyle = DEFAULT_CUE_STYLE) {
     const mat = (color: string, rough = 0.75) => {
       const m = new MeshStandardMaterial({ color, roughness: rough });
       this.mats.push(m);
@@ -548,7 +550,7 @@ export class Character {
     for (const side of ['l', 'r'] as const) this.group.add(...Object.values(f.limbs[side]));
 
     // The player's own cue (shown while standing, walking and sitting), the rest and the spider.
-    this.cue.add(buildCue(this.kit));
+    this.cue.add(buildCue(this.kit, cue));
     this.group.add(this.cue);
     this.restMesh = buildRestShaft(this.kit);
     this.group.add(this.restMesh, this.restHead);

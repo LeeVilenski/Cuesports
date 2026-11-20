@@ -1,10 +1,42 @@
 import { CHALLENGES, loadStars, starText } from '../game/challenges';
+import {
+  BUILDS,
+  buildId,
+  EYES,
+  FACIAL,
+  fromPreset,
+  HAIR_COLOURS,
+  HAIR_STYLES,
+  POOL_CLOTHS,
+  SHIRTS,
+  SHOES,
+  SKINS,
+  SNOOKER_CLOTHS,
+  TROUSERS,
+  WAISTCOATS,
+  WRAPS,
+  type Profile,
+} from '../game/profile';
+import { FERRULES, WOODS, type CueFerrule, type CueWood } from '../render/equipment';
+import { PRESETS } from '../render/figure';
 import { bestLabel, DRILLS, type DrillId } from '../game/drills';
 import { visitWord } from '../game/games';
 import { DEFAULT_MATCH, type MatchConfig } from '../game/match';
 import { reelOfHighlight, reelOfRack, type Highlight, type MatchRecord, type Reel } from '../game/record';
 import { knownPlayers, percent, playerStats } from '../game/stats';
-import { chooser, h, icon, iconButton, load, save, segmented, stepper, toggle, type IconName } from './kit';
+import {
+  chooser,
+  h,
+  icon,
+  iconButton,
+  swatches,
+  load,
+  save,
+  segmented,
+  stepper,
+  toggle,
+  type IconName,
+} from './kit';
 
 export type ClothSpeedId = 'fast' | 'medium' | 'slow';
 export type OptionName = 'guide' | 'squirt' | 'player';
@@ -40,10 +72,24 @@ export interface MenuCallbacks {
   onSaveHighlight(): void;
   onDrill(id: DrillId): void;
   onChallenge(id: string): void;
+  /** The player's profile, and a change to it from the customiser. */
+  profile(): Profile;
+  onProfile(p: Profile): void;
+  /** The customiser opened (true) or closed: show the player standing behind it. */
+  onPreview(on: boolean): void;
 }
 
 type Screen =
-  'home' | 'play' | 'practice' | 'settings' | 'help' | 'pause' | 'stats' | 'replays' | 'challenges';
+  | 'home'
+  | 'play'
+  | 'practice'
+  | 'settings'
+  | 'help'
+  | 'pause'
+  | 'stats'
+  | 'replays'
+  | 'challenges'
+  | 'player';
 
 const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: string }[] = [
   { id: 'nine-ball', label: '9-Ball', ball: '#f2c14e', sub: '9' },
@@ -130,6 +176,7 @@ export class Menu {
 
   close(): void {
     if (this.root.hidden) return;
+    this.cb.onPreview(false);
     this.root.hidden = true;
     this.cb.onVisible(false);
   }
@@ -160,7 +207,9 @@ export class Menu {
       stats: () => this.stats(),
       replays: () => this.replays(),
       challenges: () => this.challenges(),
+      player: () => this.player(),
     };
+    this.cb.onPreview(screen === 'player');
     const panel = build[screen]();
     panel.classList.add('panel', 'enter');
     this.root.replaceChildren(panel);
@@ -237,6 +286,7 @@ export class Menu {
       h(
         'div',
         { className: 'utility' },
+        h('button', { className: 'ubtn', onclick: () => this.go('player') }, icon('user'), 'Player'),
         h('button', { className: 'ubtn', onclick: () => this.go('help') }, icon('help'), 'How to play'),
         h('button', { className: 'ubtn', onclick: () => this.go('settings') }, icon('settings'), 'Settings'),
       ),
@@ -522,6 +572,98 @@ export class Menu {
         ),
       ),
     );
+  }
+
+  /** The customiser: everything about the player's look, cue and tables, saved as it changes. */
+  private player(): HTMLElement {
+    let p = structuredClone(this.cb.profile());
+    const change = (f: (q: Profile) => void) => {
+      f(p);
+      this.cb.onProfile(structuredClone(p));
+    };
+    const body = h('div', { className: 'scroll' });
+    const draw = () => {
+      const look = p.look;
+      const name = h('input', { type: 'text', value: p.name, maxLength: 16, ariaLabel: 'Your name' });
+      name.addEventListener('change', () => {
+        change((q) => (q.name = name.value.trim() || 'Player 1'));
+        // The Play screen's player 1 is the same person.
+        this.config.players = [p.name, this.config.players[1]];
+        save(LAST_MATCH_KEY, this.config);
+      });
+      const presets = h(
+        'div',
+        { className: 'presets seg' },
+        ...PRESETS.map((pr) =>
+          h(
+            'button',
+            {
+              type: 'button',
+              onclick: () => {
+                p = fromPreset(p, pr);
+                this.cb.onProfile(structuredClone(p));
+                draw();
+              },
+            },
+            pr.name,
+          ),
+        ),
+      );
+      const sw = (
+        label: string,
+        opts: { value: string; label: string }[],
+        v: string,
+        set: (x: string) => void,
+      ) => this.field(label, swatches(label, opts, v, (x) => change(() => set(x))).el);
+      const seg = <T extends string>(
+        label: string,
+        opts: { value: T; label: string }[],
+        v: T,
+        set: (x: T) => void,
+      ) => this.field(label, segmented(label, opts, v, (x) => change(() => set(x))).el);
+      body.replaceChildren(
+        this.field('Name', name),
+        h('h3', {}, 'Start from'),
+        presets,
+        h('h3', {}, 'Look'),
+        sw('Skin', SKINS, look.skin, (x) => (look.skin = x)),
+        seg('Hair', HAIR_STYLES, look.hairStyle, (x) => (look.hairStyle = x)),
+        sw('Hair colour', HAIR_COLOURS, look.hair, (x) => (look.hair = x)),
+        seg('Face', FACIAL, look.facial, (x) => (look.facial = x)),
+        sw('Eyes', EYES, look.eyes, (x) => (look.eyes = x)),
+        seg(
+          'Build',
+          BUILDS,
+          buildId(look.build),
+          (x) => (look.build = { ...BUILDS.find((b) => b.value === x)!.build }),
+        ),
+        h('h3', {}, 'Outfit'),
+        sw('Shirt (pool)', SHIRTS, look.shirt, (x) => (look.shirt = x)),
+        sw('Trousers (pool)', TROUSERS, look.trousers, (x) => (look.trousers = x)),
+        sw('Shoes (pool)', SHOES, look.shoes, (x) => (look.shoes = x)),
+        sw('Waistcoat (snooker)', WAISTCOATS, look.waistcoat, (x) => (look.waistcoat = x)),
+        h('h3', {}, 'Cue'),
+        seg<CueWood>(
+          'Wood',
+          (Object.keys(WOODS) as CueWood[]).map((k) => ({ value: k, label: WOODS[k].label })),
+          p.cue.wood,
+          (x) => (p.cue.wood = x),
+        ),
+        seg<CueFerrule>(
+          'Ferrule',
+          (Object.keys(FERRULES) as CueFerrule[]).map((k) => ({ value: k, label: FERRULES[k].label })),
+          p.cue.ferrule,
+          (x) => (p.cue.ferrule = x),
+        ),
+        this.field('Wrap', swatches('Wrap', WRAPS, p.cue.wrap, (x) => change((q) => (q.cue.wrap = x))).el),
+        h('h3', {}, 'Tables'),
+        sw('Pool cloth', POOL_CLOTHS, p.cloth.pool, (x) => (p.cloth.pool = x)),
+        sw('UK pool cloth', POOL_CLOTHS, p.cloth.english, (x) => (p.cloth.english = x)),
+        sw('Snooker cloth', SNOOKER_CLOTHS, p.cloth.snooker, (x) => (p.cloth.snooker = x)),
+      );
+    };
+    draw();
+    return h('div', { className: 'sub player' }, this.header('Player'), body);
   }
 
   private settingsScreen(): HTMLElement {

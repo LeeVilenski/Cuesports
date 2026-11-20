@@ -103,8 +103,37 @@ function lathe(points: [number, number][], segments = 20): LatheGeometry {
   return new LatheGeometry(pts, segments);
 }
 
+export type CueWood = 'ash' | 'maple' | 'rosewood' | 'ebony';
+export type CueFerrule = 'brass' | 'ivory' | 'black';
+
+/** How a cue looks: the wood, the ferrule, and a wrap round the butt (null for none). */
+export interface CueStyle {
+  wood: CueWood;
+  ferrule: CueFerrule;
+  wrap: string | null;
+}
+
+export const DEFAULT_CUE_STYLE: CueStyle = { wood: 'ash', ferrule: 'brass', wrap: null };
+
+/** Base and grain colours per wood. */
+export const WOODS: Record<CueWood, { label: string; base: string; grain: string }> = {
+  ash: { label: 'Ash', base: '#d8bf93', grain: '#5a3a1e' },
+  maple: { label: 'Maple', base: '#ead6ae', grain: '#a7835a' },
+  rosewood: { label: 'Rosewood', base: '#7c3d24', grain: '#2a100a' },
+  ebony: { label: 'Ebony', base: '#3a2d26', grain: '#0d0907' },
+};
+
+export const FERRULES: Record<
+  CueFerrule,
+  { label: string; color: string; metalness: number; roughness: number }
+> = {
+  brass: { label: 'Brass', color: '#c9a548', metalness: 0.9, roughness: 0.25 },
+  ivory: { label: 'Ivory', color: '#efe8d6', metalness: 0, roughness: 0.35 },
+  black: { label: 'Black', color: '#1a1a1a', metalness: 0.2, roughness: 0.4 },
+};
+
 /** The cue, built along +y with the very end of the tip at the origin and the butt at y = length. */
-export function buildCue(track: Track): Group {
+export function buildCue(track: Track, style: CueStyle = DEFAULT_CUE_STYLE): Group {
   const { geo, mat } = track;
   const g = new Group();
   // Tip: a blue leather disc as wide as the ferrule, its face domed and chalked.
@@ -120,10 +149,13 @@ export function buildCue(track: Track): Group {
   const dome = new Mesh(geo(new SphereGeometry(sr, 20, 6, 0, Math.PI * 2, 0, theta)), chalk);
   dome.rotation.x = Math.PI;
   dome.position.y = sr;
-  // Brass ferrule.
+  // Ferrule.
   const FERRULE = 0.02;
-  const brass = mat(new MeshStandardMaterial({ color: '#c9a548', roughness: 0.25, metalness: 0.9 }));
-  const ferrule = new Mesh(geo(new CylinderGeometry(TIP_R * 1.01, TIP_R * 1.03, FERRULE, 20)), brass);
+  const f = FERRULES[style.ferrule];
+  const fmat = mat(
+    new MeshStandardMaterial({ color: f.color, roughness: f.roughness, metalness: f.metalness }),
+  );
+  const ferrule = new Mesh(geo(new CylinderGeometry(TIP_R * 1.01, TIP_R * 1.03, FERRULE, 20)), fmat);
   ferrule.position.y = TIP_LEN + FERRULE / 2;
   // One piece of ash from the ferrule to the butt, thickening steadily, the butt a little darker.
   const y0 = TIP_LEN + FERRULE;
@@ -133,14 +165,13 @@ export function buildCue(track: Track): Group {
     const k = i / 12;
     shaft.push([r(k), y0 + (L - y0 - 0.004) * k]);
   }
-  const ash = ashTexture('#d8bf93', '#5a3a1e');
+  const w = WOODS[style.wood];
+  const ash = ashTexture(w.base, w.grain);
   if (ash) {
     track.tex(ash);
     ash.repeat.set(1, 3);
   }
-  const wood = mat(
-    new MeshStandardMaterial({ color: ash ? '#ffffff' : '#d8bf93', map: ash, roughness: 0.38 }),
-  );
+  const wood = mat(new MeshStandardMaterial({ color: ash ? '#ffffff' : w.base, map: ash, roughness: 0.38 }));
   const body = new Mesh(geo(lathe(shaft, 24)), wood);
   // Black rubber bumper on the butt.
   const bumper = new Mesh(
@@ -149,6 +180,22 @@ export function buildCue(track: Track): Group {
   );
   bumper.position.y = L - 0.003;
   g.add(disc, dome, ferrule, body, bumper);
+  // Wrap: a grip a little proud of the butt, where the back hand holds the cue.
+  if (style.wrap) {
+    const WRAP = [0.2, 0.47];
+    const pts: [number, number][] = [];
+    for (let i = 0; i <= 6; i++) {
+      // k: metres from the butt end; the shaft's radius there, plus the wrap's thickness.
+      const k = WRAP[0]! + ((WRAP[1]! - WRAP[0]!) * i) / 6;
+      const y = L - k;
+      pts.push([r((y - y0) / (L - y0 - 0.004)) + 0.0006, y]);
+    }
+    const wrap = new Mesh(
+      geo(lathe(pts.reverse(), 24)),
+      mat(new MeshStandardMaterial({ color: style.wrap, roughness: 0.85 })),
+    );
+    g.add(wrap);
+  }
   return g;
 }
 
