@@ -15,6 +15,8 @@ export interface MatchHudCallbacks {
   onHome(): void;
   /** Watch the rack or frame just finished, shot by shot. */
   onWatch(): void;
+  /** The result sheet's second choice, when it has one (a challenge's Retry). */
+  onAlt(): void;
 }
 
 /** What a snooker player is on, in words. */
@@ -184,7 +186,14 @@ export class MatchHud {
     );
   }
 
-  showResult(title: string | null, detail = '', matchOver = false): void {
+  /** `again` labels the main button once the match is over (a drill says "Go again"). */
+  showResult(
+    title: string | null,
+    detail = '',
+    matchOver = false,
+    again = 'New match',
+    alt: string | null = null,
+  ): void {
     this.result.hidden = title === null;
     if (title === null) return;
     this.result.replaceChildren(
@@ -194,8 +203,9 @@ export class MatchHud {
         'div',
         { className: 'row wrap result-actions' },
         matchOver
-          ? h('button', { className: 'chip on', onclick: () => this.cb.onNewMatch() }, 'New match')
+          ? h('button', { className: 'chip on', onclick: () => this.cb.onNewMatch() }, again)
           : h('button', { className: 'chip on', onclick: () => this.cb.onNextRack() }, 'Next rack'),
+        alt ? h('button', { className: 'chip', onclick: () => this.cb.onAlt() }, alt) : '',
         h('button', { className: 'chip watch', onclick: () => this.cb.onWatch() }, 'Watch again'),
         h('button', { className: 'chip', onclick: () => this.cb.onHome() }, 'Home'),
       ),

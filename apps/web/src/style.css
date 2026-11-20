@@ -1912,3 +1912,116 @@ body {
     min-width: max-content;
   }
 }
+
+/* Practice: arranging the balls */
+.editor-bar {
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+  top: calc(60px + var(--safe-t));
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+  z-index: 5;
+}
+.editor-bar[hidden] {
+  display: none;
+}
+.editor-hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+.editor-bar .chip {
+  --c: var(--navy);
+  --c-lip: var(--navy-lip);
+  min-height: 40px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--c);
+  color: #fff;
+  box-shadow: 0 4px 0 var(--c-lip);
+  margin-bottom: 4px;
+  font: 700 16px var(--font-display);
+}
+.editor-bar .chip:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--c-lip);
+}
+.editor-bar .chip.on {
+  --c: var(--yellow);
+  --c-lip: var(--yellow-lip);
+  color: #1d1600;
+}
+
+.challenge-list .stars {
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+/* Colour swatches (the customiser) */
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.swatches button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: var(--sw, transparent);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.swatches button.none {
+  background:
+    linear-gradient(135deg, transparent 45%, #e0413a 45% 55%, transparent 55%), rgba(255, 255, 255, 0.06);
+}
+.swatches button[aria-pressed='true'] {
+  border-color: var(--yellow);
+  box-shadow:
+    0 0 0 3px var(--yellow),
+    0 3px 0 rgba(0, 0, 0, 0.45);
+}
+.swatches button:active {
+  transform: translateY(2px);
+}
+.menu .scroll .field:has(.swatches) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.menu .player .presets {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+/* The customiser leaves room to see the player: half the screen on a phone. */
+@media (max-width: 520px) {
+  .menu[data-screen='player'] {
+    align-items: flex-end;
+    background: none;
+  }
+  .menu[data-screen='player'] .sub {
+    height: 58%;
+  }
+}
+.menu .player .presets {
+  flex-wrap: nowrap;
+}
+.menu .player .presets button {
+  flex: none;
+  min-width: max-content;
+}

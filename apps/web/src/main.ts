@@ -19,13 +19,14 @@ import {
   Plane,
   Raycaster,
   RingGeometry,
+  Group,
   Scene,
   SpotLight,
   Vector2,
   Vector3,
   WebGLRenderer,
 } from 'three';
-import { DEFAULT_CUE } from '@cuesports/shared';
+import { DEFAULT_CUE, type TableSpec } from '@cuesports/shared';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { registerSW } from 'virtual:pwa-register';
 import {
@@ -51,6 +52,7 @@ import { Hud } from './ui/hud';
 import { MatchHud, type CallChoice } from './ui/match-hud';
 import { Menu } from './ui/menu';
 import { ReplayBar } from './ui/replay-bar';
+import { EditorBar } from './ui/editor-bar';
 import {
   ballsLabel,
   compactBalls,
@@ -64,6 +66,18 @@ import {
   type ShotRecord,
 } from './game/record';
 import { openStore } from './game/store';
+import { loadProfile, profilePreset, saveProfile, type Profile } from './game/profile';
+import { bestLabel, DRILLS, recordBest, type DrillId } from './game/drills';
+import {
+  CHALLENGES,
+  judgeChallenge,
+  loadStars,
+  newRun,
+  recordStars,
+  starText,
+  type ChallengeRun,
+  type ChallengeSpec,
+} from './game/challenges';
 import '@fontsource/barlow/500.css';
 import '@fontsource/barlow/600.css';
 import '@fontsource/barlow-condensed/700.css';
@@ -124,6 +138,11 @@ world.add(ballsView.group, cueView.group, guideView.group);
 let game: GameDef = GAMES[0]!;
 let tableView: TableView | null = null;
 let clothSpeed: ClothSpeed = loadClothSpeed();
+/** The player's own look, cue and cloth colours (the customiser). */
+let profile: Profile = loadProfile();
+/** The customiser is open: player 1 stands on a turntable behind it. */
+let previewing = false;
+cueView.setStyle(profile.cue);
 /** The table the physics runs on: the game's table with the chosen cloth speed. */
 let simTable = withClothSpeed(game.table, clothSpeed);
 
@@ -211,6 +230,7 @@ function resetTurnState(): void {
 function setGame(def: GameDef): void {
   resetTurnState();
   match = null;
+  endChallenge();
   viewer = null;
   replayBar.show(null);
   app.classList.remove('viewing');
@@ -231,7 +251,7 @@ function setTable(def: GameDef): void {
     world.remove(tableView.group);
     tableView.dispose();
   }
-  tableView = buildTableView(def.table, scene.environment);
+  tableView = buildTableView(def.table, scene.environment, clothFor(def.table));
   world.add(tableView.group);
   ballsView.setPockets(
     tableView.pocketRest,
@@ -261,9 +281,14 @@ function buildPlayers(): void {
     // line playing across the table; up the length, it's the rest.
     restReach: game.table.id.startsWith('snooker') ? 0.85 : 0.8,
   };
-  const picks = presetsFor(viewer?.reel.players ?? (match ? match.config.players : ['Player 1', 'Player 2']));
+  const names = viewer?.reel.players ?? (match ? match.config.players : [profile.name, 'Player 2']);
+  const picks = presetsFor(names);
+  // Seat 1 is whoever holds the device: their own look and cue (unless watching someone else's).
+  const mine = (i: number) => i === 0 && (!viewer || names[0] === profile.name);
   players = picks.map((pi, i) => {
-    const c = new Character(lookFor(PRESETS[pi]!, game.table.id));
+    const c = mine(i)
+      ? new Character(lookFor(profilePreset(profile), game.table.id), profile.cue)
+      : new Character(lookFor(PRESETS[pi]!, game.table.id));
     // Chairs along one long side, facing the table.
     c.setTable(t, { x: (i === 0 ? -1 : 1) * t.hl * 0.55, y: -(t.hy + 1.15) }, Math.PI / 2);
     world.add(c.group, c.chair);
@@ -303,6 +328,7 @@ function playerWants(i: number, cue: BallState | undefined, gap: number): Want {
 
 function startMatch(config: MatchConfig): void {
   resetTurnState();
+  endChallenge();
   setTable(GAMES.find((g) => g.id === config.game) ?? GAMES[0]!);
   viewer = null;
   replayBar.show(null);
@@ -368,7 +394,8 @@ function syncTurn(): void {
   matchHud.say(match.notable ? match.message + hand : '', hand ? 5000 : 3500);
   status(`${match.config.players[t.player]} to play`);
   window.setTimeout(maybeAiTurn, 400);
-  if (match.rackResult) {
+  if (match.rackResult && match.config.drill) showDrillResult(match);
+  else if (match.rackResult) {
     const w = match.config.players[match.rackResult.winner]!;
     const score = `${match.config.players[0]} ${match.score[0]} – ${match.score[1]} ${match.config.players[1]}`;
     if (match.winner !== null) matchHud.showResult(`${w} wins the match`, score, true);
@@ -413,7 +440,7 @@ function status(extra = ''): void {
 // Shooting
 
 function shoot(p: number): void {
-  if (phase !== 'aim' || aiTurn() || viewer) return;
+  if (phase !== 'aim' || aiTurn() || viewer || challenge?.sheet) return;
   if (match && (match.turn.decision || match.rackResult)) return;
   const cue = cueBall();
   if (!cue || cue.state === 'pocketed') return;
@@ -497,6 +524,7 @@ function endPlayback(): void {
   if (!playing) return;
   const result = playing;
   resetSpin();
+  const wasReplay = replaying;
   if (replaying || match) {
     if (match && !replaying && last) {
       match.judge(decl, last.before, result, last.shot);
@@ -519,6 +547,8 @@ function endPlayback(): void {
     hud.setBusy(false);
     if (match) syncTurn();
     if (viewer) afterViewedShot();
+    // A challenge's result sheet comes back after watching the shot again.
+    if (wasReplay && challenge?.sheet) challenge.sheet();
     dirty = true;
     return;
   }
@@ -529,7 +559,8 @@ function endPlayback(): void {
     .map((e) => (e.type === 'pocket' ? e.ball : ''));
   const cue = cueBall();
   ballsView.commit(result);
-  if (cue && cue.state === 'pocketed') respawnCue(cue);
+  // In a challenge a scratch ends the attempt; the table is set up again instead.
+  if (cue && cue.state === 'pocketed' && !challenge) respawnCue(cue);
   ballsView.showState(balls);
   playing = null;
   phase = 'aim';
@@ -548,6 +579,7 @@ function endPlayback(): void {
       .filter(Boolean)
       .join(' · '),
   );
+  if (challenge) challengeShot(result);
   dirty = true;
 }
 
@@ -688,6 +720,10 @@ function replay(): void {
 
 function undo(): void {
   if (viewer) return;
+  if (challenge) {
+    matchHud.say('No undo in a challenge: that would be too easy.');
+    return;
+  }
   if (match) {
     matchHud.say('Undo is only available in practice.');
     return;
@@ -729,6 +765,11 @@ const hud = new Hud({
     dirty = true;
   },
   onPlaceToggle: (on) => {
+    if (challenge) {
+      hud.setPlacing(false);
+      matchHud.say('The balls stay where they are in a challenge.');
+      return;
+    }
     if (match && match.turn.ballInHand === 'none') {
       hud.setPlacing(false);
       matchHud.say('You can only move the cue ball when you have ball in hand.');
@@ -770,8 +811,18 @@ const matchHud: MatchHud = new MatchHud({
     match.startRack();
     loadRack();
   },
-  onNewMatch: () => menu.open('play'),
+  onNewMatch: () => {
+    if (challenge) startChallenge(challenge.next ?? challenge.spec);
+    else if (match?.config.drill) startMatch(match.config);
+    else menu.open('play');
+  },
+  onAlt: () => challenge && startChallenge(challenge.spec),
   onWatch: () => {
+    if (challenge) {
+      matchHud.showResult(null);
+      replay();
+      return;
+    }
     if (!match) return;
     // The match is kept as it was saved: watching leaves it.
     saveMatch();
@@ -817,6 +868,14 @@ const menu: Menu = new Menu(
       dirty = true;
     },
     onShotCamera: (mode) => (shotCamMode = mode),
+    onDrill: (id) => startDrill(id),
+    profile: () => profile,
+    onProfile: (p) => applyProfile(p),
+    onPreview: (on) => setPreview(on),
+    onChallenge: (id) => {
+      const spec = CHALLENGES.find((c) => c.id === id);
+      if (spec) startChallenge(spec);
+    },
     saved: async () => {
       const st = await store;
       const [matches, highlights] = await Promise.all([st.matches(), st.highlights()]);
@@ -856,6 +915,250 @@ shotCamMode = menu.settings.shotCam;
 showPlayer = menu.settings.player;
 hud.setStrokeMode(menu.settings.stroke);
 app.append(menu.root);
+
+// ---------------------------------------------------------------------------------------------
+// The player's profile (customiser)
+
+/** Cloth colour for a table, from the profile. */
+function clothFor(t: TableSpec): string {
+  return t.id.startsWith('snooker')
+    ? profile.cloth.snooker
+    : t.id.startsWith('english')
+      ? profile.cloth.english
+      : profile.cloth.pool;
+}
+
+/** Where player 1 stands for the customiser: just past the bottom end, under the table lights. */
+function previewSpot(): { x: number; y: number } {
+  return { x: -(game.table.playfield.length / 2 + 0.5), y: 0 };
+}
+
+function aimPreview(): void {
+  const s = previewSpot();
+  rig.setMode('free');
+  rig.orbit.target.copy(toWorld(s.x, s.y, 0.95));
+  // Further back on a phone: the whole figure has to fit above the panel.
+  const k = app.clientWidth > 520 ? 1 : 1.45;
+  rig.persp.position.copy(toWorld(s.x + 3.0 * k, s.y - 1.2 * k, 1.35));
+  rig.orbit.enabled = false;
+  rig.orbit.autoRotate = true;
+  rig.orbit.autoRotateSpeed = 1.6;
+  framePreview();
+}
+
+/**
+ * Shifts the picture so the player sits in the space the customiser leaves: to the right of the
+ * panel on a wide screen, above it on a phone.
+ */
+function framePreview(): void {
+  const w = app.clientWidth;
+  const h = app.clientHeight;
+  if (!previewing) {
+    rig.persp.clearViewOffset();
+    return;
+  }
+  const panel = menu.root.querySelector('.sub')?.getBoundingClientRect();
+  if (!panel) return;
+  if (w > 520) {
+    // The middle of the space right of the panel, compared with the middle of the screen.
+    const dx = (panel.right + w) / 2 - w / 2;
+    rig.persp.setViewOffset(w, h, -dx, 0, w, h);
+  } else {
+    const dy = panel.top / 2 - h / 2;
+    rig.persp.setViewOffset(w, h, 0, -dy, w, h);
+  }
+}
+
+function setPreview(on: boolean): void {
+  if (previewing === on) return;
+  previewing = on;
+  if (on) {
+    players[0]?.place({ kind: 'watch', at: previewSpot() });
+    // After the panel is laid out, so the picture can be framed beside it.
+    requestAnimationFrame(aimPreview);
+  } else {
+    framePreview();
+    // Back to the slow orbit round the table behind the menus.
+    const L = game.table.playfield.length;
+    rig.persp.position.set(L * 0.55, L * 0.42, L * 0.55);
+    rig.orbit.target.set(0, 0, 0);
+    rig.orbit.autoRotateSpeed = 0.35;
+    placePlayers();
+  }
+  dirty = true;
+}
+
+/** A change from the customiser: save it and show it straight away. */
+function applyProfile(p: Profile): void {
+  const before = clothFor(game.table);
+  profile = p;
+  const clothChanged = clothFor(game.table) !== before;
+  saveProfile(p);
+  cueView.setStyle(p.cue);
+  if (clothChanged) setTable(game);
+  else buildPlayers();
+  if (previewing) players[0]?.place({ kind: 'watch', at: previewSpot() });
+  ballsView.showState(balls);
+  dirty = true;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Challenges
+
+/** The challenge being played: its spec, the run so far, and (once over) its result sheet. */
+let challenge: {
+  spec: ChallengeSpec;
+  run: ChallengeRun;
+  next: ChallengeSpec | null;
+  sheet: (() => void) | null;
+} | null = null;
+
+/** The target for a position challenge: three rings, for three, two and one stars. */
+const targetRings = new Group();
+targetRings.visible = false;
+targetRings.renderOrder = 3;
+world.add(targetRings);
+
+function showTarget(t: ChallengeSpec['target']): void {
+  targetRings.clear();
+  targetRings.visible = !!t;
+  if (!t) return;
+  const colours = ['#ffd84a', '#ffffff', '#ffffff'];
+  t.r.forEach((r, i) => {
+    const ring = new Mesh(
+      new RingGeometry(Math.max(0, r - 0.006), r, 64),
+      new MeshBasicMaterial({
+        color: colours[i] ?? '#ffffff',
+        transparent: true,
+        opacity: i === 0 ? 0.9 : 0.45 - i * 0.1,
+        depthWrite: false,
+      }),
+    );
+    targetRings.add(ring);
+  });
+  targetRings.position.set(t.x, t.y, 0.0015);
+}
+
+function startChallenge(spec: ChallengeSpec): void {
+  setGame(GAMES.find((g) => g.id === spec.table) ?? GAMES[0]!);
+  const i = CHALLENGES.indexOf(spec);
+  challenge = { spec, run: newRun(), next: CHALLENGES[i + 1] ?? null, sheet: null };
+  setupChallengeTable();
+  matchHud.say(spec.goal, 5000);
+}
+
+/** Puts the balls back where the challenge starts (a new attempt). */
+function setupChallengeTable(): void {
+  if (!challenge) return;
+  const { spec, run } = challenge;
+  const t = game.table;
+  const specs = Object.fromEntries(
+    spec.balls.map(([id]) => {
+      const b = id === 'cue' ? t.balls.cue : t.balls.object;
+      return [id, [b.radius, b.mass] as [number, number]];
+    }),
+  );
+  balls = expandBalls(spec.balls, specs);
+  cueStart = { ...cueBall()!.pos };
+  ballsView.setBalls(balls);
+  last = null;
+  phase = 'aim';
+  aimAtFirstBall();
+  placePlayers();
+  showTarget(spec.target);
+  rig.snap();
+  status(challengeStatus(spec, run));
+  dirty = true;
+}
+
+function challengeStatus(spec: ChallengeSpec, run: ChallengeRun): string {
+  return spec.kind === 'clear'
+    ? `${spec.title} · shot ${run.shots + 1} of ${spec.limit}`
+    : `${spec.title} · attempt ${run.attempt} of ${spec.limit}`;
+}
+
+function challengeShot(result: ShotResult): void {
+  if (!challenge) return;
+  const c = challenge;
+  const v = judgeChallenge(c.spec, c.run, result);
+  if (v.status === 'continue') {
+    status(challengeStatus(c.spec, c.run));
+    matchHud.say(v.message);
+    return;
+  }
+  if (v.status === 'retry') {
+    matchHud.say(v.message, 2500);
+    window.setTimeout(() => challenge === c && phase === 'aim' && setupChallengeTable(), 1200);
+    return;
+  }
+  const won = v.status === 'won';
+  status(`${c.spec.title} · ${won ? starText(v.stars) : 'not this time'}`);
+  const better = won && recordStars(c.spec.id, v.stars);
+  const best = loadStars()[c.spec.id] ?? 0;
+  c.sheet = () =>
+    matchHud.showResult(
+      won ? `${starText(v.stars)}  ${c.spec.title}` : 'Not this time',
+      `${v.message}${better ? ' A new best!' : best ? ` Best: ${starText(best)}` : ''}`,
+      true,
+      won && c.next ? 'Next challenge' : 'Retry',
+      won && c.next ? 'Retry' : null,
+    );
+  c.sheet();
+}
+
+function endChallenge(): void {
+  challenge = null;
+  targetRings.visible = false;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Practice drills
+
+function startDrill(id: DrillId): void {
+  const d = DRILLS[id];
+  const name = menu.lastConfig.players[0] || 'Player 1';
+  startMatch({
+    ...DEFAULT_MATCH,
+    game: d.game,
+    raceTo: d.raceTo,
+    players: [name, d.opponent],
+    ai: null,
+    drill: id,
+  });
+}
+
+/** The end of a line-up, or of a rack or race against the ghost, with the personal best. */
+function showDrillResult(m: Match): void {
+  const id = m.config.drill!;
+  if (id === 'lineup') {
+    const pts = m.framePoints?.points[0] ?? 0;
+    const cleared = m.rackResult?.winner === 0;
+    const best = recordBest(id, pts);
+    matchHud.showResult(
+      cleared ? `Cleared the line-up: ${pts}` : `Break of ${pts}`,
+      best ? 'A new best!' : bestLabel(id),
+      true,
+      'Go again',
+    );
+    return;
+  }
+  const [you, ghost] = m.score;
+  if (m.winner === null) {
+    const won = m.rackResult!.winner === 0;
+    matchHud.showResult(
+      won ? `${m.config.players[0]} wins rack ${m.rack}` : `The ghost wins rack ${m.rack}`,
+      `${m.message} ${you}–${ghost}, race to ${m.config.raceTo}.`,
+    );
+    return;
+  }
+  const best = recordBest(id, you);
+  matchHud.showResult(
+    m.winner === 0 ? `You beat the ghost ${you}–${ghost}` : `The ghost wins ${ghost}–${you}`,
+    best ? 'A new best!' : bestLabel(id),
+    true,
+    'Go again',
+  );
+}
 
 // ---------------------------------------------------------------------------------------------
 // Saved matches, highlights and watching them
@@ -1157,7 +1460,8 @@ canvas.addEventListener('pointerdown', (e) => {
     const p = tablePoint(e.clientX, e.clientY);
     if (picking) {
       if (p) pickAt(p);
-    } else if (p && placing) placeCue(p);
+    } else if (p && placing && !match) arrangeAt(p);
+    else if (p && placing) placeCue(p);
     else if (p && rig.mode === 'top') aimAtPoint(p);
   }
   dirty = true;
@@ -1185,7 +1489,8 @@ canvas.addEventListener('pointermove', (e) => {
   if (phase !== 'aim' || picking) return;
   if (placing) {
     const p = tablePoint(e.clientX, e.clientY);
-    if (p) placeCue(p);
+    if (p && grabbed) moveBall(grabbed, p);
+    else if (p && !removing) placeCue(p);
   } else if (rig.mode === 'top') {
     const p = tablePoint(e.clientX, e.clientY);
     if (p) aimAtPoint(p);
@@ -1203,6 +1508,7 @@ canvas.addEventListener('pointermove', (e) => {
 
 const endPointer = (e: PointerEvent): void => {
   pointers.delete(e.pointerId);
+  grabbed = null;
   if (pointers.size < 2) pinch = null;
 };
 canvas.addEventListener('pointerup', endPointer);
@@ -1218,6 +1524,135 @@ canvas.addEventListener(
   },
   { passive: false },
 );
+
+// ---------------------------------------------------------------------------------------------
+// Practice: arranging the balls
+
+/** The ball being dragged while arranging. */
+let grabbed: string | null = null;
+/** Arranging: taps take balls off the table. */
+let removing = false;
+
+/** Whether ball `id` fits at p: on the cloth and clear of every other ball. */
+function fits(id: string, p: { x: number; y: number }): boolean {
+  const b = balls.find((x) => x.id === id);
+  if (!b) return false;
+  const hl = game.table.playfield.length / 2 - b.radius;
+  const hw = game.table.playfield.width / 2 - b.radius;
+  if (Math.abs(p.x) > hl || Math.abs(p.y) > hw) return false;
+  return balls.every(
+    (o) =>
+      o === b || o.state === 'pocketed' || Math.hypot(o.pos.x - p.x, o.pos.y - p.y) >= o.radius + b.radius,
+  );
+}
+
+function ballAtPoint(p: { x: number; y: number }): BallState | undefined {
+  let best: BallState | undefined;
+  let d = Infinity;
+  for (const b of balls) {
+    if (b.state === 'pocketed') continue;
+    const e = Math.hypot(b.pos.x - p.x, b.pos.y - p.y);
+    if (e < b.radius * 1.8 && e < d) [best, d] = [b, e];
+  }
+  return best;
+}
+
+/** A tap while arranging: take a ball off, pick one up, or move the cue ball here. */
+function arrangeAt(p: { x: number; y: number }): void {
+  const b = ballAtPoint(p);
+  if (removing) {
+    if (b && b.id !== 'cue') {
+      b.state = 'pocketed';
+      delete b.pocket;
+      tableEdited();
+    }
+    return;
+  }
+  grabbed = b?.id ?? 'cue';
+  if (!b) moveBall('cue', p);
+}
+
+function moveBall(id: string, p: { x: number; y: number }): void {
+  const b = balls.find((x) => x.id === id);
+  if (!b || !fits(id, p)) return;
+  b.pos = { ...p };
+  b.state = 'stationary';
+  delete b.pocket;
+  tableEdited();
+}
+
+/** Nearest free point to p, searching outwards (null if the table is somehow full there). */
+function freeNear(id: string, p: { x: number; y: number }): { x: number; y: number } | null {
+  const step = (balls.find((b) => b.id === id)?.radius ?? 0.028) * 0.5;
+  for (let r = 0; r < 120; r++)
+    for (let k = 0; k < Math.max(1, r * 6); k++) {
+      const a = (k / Math.max(1, r * 6)) * Math.PI * 2;
+      const q = { x: p.x + Math.cos(a) * r * step, y: p.y + Math.sin(a) * r * step };
+      if (fits(id, q)) return q;
+    }
+  return null;
+}
+
+/** Puts potted balls back, each as close to its place in the rack (or its spot) as it fits. */
+function spotPotted(): void {
+  const home = new Map(layout(game.table, game.layout, 1).map((b) => [b.id, b.pos]));
+  for (const b of balls) {
+    if (b.state !== 'pocketed') continue;
+    const q = freeNear(b.id, home.get(b.id) ?? { x: game.table.playfield.length / 4, y: 0 });
+    if (!q) continue;
+    b.pos = q;
+    b.state = 'stationary';
+    delete b.pocket;
+  }
+  tableEdited();
+}
+
+function clearTable(): void {
+  for (const b of balls)
+    if (b.id !== 'cue') {
+      b.state = 'pocketed';
+      delete b.pocket;
+    }
+  tableEdited();
+}
+
+function tableEdited(): void {
+  // The last shot no longer matches the table, so it can't be undone onto it.
+  last = null;
+  ballsView.showState(balls);
+  dirty = true;
+}
+
+function stopArranging(): void {
+  placing = false;
+  removing = false;
+  hud.setPlacing(false);
+  dirty = true;
+}
+
+const editorBar = new EditorBar({
+  onRemove: (on) => (removing = on),
+  onSpot: spotPotted,
+  onClear: clearTable,
+  onDone: stopArranging,
+  // The challenge level editor: arrange the table, then paste this into a ChallengeSpec.
+  onCopy: import.meta.env.DEV || new URLSearchParams(location.search).has('debug') ? copyLayout : undefined,
+});
+
+function copyLayout(): void {
+  const text = JSON.stringify({
+    table: game.id,
+    balls: compactBalls(balls)
+      .filter((b) => b.length === 3)
+      .map(([id, x, y]) => [id, Math.round(x! * 1e4) / 1e4, Math.round(y! * 1e4) / 1e4]),
+  });
+  console.info('Challenge layout:', text);
+  void navigator.clipboard?.writeText(text).then(
+    () => status('layout copied'),
+    () => status('layout in the console'),
+  );
+}
+app.append(editorBar.root);
 
 function placeCue(p: { x: number; y: number }, force = false): void {
   const cue = cueBall();
@@ -1262,6 +1697,7 @@ function resize(): void {
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(w, h);
   rig.resize(w / h);
+  framePreview();
   rig.snap();
   dirty = true;
 }
@@ -1296,6 +1732,8 @@ function frame(now: number): void {
     dirty = true;
   }
 
+  editorBar.show(placing && !match && !viewer && phase === 'aim' && !menu.isOpen);
+  if (!placing) removing = false;
   if (menu.isOpen) dirty = true;
   if (cue) {
     // While aiming the camera rides just above the cue when it is raised (chin on the cue).
@@ -1343,6 +1781,16 @@ function frame(now: number): void {
 }
 
 function updatePlayers(dt: number, cue: BallState | undefined): void {
+  if (previewing) {
+    // The customiser: player 1 stands for inspection, everyone else sits.
+    players.forEach((p, i) => {
+      p.chair.visible = false;
+      if (p.update(dt, i === 0 ? { kind: 'watch', at: previewSpot() } : { kind: 'sit' })) dirty = true;
+      p.group.visible = i === 0;
+    });
+    cueView.group.visible = false;
+    return;
+  }
   const back = 0.015 + pull * 0.22;
   const gap = phase === 'striking' ? Math.max(0, back * (1 - (Math.max(0, strikeT) / 0.09) ** 2)) : back;
   players.forEach((p, i) => {

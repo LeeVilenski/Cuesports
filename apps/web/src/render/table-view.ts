@@ -199,7 +199,12 @@ const toPath = (pts: Vec2[]): Path => new Path(pts.map((p) => ({ x: p.x, y: p.y 
  * Builds the table. `env` is the room's environment map: parts of the table the canopy does not
  * light (the sides and legs of a snooker table) take more of it.
  */
-export function buildTableView(table: TableSpec, env?: Texture | null): TableView {
+/** `clothHex` overrides the cloth colour (the player's choice); by default it is the table's own. */
+export function buildTableView(
+  table: TableSpec,
+  env?: Texture | null,
+  clothHex = clothColour(table),
+): TableView {
   const geo = tableGeometry(table);
   const group = new Group();
   const hl = table.playfield.length / 2;
@@ -233,13 +238,13 @@ export function buildTableView(table: TableSpec, env?: Texture | null): TableVie
     uv.setXY(i, (pos.getX(i) + ex) / (2 * ex), (pos.getY(i) + ey) / (2 * ey));
   const cloth = new Mesh(
     clothGeo,
-    new MeshStandardMaterial({ map: clothTexture(table, ex, ey), roughness: 0.92, metalness: 0 }),
+    new MeshStandardMaterial({ map: clothTexture(table, ex, ey, clothHex), roughness: 0.92, metalness: 0 }),
   );
   group.add(cloth);
 
   // Cushions: from the nose line out to the rail, covered in cloth.
   const cushionMat = new MeshStandardMaterial({
-    color: new Color(clothColour(table)).multiplyScalar(0.92),
+    color: new Color(clothHex).multiplyScalar(0.92),
     roughness: 0.9,
   });
   const cushionOuter = railOutline(geo, hl + CUSHION_WIDTH + 0.01, hw + CUSHION_WIDTH + 0.01, 0.012);

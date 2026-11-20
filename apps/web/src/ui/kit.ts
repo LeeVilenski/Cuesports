@@ -168,3 +168,33 @@ export function chooser<T extends HTMLElement>(el: T): T {
   requestAnimationFrame(() => requestAnimationFrame(reveal));
   return el;
 }
+
+/** A row of colour swatches: one choice of several, like `segmented` but shown as colours. */
+export function swatches<T extends string | null>(
+  label: string,
+  options: { value: T; label: string }[],
+  value: T,
+  onChange: (v: T) => void,
+): { el: HTMLElement; set(v: T): void } {
+  const el = h('div', { className: 'swatches', role: 'group', ariaLabel: label });
+  const buttons = options.map((o) => {
+    const b = h('button', {
+      type: 'button',
+      title: o.label,
+      ariaLabel: o.label,
+      onclick: () => pick(o.value),
+    });
+    if (o.value) b.style.setProperty('--sw', o.value);
+    else b.classList.add('none');
+    return b;
+  });
+  const set = (v: T) =>
+    buttons.forEach((b, i) => b.setAttribute('aria-pressed', String(options[i]!.value === v)));
+  const pick = (v: T) => {
+    set(v);
+    onChange(v);
+  };
+  el.append(...buttons);
+  set(value);
+  return { el, set };
+}

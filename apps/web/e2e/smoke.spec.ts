@@ -30,7 +30,7 @@ async function practice(page: Page, game = '9-ball'): Promise<void> {
 /** Opens the match set-up from the home menu, against a friend on the same device. */
 async function setup(page: Page, game?: string): Promise<void> {
   await page.goto('/');
-  await page.getByRole('button', { name: /^Play/ }).click();
+  await page.getByRole('button', { name: /^Play Game/ }).click();
   if (game) await page.getByRole('button', { name: game, exact: true }).click();
   await page.getByRole('button', { name: 'Friend', exact: true }).click();
 }
@@ -206,7 +206,7 @@ test('plays against the computer: it thinks in a worker and takes its own shots'
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
-  await page.getByRole('button', { name: /^Play/ }).click();
+  await page.getByRole('button', { name: /^Play Game/ }).click();
   await page.getByRole('button', { name: 'Computer', exact: true }).click();
   await page.getByRole('button', { name: 'Club', exact: true }).click();
   await page.getByRole('button', { name: 'Start' }).click();
@@ -296,5 +296,69 @@ test('saves a match, shows its stats and replays its shots', async ({ page }) =>
   await expect(page.locator('.replay-bar')).toContainText('Shot 2 of 2');
   await page.getByRole('button', { name: 'Close replay' }).click();
   await expect(page.locator('.saved-row').first()).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('practice: arranges the table and starts the drills', async ({ page }) => {
+  test.setTimeout(300_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await practice(page);
+  await page.waitForFunction(() => window.__cuesports?.state().phase === 'aim');
+  const onTable = () =>
+    page.evaluate(() => window.__cuesports.state().balls.filter((b) => b.state !== 'pocketed').length);
+  await page.getByRole('button', { name: 'Move cue ball' }).click();
+  await expect(page.locator('.editor-bar')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  expect(await onTable()).toBe(1);
+  await page.getByRole('button', { name: 'Spot potted' }).click();
+  expect(await onTable()).toBe(10);
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.locator('.editor-bar')).toBeHidden();
+
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: /^Change game/ }).click();
+  await page.getByRole('button', { name: /^Snooker line-up/ }).click();
+  await page.waitForFunction(() => window.__cuesports.state().match?.turn.ballInHand === 'in-d');
+  const reds = await page.evaluate(
+    () => window.__cuesports.state().balls.filter((b) => b.id.startsWith('red')).length,
+  );
+  expect(reds).toBe(15);
+
+  // A challenge: the list, then the first one, set up with its goal in the status line.
+  // A drill counts as a match, so the pause menu has Home rather than Change game.
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: /^Home/ }).click();
+  await page.getByRole('button', { name: /^Practice/ }).click();
+  await page.getByRole('button', { name: /^Challenges/ }).click();
+  await page.getByRole('button', { name: /^1\. Straight in/ }).click();
+  await expect(page.locator('.hud')).toContainText('Straight in · attempt 1 of 3');
+  const challengeBalls = await page.evaluate(() =>
+    window.__cuesports
+      .state()
+      .balls.filter((b) => b.state !== 'pocketed')
+      .map((b) => b.id),
+  );
+  expect(challengeBalls.sort()).toEqual(['1', 'cue']);
+  expect(errors).toEqual([]);
+});
+
+test('customises the player and keeps it', async ({ page }) => {
+  test.setTimeout(300_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.getByRole('button', { name: /^Player$/ }).click();
+  await page.getByRole('button', { name: 'Kenji', exact: true }).click();
+  await page.getByRole('button', { name: 'Rosewood', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Your name' }).fill('Ann');
+  await page.getByRole('textbox', { name: 'Your name' }).press('Enter');
+  await page.getByRole('textbox', { name: 'Your name' }).blur();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('cuesports.profile') ?? '{}'));
+  expect(saved).toMatchObject({ name: 'Ann', look: { hairStyle: 'long' }, cue: { wood: 'rosewood' } });
+  // Kept after a reload, and used on the Play screen.
+  await page.reload();
+  await page.getByRole('button', { name: /^Play Game/ }).click();
+  await expect(page.getByRole('textbox', { name: 'Player 1 name' })).toHaveValue('Ann');
   expect(errors).toEqual([]);
 });
