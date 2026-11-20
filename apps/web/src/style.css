@@ -1912,3 +1912,52 @@ body {
     min-width: max-content;
   }
 }
+
+/* Practice: arranging the balls */
+.editor-bar {
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+  top: calc(60px + var(--safe-t));
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+  z-index: 5;
+}
+.editor-bar[hidden] {
+  display: none;
+}
+.editor-hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+.editor-bar .chip {
+  --c: var(--navy);
+  --c-lip: var(--navy-lip);
+  min-height: 40px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--c);
+  color: #fff;
+  box-shadow: 0 4px 0 var(--c-lip);
+  margin-bottom: 4px;
+  font: 700 16px var(--font-display);
+}
+.editor-bar .chip:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--c-lip);
+}
+.editor-bar .chip.on {
+  --c: var(--yellow);
+  --c-lip: var(--yellow-lip);
+  color: #1d1600;
+}

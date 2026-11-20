@@ -1,3 +1,4 @@
+import { bestLabel, DRILLS, type DrillId } from '../game/drills';
 import { visitWord } from '../game/games';
 import { DEFAULT_MATCH, type MatchConfig } from '../game/match';
 import { reelOfHighlight, reelOfRack, type Highlight, type MatchRecord, type Reel } from '../game/record';
@@ -36,6 +37,7 @@ export interface MenuCallbacks {
   onDeleteHighlight(id: string): Promise<void>;
   /** Pause sheet: keep the last shot as a highlight. */
   onSaveHighlight(): void;
+  onDrill(id: DrillId): void;
 }
 
 type Screen = 'home' | 'play' | 'practice' | 'settings' | 'help' | 'pause' | 'stats' | 'replays';
@@ -54,6 +56,7 @@ const LAST_MATCH_KEY = 'cuesports.lastMatch';
 
 /** Short description of a match set-up, for the Quick match tile. */
 function describe(c: MatchConfig): string {
+  if (c.drill) return `Drill · ${DRILLS[c.drill].title}`;
   const game = MATCH_GAMES.find((g) => g.id === c.game)?.label ?? c.game;
   const who = c.ai ? `vs ${LEVELS[c.ai - 1]} CPU` : 'vs friend';
   const race = c.game === 'snooker' ? `best of ${c.raceTo * 2 - 1}` : `race to ${c.raceTo}`;
@@ -416,6 +419,7 @@ export class Menu {
       h(
         'div',
         { className: 'scroll' },
+        h('h3', {}, 'Free table'),
         h(
           'div',
           { className: 'game-pick big' },
@@ -439,6 +443,34 @@ export class Menu {
             );
           }),
         ),
+        h('h3', {}, 'Drills'),
+        h(
+          'div',
+          { className: 'tiles' },
+          this.tile(
+            'red',
+            'target',
+            DRILLS.lineup.title,
+            bestLabel('lineup'),
+            () => {
+              this.close();
+              this.cb.onDrill('lineup');
+            },
+            'wide',
+          ),
+          this.tile(
+            'yellow',
+            'cue',
+            DRILLS.ghost.title,
+            bestLabel('ghost'),
+            () => {
+              this.close();
+              this.cb.onDrill('ghost');
+            },
+            'wide',
+          ),
+        ),
+        h('h3', {}, 'Table'),
         this.field('Cloth', cloth.el),
       ),
     );

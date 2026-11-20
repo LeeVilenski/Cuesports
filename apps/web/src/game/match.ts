@@ -15,6 +15,7 @@ import {
   type Turn,
 } from '@cuesports/rules';
 import { Rng } from '@cuesports/shared';
+import { drillRule, lineupBalls, type DrillId } from './drills';
 import type { ClothSpeed } from './games';
 import { recordId, shotRecord, specsOf, type MatchRecord, type RackRecord } from './record';
 
@@ -34,6 +35,8 @@ export interface MatchConfig {
   english: EnglishPreset;
   /** Skill level (1–5) of the computer playing as player 2, or null for a second human. */
   ai: number | null;
+  /** A practice drill (snooker line-up, 9-ball ghost) instead of a match. */
+  drill?: DrillId | undefined;
 }
 
 export const DEFAULT_MATCH: MatchConfig = {
@@ -156,14 +159,18 @@ export class Match {
     const f = this.ruleset.newFrame(this.options, this.rng, this.breaker);
     this.state = f.state;
     this.turn = f.turn;
-    this.balls = f.balls;
+    this.balls = this.config.drill === 'lineup' ? lineupBalls(this.table, f.balls) : f.balls;
     // A re-rack after an illegal break carries on in the same rack record.
     if (this.record.racks.length < this.rack)
       this.record.racks.push({ breaker: this.breaker, shots: [], winner: null, reason: '' });
     Object.assign(this.record.specs, specsOf(f.balls));
-    const what = this.isSnooker
-      ? `Frame ${this.rack}: ${this.config.players[this.breaker]} to break off.`
-      : `Rack ${this.rack}: ${this.config.players[this.breaker]} to break.`;
+    const what = this.config.drill
+      ? this.config.drill === 'lineup'
+        ? `${this.config.players[0]}: ball in hand in the D. Make your best break.`
+        : `Rack ${this.rack}: ${this.config.players[0]} to break.`
+      : this.isSnooker
+        ? `Frame ${this.rack}: ${this.config.players[this.breaker]} to break off.`
+        : `Rack ${this.rack}: ${this.config.players[this.breaker]} to break.`;
     this.message = what;
     this.notable = true;
   }
@@ -189,6 +196,17 @@ export class Match {
     const pointsBefore = this.framePoints?.points[player] ?? 0;
     const j = this.ruleset.judge(this.state, decl, before, result, this.options);
     this.apply(j);
+    const drill = this.config.drill;
+    if (drill && !j.frame && !j.rerack) {
+      const d = drillRule(drill, j, isBreak, this.config.players);
+      this.state = d.state;
+      this.turn = d.turn;
+      if (d.message) {
+        this.message = d.message;
+        this.notable = true;
+      }
+      if (d.frame) this.endRack(d.frame);
+    }
     if (shot && rack) {
       const scored = this.isSnooker
         ? Math.max(0, (this.framePoints?.points[player] ?? 0) - pointsBefore)
@@ -238,7 +256,8 @@ export class Match {
     if ((this.score[frame.winner] ?? 0) >= this.config.raceTo) this.winner = frame.winner;
     else {
       const alternate = this.isSnooker || this.config.breaks === 'alternate';
-      this.breaker = alternate ? 1 - this.breaker : frame.winner;
+      // In a drill the player always breaks.
+      this.breaker = this.config.drill ? 0 : alternate ? 1 - this.breaker : frame.winner;
     }
     this.record.winner = this.winner;
   }

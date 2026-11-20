@@ -51,6 +51,7 @@ import { Hud } from './ui/hud';
 import { MatchHud, type CallChoice } from './ui/match-hud';
 import { Menu } from './ui/menu';
 import { ReplayBar } from './ui/replay-bar';
+import { EditorBar } from './ui/editor-bar';
 import {
   ballsLabel,
   compactBalls,
@@ -64,6 +65,7 @@ import {
   type ShotRecord,
 } from './game/record';
 import { openStore } from './game/store';
+import { bestLabel, DRILLS, recordBest, type DrillId } from './game/drills';
 import '@fontsource/barlow/500.css';
 import '@fontsource/barlow/600.css';
 import '@fontsource/barlow-condensed/700.css';
@@ -368,7 +370,8 @@ function syncTurn(): void {
   matchHud.say(match.notable ? match.message + hand : '', hand ? 5000 : 3500);
   status(`${match.config.players[t.player]} to play`);
   window.setTimeout(maybeAiTurn, 400);
-  if (match.rackResult) {
+  if (match.rackResult && match.config.drill) showDrillResult(match);
+  else if (match.rackResult) {
     const w = match.config.players[match.rackResult.winner]!;
     const score = `${match.config.players[0]} ${match.score[0]} – ${match.score[1]} ${match.config.players[1]}`;
     if (match.winner !== null) matchHud.showResult(`${w} wins the match`, score, true);
@@ -770,7 +773,7 @@ const matchHud: MatchHud = new MatchHud({
     match.startRack();
     loadRack();
   },
-  onNewMatch: () => menu.open('play'),
+  onNewMatch: () => (match?.config.drill ? startMatch(match.config) : menu.open('play')),
   onWatch: () => {
     if (!match) return;
     // The match is kept as it was saved: watching leaves it.
@@ -817,6 +820,7 @@ const menu: Menu = new Menu(
       dirty = true;
     },
     onShotCamera: (mode) => (shotCamMode = mode),
+    onDrill: (id) => startDrill(id),
     saved: async () => {
       const st = await store;
       const [matches, highlights] = await Promise.all([st.matches(), st.highlights()]);
@@ -856,6 +860,55 @@ shotCamMode = menu.settings.shotCam;
 showPlayer = menu.settings.player;
 hud.setStrokeMode(menu.settings.stroke);
 app.append(menu.root);
+
+// ---------------------------------------------------------------------------------------------
+// Practice drills
+
+function startDrill(id: DrillId): void {
+  const d = DRILLS[id];
+  const name = menu.lastConfig.players[0] || 'Player 1';
+  startMatch({
+    ...DEFAULT_MATCH,
+    game: d.game,
+    raceTo: d.raceTo,
+    players: [name, d.opponent],
+    ai: null,
+    drill: id,
+  });
+}
+
+/** The end of a line-up, or of a rack or race against the ghost, with the personal best. */
+function showDrillResult(m: Match): void {
+  const id = m.config.drill!;
+  if (id === 'lineup') {
+    const pts = m.framePoints?.points[0] ?? 0;
+    const cleared = m.rackResult?.winner === 0;
+    const best = recordBest(id, pts);
+    matchHud.showResult(
+      cleared ? `Cleared the line-up: ${pts}` : `Break of ${pts}`,
+      best ? 'A new best!' : bestLabel(id),
+      true,
+      'Go again',
+    );
+    return;
+  }
+  const [you, ghost] = m.score;
+  if (m.winner === null) {
+    const won = m.rackResult!.winner === 0;
+    matchHud.showResult(
+      won ? `${m.config.players[0]} wins rack ${m.rack}` : `The ghost wins rack ${m.rack}`,
+      `${m.message} ${you}–${ghost}, race to ${m.config.raceTo}.`,
+    );
+    return;
+  }
+  const best = recordBest(id, you);
+  matchHud.showResult(
+    m.winner === 0 ? `You beat the ghost ${you}–${ghost}` : `The ghost wins ${ghost}–${you}`,
+    best ? 'A new best!' : bestLabel(id),
+    true,
+    'Go again',
+  );
+}
 
 // ---------------------------------------------------------------------------------------------
 // Saved matches, highlights and watching them
@@ -1157,7 +1210,8 @@ canvas.addEventListener('pointerdown', (e) => {
     const p = tablePoint(e.clientX, e.clientY);
     if (picking) {
       if (p) pickAt(p);
-    } else if (p && placing) placeCue(p);
+    } else if (p && placing && !match) arrangeAt(p);
+    else if (p && placing) placeCue(p);
     else if (p && rig.mode === 'top') aimAtPoint(p);
   }
   dirty = true;
@@ -1185,7 +1239,8 @@ canvas.addEventListener('pointermove', (e) => {
   if (phase !== 'aim' || picking) return;
   if (placing) {
     const p = tablePoint(e.clientX, e.clientY);
-    if (p) placeCue(p);
+    if (p && grabbed) moveBall(grabbed, p);
+    else if (p && !removing) placeCue(p);
   } else if (rig.mode === 'top') {
     const p = tablePoint(e.clientX, e.clientY);
     if (p) aimAtPoint(p);
@@ -1203,6 +1258,7 @@ canvas.addEventListener('pointermove', (e) => {
 
 const endPointer = (e: PointerEvent): void => {
   pointers.delete(e.pointerId);
+  grabbed = null;
   if (pointers.size < 2) pinch = null;
 };
 canvas.addEventListener('pointerup', endPointer);
@@ -1218,6 +1274,119 @@ canvas.addEventListener(
   },
   { passive: false },
 );
+
+// ---------------------------------------------------------------------------------------------
+// Practice: arranging the balls
+
+/** The ball being dragged while arranging. */
+let grabbed: string | null = null;
+/** Arranging: taps take balls off the table. */
+let removing = false;
+
+/** Whether ball `id` fits at p: on the cloth and clear of every other ball. */
+function fits(id: string, p: { x: number; y: number }): boolean {
+  const b = balls.find((x) => x.id === id);
+  if (!b) return false;
+  const hl = game.table.playfield.length / 2 - b.radius;
+  const hw = game.table.playfield.width / 2 - b.radius;
+  if (Math.abs(p.x) > hl || Math.abs(p.y) > hw) return false;
+  return balls.every(
+    (o) =>
+      o === b || o.state === 'pocketed' || Math.hypot(o.pos.x - p.x, o.pos.y - p.y) >= o.radius + b.radius,
+  );
+}
+
+function ballAtPoint(p: { x: number; y: number }): BallState | undefined {
+  let best: BallState | undefined;
+  let d = Infinity;
+  for (const b of balls) {
+    if (b.state === 'pocketed') continue;
+    const e = Math.hypot(b.pos.x - p.x, b.pos.y - p.y);
+    if (e < b.radius * 1.8 && e < d) [best, d] = [b, e];
+  }
+  return best;
+}
+
+/** A tap while arranging: take a ball off, pick one up, or move the cue ball here. */
+function arrangeAt(p: { x: number; y: number }): void {
+  const b = ballAtPoint(p);
+  if (removing) {
+    if (b && b.id !== 'cue') {
+      b.state = 'pocketed';
+      delete b.pocket;
+      tableEdited();
+    }
+    return;
+  }
+  grabbed = b?.id ?? 'cue';
+  if (!b) moveBall('cue', p);
+}
+
+function moveBall(id: string, p: { x: number; y: number }): void {
+  const b = balls.find((x) => x.id === id);
+  if (!b || !fits(id, p)) return;
+  b.pos = { ...p };
+  b.state = 'stationary';
+  delete b.pocket;
+  tableEdited();
+}
+
+/** Nearest free point to p, searching outwards (null if the table is somehow full there). */
+function freeNear(id: string, p: { x: number; y: number }): { x: number; y: number } | null {
+  const step = (balls.find((b) => b.id === id)?.radius ?? 0.028) * 0.5;
+  for (let r = 0; r < 120; r++)
+    for (let k = 0; k < Math.max(1, r * 6); k++) {
+      const a = (k / Math.max(1, r * 6)) * Math.PI * 2;
+      const q = { x: p.x + Math.cos(a) * r * step, y: p.y + Math.sin(a) * r * step };
+      if (fits(id, q)) return q;
+    }
+  return null;
+}
+
+/** Puts potted balls back, each as close to its place in the rack (or its spot) as it fits. */
+function spotPotted(): void {
+  const home = new Map(layout(game.table, game.layout, 1).map((b) => [b.id, b.pos]));
+  for (const b of balls) {
+    if (b.state !== 'pocketed') continue;
+    const q = freeNear(b.id, home.get(b.id) ?? { x: game.table.playfield.length / 4, y: 0 });
+    if (!q) continue;
+    b.pos = q;
+    b.state = 'stationary';
+    delete b.pocket;
+  }
+  tableEdited();
+}
+
+function clearTable(): void {
+  for (const b of balls)
+    if (b.id !== 'cue') {
+      b.state = 'pocketed';
+      delete b.pocket;
+    }
+  tableEdited();
+}
+
+function tableEdited(): void {
+  // The last shot no longer matches the table, so it can't be undone onto it.
+  last = null;
+  ballsView.showState(balls);
+  dirty = true;
+}
+
+function stopArranging(): void {
+  placing = false;
+  removing = false;
+  hud.setPlacing(false);
+  dirty = true;
+}
+
+const editorBar = new EditorBar({
+  onRemove: (on) => (removing = on),
+  onSpot: spotPotted,
+  onClear: clearTable,
+  onDone: stopArranging,
+});
+app.append(editorBar.root);
 
 function placeCue(p: { x: number; y: number }, force = false): void {
   const cue = cueBall();
@@ -1296,6 +1465,8 @@ function frame(now: number): void {
     dirty = true;
   }
 
+  editorBar.show(placing && !match && !viewer && phase === 'aim' && !menu.isOpen);
+  if (!placing) removing = false;
   if (menu.isOpen) dirty = true;
   if (cue) {
     // While aiming the camera rides just above the cue when it is raised (chin on the cue).

@@ -298,3 +298,31 @@ test('saves a match, shows its stats and replays its shots', async ({ page }) =>
   await expect(page.locator('.saved-row').first()).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('practice: arranges the table and starts the drills', async ({ page }) => {
+  test.setTimeout(300_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await practice(page);
+  await page.waitForFunction(() => window.__cuesports?.state().phase === 'aim');
+  const onTable = () =>
+    page.evaluate(() => window.__cuesports.state().balls.filter((b) => b.state !== 'pocketed').length);
+  await page.getByRole('button', { name: 'Move cue ball' }).click();
+  await expect(page.locator('.editor-bar')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  expect(await onTable()).toBe(1);
+  await page.getByRole('button', { name: 'Spot potted' }).click();
+  expect(await onTable()).toBe(10);
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.locator('.editor-bar')).toBeHidden();
+
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: /^Change game/ }).click();
+  await page.getByRole('button', { name: /^Snooker line-up/ }).click();
+  await page.waitForFunction(() => window.__cuesports.state().match?.turn.ballInHand === 'in-d');
+  const reds = await page.evaluate(
+    () => window.__cuesports.state().balls.filter((b) => b.id.startsWith('red')).length,
+  );
+  expect(reds).toBe(15);
+  expect(errors).toEqual([]);
+});

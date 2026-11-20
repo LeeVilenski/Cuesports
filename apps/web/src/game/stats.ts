@@ -135,6 +135,8 @@ export function playerStats(matches: readonly MatchRecord[], q: StatsQuery): Pla
   const stats = emptyStats();
   const name = q.player.trim().toLowerCase();
   for (const m of matches) {
+    // Drills have their own bests; they would skew match figures (a line-up is all pots).
+    if (m.config.drill) continue;
     if (q.game && m.config.game !== q.game) continue;
     m.config.players.forEach((p, seat) => {
       if (p.trim().toLowerCase() === name) addMatch(stats, m, seat);
@@ -147,6 +149,7 @@ export function playerStats(matches: readonly MatchRecord[], q: StatsQuery): Pla
 export function knownPlayers(matches: readonly MatchRecord[]): string[] {
   const count = new Map<string, number>();
   for (const m of matches) {
+    if (m.config.drill) continue;
     m.config.players.forEach((p, seat) => {
       if (m.config.ai !== null && seat === 1) return;
       count.set(p, (count.get(p) ?? 0) + 1);
