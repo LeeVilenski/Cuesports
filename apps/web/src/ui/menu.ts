@@ -1,3 +1,4 @@
+import { CHALLENGES, loadStars, starText } from '../game/challenges';
 import { bestLabel, DRILLS, type DrillId } from '../game/drills';
 import { visitWord } from '../game/games';
 import { DEFAULT_MATCH, type MatchConfig } from '../game/match';
@@ -38,9 +39,11 @@ export interface MenuCallbacks {
   /** Pause sheet: keep the last shot as a highlight. */
   onSaveHighlight(): void;
   onDrill(id: DrillId): void;
+  onChallenge(id: string): void;
 }
 
-type Screen = 'home' | 'play' | 'practice' | 'settings' | 'help' | 'pause' | 'stats' | 'replays';
+type Screen =
+  'home' | 'play' | 'practice' | 'settings' | 'help' | 'pause' | 'stats' | 'replays' | 'challenges';
 
 const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: string }[] = [
   { id: 'nine-ball', label: '9-Ball', ball: '#f2c14e', sub: '9' },
@@ -156,6 +159,7 @@ export class Menu {
       pause: () => this.pause(),
       stats: () => this.stats(),
       replays: () => this.replays(),
+      challenges: () => this.challenges(),
     };
     const panel = build[screen]();
     panel.classList.add('panel', 'enter');
@@ -470,8 +474,52 @@ export class Menu {
             'wide',
           ),
         ),
+        h('h3', {}, 'Challenges'),
+        h(
+          'div',
+          { className: 'tiles' },
+          this.tile(
+            'purple',
+            'star',
+            'Challenges',
+            `${Object.values(loadStars()).reduce((a, b) => a + b, 0)} of ${CHALLENGES.length * 3} stars`,
+            () => this.go('challenges'),
+            'wide',
+          ),
+        ),
         h('h3', {}, 'Table'),
         this.field('Cloth', cloth.el),
+      ),
+    );
+  }
+
+  private challenges(): HTMLElement {
+    const stars = loadStars();
+    const colours = ['blue', 'orange', 'green', 'red', 'purple', 'teal'];
+    return h(
+      'div',
+      { className: 'sub challenges' },
+      this.header('Challenges'),
+      h(
+        'div',
+        { className: 'scroll' },
+        h(
+          'div',
+          { className: 'tiles challenge-list' },
+          ...CHALLENGES.map((c, i) =>
+            this.tile(
+              colours[i % colours.length]!,
+              'target',
+              `${i + 1}. ${c.title}`,
+              h('small', {}, h('span', { className: 'stars' }, starText(stars[c.id] ?? 0)), ` ${c.goal}`),
+              () => {
+                this.close();
+                this.cb.onChallenge(c.id);
+              },
+              'wide',
+            ),
+          ),
+        ),
       ),
     );
   }

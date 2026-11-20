@@ -324,5 +324,21 @@ test('practice: arranges the table and starts the drills', async ({ page }) => {
     () => window.__cuesports.state().balls.filter((b) => b.id.startsWith('red')).length,
   );
   expect(reds).toBe(15);
+
+  // A challenge: the list, then the first one, set up with its goal in the status line.
+  // A drill counts as a match, so the pause menu has Home rather than Change game.
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: /^Home/ }).click();
+  await page.getByRole('button', { name: /^Practice/ }).click();
+  await page.getByRole('button', { name: /^Challenges/ }).click();
+  await page.getByRole('button', { name: /^1\. Straight in/ }).click();
+  await expect(page.locator('.hud')).toContainText('Straight in · attempt 1 of 3');
+  const challengeBalls = await page.evaluate(() =>
+    window.__cuesports
+      .state()
+      .balls.filter((b) => b.state !== 'pocketed')
+      .map((b) => b.id),
+  );
+  expect(challengeBalls.sort()).toEqual(['1', 'cue']);
   expect(errors).toEqual([]);
 });

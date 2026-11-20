@@ -19,6 +19,7 @@ import {
   Plane,
   Raycaster,
   RingGeometry,
+  Group,
   Scene,
   SpotLight,
   Vector2,
@@ -66,6 +67,16 @@ import {
 } from './game/record';
 import { openStore } from './game/store';
 import { bestLabel, DRILLS, recordBest, type DrillId } from './game/drills';
+import {
+  CHALLENGES,
+  judgeChallenge,
+  loadStars,
+  newRun,
+  recordStars,
+  starText,
+  type ChallengeRun,
+  type ChallengeSpec,
+} from './game/challenges';
 import '@fontsource/barlow/500.css';
 import '@fontsource/barlow/600.css';
 import '@fontsource/barlow-condensed/700.css';
@@ -213,6 +224,7 @@ function resetTurnState(): void {
 function setGame(def: GameDef): void {
   resetTurnState();
   match = null;
+  endChallenge();
   viewer = null;
   replayBar.show(null);
   app.classList.remove('viewing');
@@ -305,6 +317,7 @@ function playerWants(i: number, cue: BallState | undefined, gap: number): Want {
 
 function startMatch(config: MatchConfig): void {
   resetTurnState();
+  endChallenge();
   setTable(GAMES.find((g) => g.id === config.game) ?? GAMES[0]!);
   viewer = null;
   replayBar.show(null);
@@ -416,7 +429,7 @@ function status(extra = ''): void {
 // Shooting
 
 function shoot(p: number): void {
-  if (phase !== 'aim' || aiTurn() || viewer) return;
+  if (phase !== 'aim' || aiTurn() || viewer || challenge?.sheet) return;
   if (match && (match.turn.decision || match.rackResult)) return;
   const cue = cueBall();
   if (!cue || cue.state === 'pocketed') return;
@@ -500,6 +513,7 @@ function endPlayback(): void {
   if (!playing) return;
   const result = playing;
   resetSpin();
+  const wasReplay = replaying;
   if (replaying || match) {
     if (match && !replaying && last) {
       match.judge(decl, last.before, result, last.shot);
@@ -522,6 +536,8 @@ function endPlayback(): void {
     hud.setBusy(false);
     if (match) syncTurn();
     if (viewer) afterViewedShot();
+    // A challenge's result sheet comes back after watching the shot again.
+    if (wasReplay && challenge?.sheet) challenge.sheet();
     dirty = true;
     return;
   }
@@ -532,7 +548,8 @@ function endPlayback(): void {
     .map((e) => (e.type === 'pocket' ? e.ball : ''));
   const cue = cueBall();
   ballsView.commit(result);
-  if (cue && cue.state === 'pocketed') respawnCue(cue);
+  // In a challenge a scratch ends the attempt; the table is set up again instead.
+  if (cue && cue.state === 'pocketed' && !challenge) respawnCue(cue);
   ballsView.showState(balls);
   playing = null;
   phase = 'aim';
@@ -551,6 +568,7 @@ function endPlayback(): void {
       .filter(Boolean)
       .join(' · '),
   );
+  if (challenge) challengeShot(result);
   dirty = true;
 }
 
@@ -691,6 +709,10 @@ function replay(): void {
 
 function undo(): void {
   if (viewer) return;
+  if (challenge) {
+    matchHud.say('No undo in a challenge: that would be too easy.');
+    return;
+  }
   if (match) {
     matchHud.say('Undo is only available in practice.');
     return;
@@ -732,6 +754,11 @@ const hud = new Hud({
     dirty = true;
   },
   onPlaceToggle: (on) => {
+    if (challenge) {
+      hud.setPlacing(false);
+      matchHud.say('The balls stay where they are in a challenge.');
+      return;
+    }
     if (match && match.turn.ballInHand === 'none') {
       hud.setPlacing(false);
       matchHud.say('You can only move the cue ball when you have ball in hand.');
@@ -773,8 +800,18 @@ const matchHud: MatchHud = new MatchHud({
     match.startRack();
     loadRack();
   },
-  onNewMatch: () => (match?.config.drill ? startMatch(match.config) : menu.open('play')),
+  onNewMatch: () => {
+    if (challenge) startChallenge(challenge.next ?? challenge.spec);
+    else if (match?.config.drill) startMatch(match.config);
+    else menu.open('play');
+  },
+  onAlt: () => challenge && startChallenge(challenge.spec),
   onWatch: () => {
+    if (challenge) {
+      matchHud.showResult(null);
+      replay();
+      return;
+    }
     if (!match) return;
     // The match is kept as it was saved: watching leaves it.
     saveMatch();
@@ -821,6 +858,10 @@ const menu: Menu = new Menu(
     },
     onShotCamera: (mode) => (shotCamMode = mode),
     onDrill: (id) => startDrill(id),
+    onChallenge: (id) => {
+      const spec = CHALLENGES.find((c) => c.id === id);
+      if (spec) startChallenge(spec);
+    },
     saved: async () => {
       const st = await store;
       const [matches, highlights] = await Promise.all([st.matches(), st.highlights()]);
@@ -860,6 +901,115 @@ shotCamMode = menu.settings.shotCam;
 showPlayer = menu.settings.player;
 hud.setStrokeMode(menu.settings.stroke);
 app.append(menu.root);
+
+// ---------------------------------------------------------------------------------------------
+// Challenges
+
+/** The challenge being played: its spec, the run so far, and (once over) its result sheet. */
+let challenge: {
+  spec: ChallengeSpec;
+  run: ChallengeRun;
+  next: ChallengeSpec | null;
+  sheet: (() => void) | null;
+} | null = null;
+
+/** The target for a position challenge: three rings, for three, two and one stars. */
+const targetRings = new Group();
+targetRings.visible = false;
+targetRings.renderOrder = 3;
+world.add(targetRings);
+
+function showTarget(t: ChallengeSpec['target']): void {
+  targetRings.clear();
+  targetRings.visible = !!t;
+  if (!t) return;
+  const colours = ['#ffd84a', '#ffffff', '#ffffff'];
+  t.r.forEach((r, i) => {
+    const ring = new Mesh(
+      new RingGeometry(Math.max(0, r - 0.006), r, 64),
+      new MeshBasicMaterial({
+        color: colours[i] ?? '#ffffff',
+        transparent: true,
+        opacity: i === 0 ? 0.9 : 0.45 - i * 0.1,
+        depthWrite: false,
+      }),
+    );
+    targetRings.add(ring);
+  });
+  targetRings.position.set(t.x, t.y, 0.0015);
+}
+
+function startChallenge(spec: ChallengeSpec): void {
+  setGame(GAMES.find((g) => g.id === spec.table) ?? GAMES[0]!);
+  const i = CHALLENGES.indexOf(spec);
+  challenge = { spec, run: newRun(), next: CHALLENGES[i + 1] ?? null, sheet: null };
+  setupChallengeTable();
+  matchHud.say(spec.goal, 5000);
+}
+
+/** Puts the balls back where the challenge starts (a new attempt). */
+function setupChallengeTable(): void {
+  if (!challenge) return;
+  const { spec, run } = challenge;
+  const t = game.table;
+  const specs = Object.fromEntries(
+    spec.balls.map(([id]) => {
+      const b = id === 'cue' ? t.balls.cue : t.balls.object;
+      return [id, [b.radius, b.mass] as [number, number]];
+    }),
+  );
+  balls = expandBalls(spec.balls, specs);
+  cueStart = { ...cueBall()!.pos };
+  ballsView.setBalls(balls);
+  last = null;
+  phase = 'aim';
+  aimAtFirstBall();
+  placePlayers();
+  showTarget(spec.target);
+  rig.snap();
+  status(challengeStatus(spec, run));
+  dirty = true;
+}
+
+function challengeStatus(spec: ChallengeSpec, run: ChallengeRun): string {
+  return spec.kind === 'clear'
+    ? `${spec.title} · shot ${run.shots + 1} of ${spec.limit}`
+    : `${spec.title} · attempt ${run.attempt} of ${spec.limit}`;
+}
+
+function challengeShot(result: ShotResult): void {
+  if (!challenge) return;
+  const c = challenge;
+  const v = judgeChallenge(c.spec, c.run, result);
+  if (v.status === 'continue') {
+    status(challengeStatus(c.spec, c.run));
+    matchHud.say(v.message);
+    return;
+  }
+  if (v.status === 'retry') {
+    matchHud.say(v.message, 2500);
+    window.setTimeout(() => challenge === c && phase === 'aim' && setupChallengeTable(), 1200);
+    return;
+  }
+  const won = v.status === 'won';
+  status(`${c.spec.title} · ${won ? starText(v.stars) : 'not this time'}`);
+  const better = won && recordStars(c.spec.id, v.stars);
+  const best = loadStars()[c.spec.id] ?? 0;
+  c.sheet = () =>
+    matchHud.showResult(
+      won ? `${starText(v.stars)}  ${c.spec.title}` : 'Not this time',
+      `${v.message}${better ? ' A new best!' : best ? ` Best: ${starText(best)}` : ''}`,
+      true,
+      won && c.next ? 'Next challenge' : 'Retry',
+      won && c.next ? 'Retry' : null,
+    );
+  c.sheet();
+}
+
+function endChallenge(): void {
+  challenge = null;
+  targetRings.visible = false;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Practice drills
@@ -1385,7 +1535,23 @@ const editorBar = new EditorBar({
   onSpot: spotPotted,
   onClear: clearTable,
   onDone: stopArranging,
+  // The challenge level editor: arrange the table, then paste this into a ChallengeSpec.
+  onCopy: import.meta.env.DEV || new URLSearchParams(location.search).has('debug') ? copyLayout : undefined,
 });
+
+function copyLayout(): void {
+  const text = JSON.stringify({
+    table: game.id,
+    balls: compactBalls(balls)
+      .filter((b) => b.length === 3)
+      .map(([id, x, y]) => [id, Math.round(x! * 1e4) / 1e4, Math.round(y! * 1e4) / 1e4]),
+  });
+  console.info('Challenge layout:', text);
+  void navigator.clipboard?.writeText(text).then(
+    () => status('layout copied'),
+    () => status('layout in the console'),
+  );
+}
 app.append(editorBar.root);
 
 function placeCue(p: { x: number; y: number }, force = false): void {

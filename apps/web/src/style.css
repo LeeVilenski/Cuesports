@@ -1961,3 +1961,8 @@ body {
   --c-lip: var(--yellow-lip);
   color: #1d1600;
 }
+
+.challenge-list .stars {
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}

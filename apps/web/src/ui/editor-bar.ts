@@ -8,6 +8,8 @@ export interface EditorBarCallbacks {
   /** Take every ball but the cue ball off. */
   onClear(): void;
   onDone(): void;
+  /** Debug builds: copy the layout as a challenge's `balls` (the level editor). */
+  onCopy?: (() => void) | undefined;
 }
 
 /** Practice: arrange the balls. Drag any ball; these do the rest. */
@@ -31,6 +33,9 @@ export class EditorBar {
       this.remove,
       h('button', { className: 'chip', type: 'button', onclick: () => cb.onSpot() }, 'Spot potted'),
       h('button', { className: 'chip', type: 'button', onclick: () => cb.onClear() }, 'Clear'),
+      cb.onCopy
+        ? h('button', { className: 'chip', type: 'button', onclick: () => cb.onCopy!() }, 'Copy layout')
+        : '',
       h('button', { className: 'chip on', type: 'button', onclick: () => cb.onDone() }, 'Done'),
     );
   }
