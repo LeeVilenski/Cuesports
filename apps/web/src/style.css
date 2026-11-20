@@ -1832,3 +1832,35 @@ body {
   min-width: max-content;
   padding: 4px 8px;
 }
+
+/* Stats: compact enough that the filters and most figures fit on a phone screen at once. */
+.menu .stats .scroll {
+  gap: 8px;
+}
+.menu .stats .seg {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.menu .stats .seg button {
+  min-width: 0;
+  min-height: 36px;
+  padding: 2px 4px;
+  font-size: clamp(12px, 3.4vw, 16px);
+  white-space: nowrap;
+}
+.menu .stats .stat-grid {
+  gap: 6px;
+  margin: 4px 0;
+}
+.menu .stats .stat {
+  padding: 6px 8px 6px 14px;
+}
+.menu .stats .stat strong {
+  font-size: clamp(20px, 6vw, 28px);
+}
+.menu .stats .stat span {
+  font-size: 13px;
+}
+.menu .stats .stat small {
+  font-size: 12px;
+}
