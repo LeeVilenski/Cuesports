@@ -146,3 +146,25 @@ export function save(key: string, value: unknown): void {
     // Not persisted; fine for this session.
   }
 }
+
+/**
+ * Makes a row of choices scroll sideways when there are more than fit (more games are coming),
+ * keeping the chosen one in view. Fades at the edges show there is more to swipe to.
+ */
+export function chooser<T extends HTMLElement>(el: T): T {
+  el.classList.add('chooser');
+  const edges = () => {
+    el.classList.toggle('more-left', el.scrollLeft > 2);
+    el.classList.toggle('more-right', el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  };
+  const reveal = () => {
+    const on = el.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (on) el.scrollLeft = on.offsetLeft - (el.clientWidth - on.offsetWidth) / 2;
+    edges();
+  };
+  el.addEventListener('scroll', edges, { passive: true });
+  el.addEventListener('click', () => requestAnimationFrame(reveal));
+  // Once it is on screen and has a size.
+  requestAnimationFrame(() => requestAnimationFrame(reveal));
+  return el;
+}

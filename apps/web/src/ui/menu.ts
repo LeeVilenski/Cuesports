@@ -1,7 +1,7 @@
 import { DEFAULT_MATCH, type MatchConfig } from '../game/match';
 import { reelOfHighlight, reelOfRack, type Highlight, type MatchRecord, type Reel } from '../game/record';
 import { knownPlayers, percent, playerStats } from '../game/stats';
-import { h, icon, iconButton, load, save, segmented, stepper, toggle, type IconName } from './kit';
+import { chooser, h, icon, iconButton, load, save, segmented, stepper, toggle, type IconName } from './kit';
 
 export type ClothSpeedId = 'fast' | 'medium' | 'slow';
 export type OptionName = 'guide' | 'squirt' | 'player';
@@ -237,7 +237,7 @@ export class Menu {
 
   private play(): HTMLElement {
     const c = this.config;
-    const games = h('div', { className: 'game-pick', role: 'group', ariaLabel: 'Game' });
+    const games = chooser(h('div', { className: 'game-pick', role: 'group', ariaLabel: 'Game' }));
     const gameButtons = MATCH_GAMES.map((g) =>
       h(
         'button',
@@ -659,7 +659,7 @@ export class Menu {
       draw();
       out.append(
         this.field('Player', who.el),
-        this.field('Game', games.el),
+        this.field('Game', chooser(games.el)),
         grid,
         h(
           'p',
