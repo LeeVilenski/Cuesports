@@ -13,7 +13,8 @@ import { ballAt, type MatchRecord, type RackRecord, type ShotRecord } from './re
  *   from the cue ball. It succeeds when that ball goes in without a foul.
  * - A safety is a legal shot that pots nothing (declared or not, so it includes some missed
  *   pots). It succeeds when the opponent's next shot pots nothing or fouls.
- * - A break is the points (snooker) or legal pots (pool) in one visit. A century is 100+.
+ * - A break (a run, in American pool) is the points (snooker) or legal pots (pool) in one visit.
+ *   A century is 100+.
  * - A run-out is a visit that wins the rack and started after the opponent had been at the table.
  *   A break-and-run is a rack the breaker wins without the opponent taking a shot.
  */

@@ -1,3 +1,4 @@
+import { visitWord } from '../game/games';
 import { DEFAULT_MATCH, type MatchConfig } from '../game/match';
 import { reelOfHighlight, reelOfRack, type Highlight, type MatchRecord, type Reel } from '../game/record';
 import { knownPlayers, percent, playerStats } from '../game/stats';
@@ -627,7 +628,8 @@ export class Menu {
           cell('Long pots', percent(s.longPots, s.longAttempts), `${s.longPots} of ${s.longAttempts}`),
           cell('Safety success', percent(s.safetiesWon, s.safeties), `${s.safetiesWon} of ${s.safeties}`),
           cell(
-            'Highest break',
+            // "Highest run" for American pool, "Highest break" elsewhere; both across all games.
+            game ? `Highest ${visitWord(game)}` : 'Highest break / run',
             String(s.highestBreak),
             snooker ? 'points' : game ? 'balls' : 'points or balls',
           ),

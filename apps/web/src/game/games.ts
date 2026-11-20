@@ -66,3 +66,14 @@ export function withClothSpeed(table: TableSpec, speed: ClothSpeed): TableSpec {
   t.cloth.rollFriction *= CLOTH_SPEEDS[speed].roll;
   return t;
 }
+
+/**
+ * What a scoring visit is called. American pool calls it a run ("a run of 6"); British pool,
+ * snooker and billiards call it a break. (The opening shot is the break in every game.)
+ */
+export type VisitWord = 'break' | 'run';
+
+/** Games played under American terms. New American games (straight pool, one-pocket) go here. */
+const AMERICAN = new Set(['nine-ball', 'ten-ball', 'eight-ball']);
+
+export const visitWord = (game: string): VisitWord => (AMERICAN.has(game) ? 'run' : 'break');
