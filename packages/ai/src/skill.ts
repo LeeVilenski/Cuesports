@@ -76,5 +76,26 @@ export const SKILLS: readonly SkillProfile[] = [
   },
 ];
 
-export const skill = (level: number): SkillProfile =>
-  SKILLS[Math.min(SKILLS.length, Math.max(1, level)) - 1]!;
+/**
+ * The profile for a level. In-between levels (2.5) blend the two either side, so a career can
+ * make each opponent a little stronger than the last. Safeties start at 2.5.
+ */
+export function skill(level: number): SkillProfile {
+  const l = Math.min(SKILLS.length, Math.max(1, level));
+  const lo = SKILLS[Math.floor(l) - 1]!;
+  const hi = SKILLS[Math.ceil(l) - 1]!;
+  if (lo === hi) return lo;
+  const k = l - Math.floor(l);
+  const mix = (a: number, b: number) => a + (b - a) * k;
+  return {
+    level: l,
+    name: k < 0.5 ? lo.name : hi.name,
+    aimSigma: mix(lo.aimSigma, hi.aimSigma),
+    powerSigma: mix(lo.powerSigma, hi.powerSigma),
+    tipSigma: mix(lo.tipSigma, hi.tipSigma),
+    position: mix(lo.position, hi.position),
+    robustness: Math.round(mix(lo.robustness, hi.robustness)),
+    sloppiness: mix(lo.sloppiness, hi.sloppiness),
+    safeties: l >= 2.5,
+  };
+}

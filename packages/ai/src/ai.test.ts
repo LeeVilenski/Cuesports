@@ -320,3 +320,17 @@ describe('AI plants and kicks', () => {
     expect(hits).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('skill levels', () => {
+  it('blends in-between levels and starts safeties at 2.5', async () => {
+    const { skill } = await import('./skill');
+    const a = skill(2);
+    const b = skill(3);
+    const m = skill(2.5);
+    expect(m.aimSigma).toBeCloseTo((a.aimSigma + b.aimSigma) / 2);
+    expect(skill(2.4).safeties).toBe(false);
+    expect(m.safeties).toBe(true);
+    expect(skill(3)).toBe(b);
+    expect(skill(9)).toBe(skill(5));
+  });
+});

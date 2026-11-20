@@ -2025,3 +2025,92 @@ body {
   flex: none;
   min-width: max-content;
 }
+
+/* Career */
+.menu .rival {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 5px solid var(--yellow);
+}
+.menu .rival span,
+.menu .rival small {
+  color: var(--muted);
+  font-size: 13px;
+}
+.menu .event-status {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.menu .event-status.won {
+  background: var(--yellow);
+  color: #1d1600;
+  font-weight: 700;
+}
+.menu .bracket {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+.menu .bracket .round {
+  flex: 1 0 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 8px;
+}
+.menu .bracket h4 {
+  margin: 0;
+  font: 700 15px var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.menu .bracket .round > small {
+  color: var(--muted);
+  margin-top: -6px;
+}
+.menu .bracket .pair {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--glass-line);
+}
+.menu .bracket .slot {
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.menu .bracket .slot.you {
+  font-weight: 700;
+  color: var(--yellow);
+}
+.menu .bracket .slot.won {
+  background: rgba(54, 166, 74, 0.25);
+}
+.menu .bracket .slot.lost {
+  opacity: 0.5;
+}
+.swatches button.locked,
+.seg button.locked {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.seg button.locked::after {
+  content: ' 🔒';
+}
+.menu .bracket .round {
+  justify-content: flex-start;
+}
+.menu .bracket .round .pair {
+  margin-top: 4px;
+}

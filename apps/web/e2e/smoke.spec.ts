@@ -350,15 +350,36 @@ test('customises the player and keeps it', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /^Player$/ }).click();
   await page.getByRole('button', { name: 'Kenji', exact: true }).click();
-  await page.getByRole('button', { name: 'Rosewood', exact: true }).click();
+  // Rosewood is a career prize; the blue wrap is open from the start.
+  await page.getByRole('group', { name: 'Wrap' }).getByRole('button', { name: 'Blue' }).click();
   await page.getByRole('textbox', { name: 'Your name' }).fill('Ann');
   await page.getByRole('textbox', { name: 'Your name' }).press('Enter');
   await page.getByRole('textbox', { name: 'Your name' }).blur();
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('cuesports.profile') ?? '{}'));
-  expect(saved).toMatchObject({ name: 'Ann', look: { hairStyle: 'long' }, cue: { wood: 'rosewood' } });
+  expect(saved).toMatchObject({ name: 'Ann', look: { hairStyle: 'long' }, cue: { wrap: '#1f3f8a' } });
   // Kept after a reload, and used on the Play screen.
   await page.reload();
   await page.getByRole('button', { name: /^Play Game/ }).click();
   await expect(page.getByRole('textbox', { name: 'Player 1 name' })).toHaveValue('Ann');
+  expect(errors).toEqual([]);
+});
+
+test('career: enters an event and shows the bracket', async ({ page }) => {
+  test.setTimeout(300_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.getByRole('button', { name: /^Career/ }).click();
+  // Only the pub is open at first.
+  await expect(page.getByRole('button', { name: /^Corner Pocket 9-Ball Open/ })).toBeDisabled();
+  await page.getByRole('button', { name: /^Red Lion 9-Ball Night/ }).click();
+  await expect(page.locator('.bracket .slot')).toHaveCount(6);
+  await page.getByRole('button', { name: /^Play the semi-final/ }).click();
+  await page.waitForFunction(() => window.__cuesports?.state().match?.score.length === 2);
+  // Locked items in the customiser until won.
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: /^Home/ }).click();
+  await page.getByRole('button', { name: /^Player$/ }).click();
+  await expect(page.getByRole('button', { name: /^Maple/ })).toBeDisabled();
   expect(errors).toEqual([]);
 });

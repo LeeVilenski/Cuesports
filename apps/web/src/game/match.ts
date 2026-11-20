@@ -37,6 +37,12 @@ export interface MatchConfig {
   ai: number | null;
   /** A practice drill (snooker line-up, 9-ball ghost) instead of a match. */
   drill?: DrillId | undefined;
+  /** The computer's personality, −1 cautious to 1 attacking (career opponents). */
+  aiAttack?: number | undefined;
+  /** The computer's look: an index into the presets (career opponents have their own). */
+  aiLook?: number | undefined;
+  /** A career match: the event and round it belongs to. */
+  career?: { event: string; round: number } | undefined;
 }
 
 export const DEFAULT_MATCH: MatchConfig = {
