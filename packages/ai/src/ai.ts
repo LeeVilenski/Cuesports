@@ -32,6 +32,12 @@ export interface AiInput<S = unknown, O = unknown> {
   simTable?: TableSpec;
   /** Thinking budget in milliseconds. */
   budgetMs?: number;
+  /**
+   * Personality, −1 to 1: how much the player minds leaving the opponent a chance. Positive is
+   * attacking (goes for pots and doesn't fear the next shot), negative is cautious (plays safe
+   * sooner). 0 by default.
+   */
+  attack?: number;
   /** Play the chosen shot exactly, without the player's errors (tests and diagnostics). */
   perfect?: boolean;
   now?: () => number;
@@ -462,7 +468,8 @@ function score(
     s += 1000 + 300 * sk.position * ease + 30 * j.potted.length;
   } else {
     const ease = j.turn.ballInHand !== 'none' ? 0.75 : bestPotEase(rulesTable, j.balls, j.turn.targets);
-    s -= (sk.safeties ? 300 : 120) * ease;
+    const attack = Math.max(-1, Math.min(1, input.attack ?? 0));
+    s -= (sk.safeties ? 300 : 120) * ease * (1 - 0.6 * attack);
   }
   return s;
 }

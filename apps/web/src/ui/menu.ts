@@ -1,5 +1,22 @@
 import { CHALLENGES, loadStars, starText } from '../game/challenges';
 import {
+  bestText,
+  careerEvent,
+  EVENTS,
+  inRound,
+  isLocked,
+  nextOpponent,
+  opponent,
+  REWARDS,
+  roundName,
+  rounds,
+  tierOpen,
+  unlockedBy,
+  VENUES,
+  YOU,
+  type CareerState,
+} from '../game/career';
+import {
   BUILDS,
   buildId,
   EYES,
@@ -77,6 +94,11 @@ export interface MenuCallbacks {
   onProfile(p: Profile): void;
   /** The customiser opened (true) or closed: show the player standing behind it. */
   onPreview(on: boolean): void;
+  career(): CareerState;
+  /** Enter a career event (abandoning any other in progress). */
+  onCareerEnter(event: string): void;
+  /** Play your next match in the career event. */
+  onCareerPlay(): void;
 }
 
 type Screen =
@@ -89,7 +111,9 @@ type Screen =
   | 'stats'
   | 'replays'
   | 'challenges'
-  | 'player';
+  | 'player'
+  | 'career'
+  | 'event';
 
 const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: string }[] = [
   { id: 'nine-ball', label: '9-Ball', ball: '#f2c14e', sub: '9' },
@@ -106,6 +130,10 @@ const LAST_MATCH_KEY = 'cuesports.lastMatch';
 /** Short description of a match set-up, for the Quick match tile. */
 function describe(c: MatchConfig): string {
   if (c.drill) return `Drill · ${DRILLS[c.drill].title}`;
+  if (c.career) {
+    const e = careerEvent(c.career.event);
+    return e ? `Career · ${e.title} · ${roundName(e, c.career.round)}` : 'Career';
+  }
   const game = MATCH_GAMES.find((g) => g.id === c.game)?.label ?? c.game;
   const who = c.ai ? `vs ${LEVELS[c.ai - 1]} CPU` : 'vs friend';
   const race = c.game === 'snooker' ? `best of ${c.raceTo * 2 - 1}` : `race to ${c.raceTo}`;
@@ -190,6 +218,8 @@ export class Menu {
     const prev = this.stack.pop();
     if (prev) this.show(prev);
     else if (this.screen === 'pause') this.close();
+    // Opened straight onto a screen (after a match, say): back goes home.
+    else if (this.screen !== 'home') this.show('home');
   }
 
   private show(screen: Screen): void {
@@ -208,6 +238,8 @@ export class Menu {
       replays: () => this.replays(),
       challenges: () => this.challenges(),
       player: () => this.player(),
+      career: () => this.careerScreen(),
+      event: () => this.eventScreen(),
     };
     this.cb.onPreview(screen === 'player');
     const panel = build[screen]();
@@ -278,7 +310,7 @@ export class Menu {
         this.tile('blue', 'play', 'Quick match', this.quickSub, () => this.start(), 'wide'),
         this.tile('orange', 'cue', 'Play', 'Game, opponent, format', () => this.go('play')),
         this.tile('green', 'target', 'Practice', 'Free table', () => this.go('practice')),
-        this.tile('yellow', 'trophy', 'Career', 'Coming soon', null),
+        this.tile('yellow', 'trophy', 'Career', 'Pub to arena', () => this.go('career')),
         this.tile('purple', 'globe', 'Online', 'Coming soon', null),
         this.tile('red', 'chart', 'Stats', 'Pots, breaks, wins', () => this.go('stats')),
         this.tile('teal', 'replay', 'Replays', 'Frames and highlights', () => this.go('replays')),
@@ -609,18 +641,33 @@ export class Menu {
           ),
         ),
       );
+      // Items won in the career stay locked until then (`kind` is the reward key's prefix).
+      const career = this.cb.career();
+      const lock = <T extends string | null>(el: HTMLElement, opts: { value: T }[], kind?: string) => {
+        if (!kind) return el;
+        [...el.querySelectorAll('button')].forEach((b, i) => {
+          const key = `${kind}:${opts[i]?.value}`;
+          if (!isLocked(career, key)) return;
+          b.disabled = true;
+          b.classList.add('locked');
+          b.title = `Win the ${unlockedBy(key)?.title ?? 'career'} to unlock`;
+        });
+        return el;
+      };
       const sw = (
         label: string,
         opts: { value: string; label: string }[],
         v: string,
         set: (x: string) => void,
-      ) => this.field(label, swatches(label, opts, v, (x) => change(() => set(x))).el);
+        kind?: string,
+      ) => this.field(label, lock(swatches(label, opts, v, (x) => change(() => set(x))).el, opts, kind));
       const seg = <T extends string>(
         label: string,
         opts: { value: T; label: string }[],
         v: T,
         set: (x: T) => void,
-      ) => this.field(label, segmented(label, opts, v, (x) => change(() => set(x))).el);
+        kind?: string,
+      ) => this.field(label, lock(segmented(label, opts, v, (x) => change(() => set(x))).el, opts, kind));
       body.replaceChildren(
         this.field('Name', name),
         h('h3', {}, 'Start from'),
@@ -641,29 +688,191 @@ export class Menu {
         sw('Shirt (pool)', SHIRTS, look.shirt, (x) => (look.shirt = x)),
         sw('Trousers (pool)', TROUSERS, look.trousers, (x) => (look.trousers = x)),
         sw('Shoes (pool)', SHOES, look.shoes, (x) => (look.shoes = x)),
-        sw('Waistcoat (snooker)', WAISTCOATS, look.waistcoat, (x) => (look.waistcoat = x)),
+        sw('Waistcoat (snooker)', WAISTCOATS, look.waistcoat, (x) => (look.waistcoat = x), 'waistcoat'),
         h('h3', {}, 'Cue'),
         seg<CueWood>(
           'Wood',
           (Object.keys(WOODS) as CueWood[]).map((k) => ({ value: k, label: WOODS[k].label })),
           p.cue.wood,
           (x) => (p.cue.wood = x),
+          'wood',
         ),
         seg<CueFerrule>(
           'Ferrule',
           (Object.keys(FERRULES) as CueFerrule[]).map((k) => ({ value: k, label: FERRULES[k].label })),
           p.cue.ferrule,
           (x) => (p.cue.ferrule = x),
+          'ferrule',
         ),
-        this.field('Wrap', swatches('Wrap', WRAPS, p.cue.wrap, (x) => change((q) => (q.cue.wrap = x))).el),
+        this.field(
+          'Wrap',
+          lock(swatches('Wrap', WRAPS, p.cue.wrap, (x) => change((q) => (q.cue.wrap = x))).el, WRAPS, 'wrap'),
+        ),
         h('h3', {}, 'Tables'),
-        sw('Pool cloth', POOL_CLOTHS, p.cloth.pool, (x) => (p.cloth.pool = x)),
-        sw('UK pool cloth', POOL_CLOTHS, p.cloth.english, (x) => (p.cloth.english = x)),
+        sw('Pool cloth', POOL_CLOTHS, p.cloth.pool, (x) => (p.cloth.pool = x), 'cloth.pool'),
+        sw('UK pool cloth', POOL_CLOTHS, p.cloth.english, (x) => (p.cloth.english = x), 'cloth.pool'),
         sw('Snooker cloth', SNOOKER_CLOTHS, p.cloth.snooker, (x) => (p.cloth.snooker = x)),
       );
     };
     draw();
     return h('div', { className: 'sub player' }, this.header('Player'), body);
+  }
+
+  private careerScreen(): HTMLElement {
+    const s = this.cb.career();
+    const colours = ['blue', 'orange', 'green', 'red', 'purple', 'teal'];
+    const run = s.run?.status === 'playing' ? s.run : null;
+    const body = h('div', { className: 'scroll' });
+    if (run) {
+      const e = careerEvent(run.event)!;
+      body.append(
+        h(
+          'div',
+          { className: 'tiles' },
+          this.tile(
+            'yellow',
+            'play',
+            'Continue',
+            `${e.title} · ${roundName(e, run.round)}`,
+            () => this.go('event'),
+            'wide',
+          ),
+        ),
+      );
+    }
+    let colour = 0;
+    for (const v of VENUES) {
+      const open = tierOpen(s, v.tier);
+      body.append(h('h3', {}, `${v.kind} · ${v.name}`));
+      const tiles = h('div', { className: 'tiles' });
+      for (const e of EVENTS.filter((x) => x.venue === v.id)) {
+        const game = MATCH_GAMES.find((g) => g.id === e.game)?.label ?? e.game;
+        const prize = REWARDS[e.reward];
+        const sub = `${game} · ${2 ** rounds(e)} players · ${bestText(e, s.best[e.id])}${prize ? ` · Prize: ${prize}` : ''}`;
+        tiles.append(
+          this.tile(
+            colours[colour++ % colours.length]!,
+            'trophy',
+            e.title,
+            sub,
+            open
+              ? () => {
+                  if (run?.event !== e.id) this.cb.onCareerEnter(e.id);
+                  this.go('event');
+                }
+              : null,
+            'wide',
+          ),
+        );
+      }
+      if (!open) {
+        const below = VENUES.find((x) => x.tier === v.tier - 1);
+        tiles.append(
+          h(
+            'p',
+            { className: 'fine-print' },
+            `Win an event at ${below?.name ?? 'the venue below'} to play here.`,
+          ),
+        );
+      }
+      body.append(tiles);
+    }
+    // Rivals: one per tier, waiting in the finals.
+    body.append(h('h3', {}, 'Rivals'));
+    const seen = new Set<string>();
+    for (const e of EVENTS) {
+      if (seen.has(e.rival)) continue;
+      seen.add(e.rival);
+      const o = opponent(e.rival);
+      const [w, l] = s.h2h[o.id] ?? [0, 0];
+      const venue = VENUES.find((x) => x.id === e.venue)!;
+      body.append(
+        h(
+          'div',
+          { className: 'rival' },
+          h('strong', {}, o.name),
+          h('span', {}, `${o.style} · ${venue.kind}`),
+          h('small', {}, w + l ? `You ${w}–${l}` : 'Not met yet'),
+        ),
+      );
+    }
+    return h('div', { className: 'sub career' }, this.header('Career'), body);
+  }
+
+  /** The event you're in: the bracket so far and your next match. */
+  private eventScreen(): HTMLElement {
+    const s = this.cb.career();
+    const run = s.run;
+    const e = run && careerEvent(run.event);
+    if (!run || !e) return this.careerScreen();
+    const name = (id: string) => (id === YOU ? this.cb.profile().name : opponent(id).name);
+    const bracket = h('div', { className: 'bracket' });
+    for (let r = 0; r < rounds(e); r++) {
+      const ids = inRound(run, r);
+      const won = run.winners[r] ?? [];
+      const col = h(
+        'div',
+        { className: 'round' },
+        h('h4', {}, roundName(e, r)),
+        h('small', {}, `Race to ${e.raceTo[r]}`),
+      );
+      for (let i = 0; i < 2 ** (rounds(e) - r); i += 2) {
+        const row = (id: string | undefined) =>
+          h(
+            'div',
+            {
+              className: `slot${id === YOU ? ' you' : ''}${id && won.includes(id) ? ' won' : ''}${id && won.length && !won.includes(id) ? ' lost' : ''}`,
+            },
+            id ? name(id) : '—',
+          );
+        col.append(h('div', { className: 'pair' }, row(ids[i]), row(ids[i + 1])));
+      }
+      bracket.append(col);
+    }
+    const opp = nextOpponent(run);
+    const action =
+      run.status === 'playing' && opp
+        ? h(
+            'button',
+            {
+              className: 'tile blue cta',
+              onclick: () => {
+                this.close();
+                this.cb.onCareerPlay();
+              },
+            },
+            icon('play'),
+            h('strong', {}, `Play the ${roundName(e, run.round).toLowerCase()}`),
+          )
+        : h(
+            'button',
+            { className: 'tile cta', onclick: () => this.open('career') },
+            h('strong', {}, 'Back to the circuit'),
+          );
+    const status =
+      run.status === 'won'
+        ? h('p', { className: 'event-status won' }, `Champion! Unlocked: ${REWARDS[e.reward] ?? ''}.`)
+        : run.status === 'out'
+          ? h(
+              'p',
+              { className: 'event-status' },
+              `Out in the ${roundName(e, run.round).toLowerCase()}. Enter again from the circuit.`,
+            )
+          : opp
+            ? h(
+                'p',
+                { className: 'event-status' },
+                h('strong', {}, `Next: ${opponent(opp.id).name}`),
+                ` · ${opponent(opp.id).style}${opp.id === e.rival ? ' · your rival' : ''}`,
+              )
+            : '';
+    return h(
+      'div',
+      { className: 'sub event' },
+      this.header(e.title),
+      h('div', { className: 'scroll' }, status, bracket),
+      action,
+    );
   }
 
   private settingsScreen(): HTMLElement {

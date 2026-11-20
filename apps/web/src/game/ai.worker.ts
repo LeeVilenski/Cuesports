@@ -16,6 +16,8 @@ export interface AiRequest {
   seed: number;
   simTable: TableSpec;
   budgetMs: number;
+  /** Personality: −1 cautious to 1 attacking. */
+  attack?: number;
 }
 
 export interface AiResponse {
@@ -45,6 +47,7 @@ self.onmessage = (e: MessageEvent<AiRequest>) => {
     seed: r.seed,
     simTable: r.simTable,
     budgetMs: r.budgetMs,
+    attack: r.attack ?? 0,
     now: () => performance.now(),
   });
   (self as unknown as DedicatedWorkerGlobalScope).postMessage({

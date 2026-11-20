@@ -33,6 +33,7 @@ import {
   GAMES,
   powerToSpeed,
   strokeSpeed,
+  visitWord,
   withClothSpeed,
   type ClothSpeed,
   type GameDef,
@@ -66,6 +67,19 @@ import {
   type ShotRecord,
 } from './game/record';
 import { openStore } from './game/store';
+import { addMatch, emptyStats, percent } from './game/stats';
+import {
+  careerEvent,
+  enter,
+  loadCareer,
+  nextOpponent,
+  opponent,
+  recordMatch,
+  REWARDS,
+  roundName,
+  saveCareer,
+  type CareerState,
+} from './game/career';
 import { loadProfile, profilePreset, saveProfile, type Profile } from './game/profile';
 import { bestLabel, DRILLS, recordBest, type DrillId } from './game/drills';
 import {
@@ -283,6 +297,9 @@ function buildPlayers(): void {
   };
   const names = viewer?.reel.players ?? (match ? match.config.players : [profile.name, 'Player 2']);
   const picks = presetsFor(names);
+  // A career opponent has a look of their own.
+  const look = match?.config.aiLook;
+  if (look !== undefined && look !== picks[0]) picks[1] = look;
   // Seat 1 is whoever holds the device: their own look and cue (unless watching someone else's).
   const mine = (i: number) => i === 0 && (!viewer || names[0] === profile.name);
   players = picks.map((pi, i) => {
@@ -398,7 +415,15 @@ function syncTurn(): void {
   else if (match.rackResult) {
     const w = match.config.players[match.rackResult.winner]!;
     const score = `${match.config.players[0]} ${match.score[0]} – ${match.score[1]} ${match.config.players[1]}`;
-    if (match.winner !== null) matchHud.showResult(`${w} wins the match`, score, true);
+    if (match.winner !== null && match.config.career) careerResult(match, w, score);
+    else if (match.winner !== null)
+      matchHud.showResult(
+        `${w} wins the match`,
+        `${score}. ${matchSummary(match)}`,
+        true,
+        'New match',
+        'Rematch',
+      );
     else matchHud.showResult(`${w} wins ${match.unit} ${match.rack}`, `${match.message} ${score}`);
   }
   rig.snap();
@@ -606,6 +631,7 @@ function maybeAiTurn(): void {
     seed: (Math.random() * 2 ** 31) | 0,
     simTable,
     budgetMs: 1500,
+    attack: m.config.aiAttack ?? 0,
   };
   if (t.decision) {
     const choice = chooseDecision({
@@ -812,11 +838,15 @@ const matchHud: MatchHud = new MatchHud({
     loadRack();
   },
   onNewMatch: () => {
-    if (challenge) startChallenge(challenge.next ?? challenge.spec);
+    if (match?.config.career) menu.open('event');
+    else if (challenge) startChallenge(challenge.next ?? challenge.spec);
     else if (match?.config.drill) startMatch(match.config);
     else menu.open('play');
   },
-  onAlt: () => challenge && startChallenge(challenge.spec),
+  onAlt: () => {
+    if (challenge) startChallenge(challenge.spec);
+    else if (match) startMatch(match.config);
+  },
   onWatch: () => {
     if (challenge) {
       matchHud.showResult(null);
@@ -872,6 +902,14 @@ const menu: Menu = new Menu(
     profile: () => profile,
     onProfile: (p) => applyProfile(p),
     onPreview: (on) => setPreview(on),
+    career: () => career,
+    onCareerEnter: (id) => {
+      const e = careerEvent(id);
+      if (!e) return;
+      career = { ...career, run: enter(e, (Math.random() * 1e9) | 0) };
+      saveCareer(career);
+    },
+    onCareerPlay: () => startCareerMatch(),
     onChallenge: (id) => {
       const spec = CHALLENGES.find((c) => c.id === id);
       if (spec) startChallenge(spec);
@@ -1000,6 +1038,65 @@ function applyProfile(p: Profile): void {
   if (previewing) players[0]?.place({ kind: 'watch', at: previewSpot() });
   ballsView.showState(balls);
   dirty = true;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Career
+
+let career: CareerState = loadCareer();
+/** Matches whose result has gone into the career already (a result sheet can be shown twice). */
+const careerRecorded = new WeakSet<Match>();
+
+function startCareerMatch(): void {
+  const run = career.run;
+  const e = run && careerEvent(run.event);
+  const opp = run && nextOpponent(run);
+  if (!run || !e || !opp) return;
+  const o = opponent(opp.id);
+  startMatch({
+    ...DEFAULT_MATCH,
+    game: e.game,
+    players: [profile.name, o.name],
+    raceTo: e.raceTo[run.round] ?? 3,
+    breaks: 'alternate',
+    snooker: { ...DEFAULT_MATCH.snooker, reds: e.reds ?? 15 },
+    ai: opp.level,
+    aiAttack: o.attack,
+    aiLook: o.look,
+    career: { event: e.id, round: run.round },
+  });
+}
+
+/** Each player's match in a line: pots, best break (or run) and fouls, from the match record. */
+function matchSummary(m: Match): string {
+  const word = visitWord(m.config.game);
+  return m.config.players
+    .map((name, seat) => {
+      const s = emptyStats();
+      addMatch(s, m.record, seat);
+      return `${name}: pots ${percent(s.pots, s.potAttempts)}, best ${word} ${s.highestBreak}, fouls ${s.fouls}`;
+    })
+    .join(' · ');
+}
+
+/** The end of a career match: into the bracket, then on to the next round (or out). */
+function careerResult(m: Match, winner: string, score: string): void {
+  const c = m.config.career!;
+  const e = careerEvent(c.event)!;
+  const won = m.winner === 0;
+  if (!careerRecorded.has(m) && career.run?.event === c.event && career.run.round === c.round) {
+    careerRecorded.add(m);
+    career = recordMatch(career, won, (Math.random() * 1e9) | 0);
+    saveCareer(career);
+  }
+  const champion = won && career.run?.status === 'won';
+  const title = champion
+    ? `Champion of the ${e.title}!`
+    : won
+      ? `Through to the ${roundName(e, c.round + 1).toLowerCase()}`
+      : `${winner} wins the ${roundName(e, c.round).toLowerCase()}`;
+  const prize = champion ? ` Unlocked: ${REWARDS[e.reward] ?? ''}.` : '';
+  matchHud.showResult(title, `${score}.${prize} ${matchSummary(m)}`, true, 'Continue');
 }
 
 // ---------------------------------------------------------------------------------------------
