@@ -67,6 +67,9 @@ import {
   type ShotRecord,
 } from './game/record';
 import { openStore } from './game/store';
+import { cuesFor, due, type SoundCue } from './audio/cues';
+import { DEFAULT_SOUND, Sound, type SoundSettings } from './audio/sound';
+import type { AmbienceKind } from './audio/synth';
 import { addMatch, emptyStats, percent } from './game/stats';
 import {
   careerEvent,
@@ -78,6 +81,7 @@ import {
   REWARDS,
   roundName,
   saveCareer,
+  VENUES,
   type CareerState,
 } from './game/career';
 import { loadProfile, profilePreset, saveProfile, type Profile } from './game/profile';
@@ -256,6 +260,7 @@ function setGame(def: GameDef): void {
   matchHud.showCall(null, false, (p) => p, false);
   setTable(def);
   rerack();
+  sound.setAmbience(roomFor(null));
 }
 
 function setTable(def: GameDef): void {
@@ -351,6 +356,7 @@ function startMatch(config: MatchConfig): void {
   replayBar.show(null);
   app.classList.remove('viewing');
   match = new Match(config, (Math.random() * 1e9) | 0, clothSpeed);
+  sound.setAmbience(roomFor(config));
   // Each player gets their own look, chosen from their name.
   buildPlayers();
   matchHud.showResult(null);
@@ -521,6 +527,9 @@ function startPlayback(): void {
   if (!pending) return;
   playing = pending.result;
   playT = 0;
+  shotCues = cuesFor(playing.events);
+  // Just before the strike (t = 0), so it is due on the first frame and isn't taken for a jump.
+  heardTo = -1e-3;
   phase = 'playing';
   cueView.group.visible = false;
   const camMode: ShotCameraMode = replaying ? 'cinematic' : shotCamMode;
@@ -902,6 +911,15 @@ const menu: Menu = new Menu(
     profile: () => profile,
     onProfile: (p) => applyProfile(p),
     onPreview: (on) => setPreview(on),
+    sound: () => loadSound(),
+    onSound: (s) => {
+      sound.set(s);
+      try {
+        localStorage.setItem(SOUND_KEY, JSON.stringify(s));
+      } catch {
+        // Not kept; fine for this session.
+      }
+    },
     career: () => career,
     onCareerEnter: (id) => {
       const e = careerEvent(id);
@@ -1038,6 +1056,37 @@ function applyProfile(p: Profile): void {
   if (previewing) players[0]?.place({ kind: 'watch', at: previewSpot() });
   ballsView.showState(balls);
   dirty = true;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sound
+
+const SOUND_KEY = 'cuesports.sound';
+const sound = new Sound(loadSound());
+/** The shot's sounds, and how far into it they have been played. */
+let shotCues: SoundCue[] = [];
+let heardTo = 0;
+
+function loadSound(): SoundSettings {
+  try {
+    return {
+      ...DEFAULT_SOUND,
+      ...(JSON.parse(localStorage.getItem(SOUND_KEY) ?? '{}') as Partial<SoundSettings>),
+    };
+  } catch {
+    return { ...DEFAULT_SOUND };
+  }
+}
+
+// Browsers only start audio from a gesture: the first touch, click or key.
+for (const type of ['pointerdown', 'keydown'] as const)
+  window.addEventListener(type, () => sound.unlock(), { capture: true, passive: true });
+
+/** The room tone: the career venue's, or a quiet club. */
+function roomFor(config: MatchConfig | null): AmbienceKind {
+  const e = config?.career && careerEvent(config.career.event);
+  const kind = e && VENUES.find((v) => v.id === e.venue)?.kind;
+  return kind ? (kind.toLowerCase() as AmbienceKind) : 'club';
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1823,6 +1872,9 @@ function frame(now: number): void {
   }
   if (phase === 'playing' && playing) {
     if (!frozen) playT += dt;
+    // The sounds of the shot as playback passes them (a fast-forward skips them).
+    if (playT - heardTo < 0.25) for (const c of due(shotCues, heardTo, playT)) sound.play(c);
+    heardTo = playT;
     // The drop animation keeps running after the simulation ends.
     ballsView.showFrame(playing, playT);
     if (playT >= playbackEnd(playing)) endPlayback();

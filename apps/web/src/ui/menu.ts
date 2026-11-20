@@ -35,6 +35,7 @@ import {
   type Profile,
 } from '../game/profile';
 import { FERRULES, WOODS, type CueFerrule, type CueWood } from '../render/equipment';
+import type { SoundSettings } from '../audio/sound';
 import { PRESETS } from '../render/figure';
 import { bestLabel, DRILLS, type DrillId } from '../game/drills';
 import { visitWord } from '../game/games';
@@ -95,6 +96,8 @@ export interface MenuCallbacks {
   /** The customiser opened (true) or closed: show the player standing behind it. */
   onPreview(on: boolean): void;
   career(): CareerState;
+  sound(): SoundSettings;
+  onSound(s: SoundSettings): void;
   /** Enter a career event (abandoning any other in progress). */
   onCareerEnter(event: string): void;
   /** Play your next match in the career event. */
@@ -875,6 +878,29 @@ export class Menu {
     );
   }
 
+  /** Effects and room-tone levels, saved as they change. */
+  private soundFields(): HTMLElement[] {
+    const s = this.cb.sound();
+    const levels = [
+      { value: '0', label: 'Off' },
+      { value: '0.35', label: 'Low' },
+      { value: '0.65', label: 'Medium' },
+      { value: '1', label: 'High' },
+    ];
+    // The nearest level to a saved value.
+    const near = (v: number) =>
+      levels.reduce((a, b) => (Math.abs(Number(b.value) - v) < Math.abs(Number(a.value) - v) ? b : a)).value;
+    const set = (k: 'effects' | 'ambience') => (v: string) => {
+      s[k] = Number(v);
+      s.muted = false;
+      this.cb.onSound({ ...s });
+    };
+    return [
+      this.field('Effects', segmented('Sound effects', levels, near(s.effects), set('effects')).el),
+      this.field('Room', segmented('Room sound', levels, near(s.ambience), set('ambience')).el),
+    ];
+  }
+
   private settingsScreen(): HTMLElement {
     const opt = (name: OptionName, label: string) =>
       toggle(label, this.settings[name], (on) => {
@@ -936,6 +962,8 @@ export class Menu {
         opt('player', 'Show the player at the table'),
         h('h3', {}, 'Table'),
         this.field('Cloth', cloth.el),
+        h('h3', {}, 'Sound'),
+        ...this.soundFields(),
         h('p', { className: 'fine-print' }, h('a', { href: '/lab/' }, 'Physics lab ›')),
       ),
     );
