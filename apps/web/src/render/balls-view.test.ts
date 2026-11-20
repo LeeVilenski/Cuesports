@@ -192,3 +192,20 @@ describe('a snooker pocket with ball runners', () => {
     }
   });
 });
+
+describe('colour-vision labels', () => {
+  it('label the balls that only colour tells apart', async () => {
+    const { ballLabel } = await import('./balls-view');
+    expect(['red3', 'yellow', 'green', 'brown', 'blue', 'pink', 'black'].map(ballLabel)).toEqual([
+      'R',
+      'Y',
+      'G',
+      'Br',
+      'Bl',
+      'P',
+      'Bk',
+    ]);
+    expect(['r4', 'y2'].map(ballLabel)).toEqual(['R', 'Y']);
+    expect(['cue', '9', '8'].map(ballLabel)).toEqual([null, null, null]);
+  });
+});

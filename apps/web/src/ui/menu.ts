@@ -57,12 +57,14 @@ import {
 } from './kit';
 
 export type ClothSpeedId = 'fast' | 'medium' | 'slow';
-export type OptionName = 'guide' | 'squirt' | 'player';
+export type OptionName = 'guide' | 'squirt' | 'player' | 'labels' | 'haptics' | 'calm';
+export type TextSize = 'normal' | 'large' | 'larger';
 export type ShotCamId = 'overview' | 'follow' | 'cinematic' | 'stay';
 export type StrokeId = 'bar' | 'pull';
 export type Settings = Record<OptionName, boolean> & {
   shotCam: ShotCamId;
   stroke: StrokeId;
+  textSize: TextSize;
   /** Older saves: false meant the camera stayed put during shots. */
   overview?: boolean;
 };
@@ -130,6 +132,12 @@ const LEVELS = ['Beginner', 'Amateur', 'Club', 'Semi-pro', 'Pro'];
 const SETTINGS_KEY = 'cuesports.settings';
 const LAST_MATCH_KEY = 'cuesports.lastMatch';
 
+/** Scales the menus and HUD (CSS zoom on their roots, set from a variable on the page). */
+function applyTextSize(size: TextSize): void {
+  const scale = size === 'larger' ? 1.3 : size === 'large' ? 1.15 : 1;
+  document.documentElement.style.setProperty('--ui-scale', String(scale));
+}
+
 /** Short description of a match set-up, for the Quick match tile. */
 function describe(c: MatchConfig): string {
   if (c.drill) return `Drill · ${DRILLS[c.drill].title}`;
@@ -176,10 +184,16 @@ export class Menu {
       guide: true,
       squirt: true,
       player: true,
+      labels: false,
+      haptics: true,
+      // Reduced motion follows the device's own setting until changed here.
+      calm: typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches,
       shotCam: saved0.overview === false ? 'stay' : 'cinematic',
       stroke: 'bar',
+      textSize: 'normal',
       ...saved0,
     };
+    applyTextSize(this.settings.textSize);
     const saved = load<Partial<MatchConfig>>(LAST_MATCH_KEY, {});
     this.config = {
       ...DEFAULT_MATCH,
@@ -960,6 +974,27 @@ export class Menu {
         h('h3', {}, 'Camera'),
         this.field('During shots', shotCam.el),
         opt('player', 'Show the player at the table'),
+        h('h3', {}, 'Accessibility'),
+        opt('labels', 'Label coloured balls (Y, G, Br, Bl, P, Bk)'),
+        opt('haptics', 'Vibrate on strikes and pots'),
+        opt('calm', 'Reduce camera motion'),
+        this.field(
+          'Text size',
+          segmented<TextSize>(
+            'Text size',
+            [
+              { value: 'normal', label: 'Normal' },
+              { value: 'large', label: 'Large' },
+              { value: 'larger', label: 'Larger' },
+            ],
+            this.settings.textSize,
+            (v) => {
+              this.settings.textSize = v;
+              save(SETTINGS_KEY, this.settings);
+              applyTextSize(v);
+            },
+          ).el,
+        ),
         h('h3', {}, 'Table'),
         this.field('Cloth', cloth.el),
         h('h3', {}, 'Sound'),

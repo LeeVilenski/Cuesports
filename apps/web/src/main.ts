@@ -160,6 +160,9 @@ let clothSpeed: ClothSpeed = loadClothSpeed();
 let profile: Profile = loadProfile();
 /** The customiser is open: player 1 stands on a turntable behind it. */
 let previewing = false;
+/** Accessibility: vibrate on strikes and pots; reduce camera motion. */
+let haptics = true;
+let calm = false;
 cueView.setStyle(profile.cue);
 /** The table the physics runs on: the game's table with the chosen cloth speed. */
 let simTable = withClothSpeed(game.table, clothSpeed);
@@ -532,10 +535,11 @@ function startPlayback(): void {
   heardTo = -1e-3;
   phase = 'playing';
   cueView.group.visible = false;
-  const camMode: ShotCameraMode = replaying ? 'cinematic' : shotCamMode;
+  // Reduced motion: the camera stays where it is, replays included.
+  const camMode: ShotCameraMode = calm ? 'stay' : replaying ? 'cinematic' : shotCamMode;
   rig.overview = camMode === 'overview' && rig.mode === 'aim';
   shotCam = rig.mode === 'aim' ? new ShotCamera(playing, game.table, camMode, shot.aim) : null;
-  navigator.vibrate?.(12);
+  if (haptics) navigator.vibrate?.(12);
 }
 
 /** A potted ball takes this long to drop and settle in the pocket. */
@@ -903,6 +907,9 @@ const menu: Menu = new Menu(
     onOption: (name, on) => {
       if (name === 'guide') showGuide = on;
       else if (name === 'squirt') guideSquirt = on;
+      else if (name === 'labels') ballsView.setLabels(on);
+      else if (name === 'haptics') haptics = on;
+      else if (name === 'calm') calm = on;
       else showPlayer = on;
       dirty = true;
     },
@@ -951,7 +958,7 @@ const menu: Menu = new Menu(
         rig.persp.position.set(L * 0.55, L * 0.42, L * 0.55);
         rig.orbit.target.set(0, 0, 0);
         rig.orbit.enabled = false;
-        rig.orbit.autoRotate = true;
+        rig.orbit.autoRotate = !calm;
         rig.orbit.autoRotateSpeed = 0.35;
       } else {
         rig.orbit.autoRotate = false;
@@ -969,6 +976,9 @@ showGuide = menu.settings.guide;
 guideSquirt = menu.settings.squirt;
 shotCamMode = menu.settings.shotCam;
 showPlayer = menu.settings.player;
+ballsView.setLabels(menu.settings.labels);
+haptics = menu.settings.haptics;
+calm = menu.settings.calm;
 hud.setStrokeMode(menu.settings.stroke);
 app.append(menu.root);
 
@@ -997,7 +1007,7 @@ function aimPreview(): void {
   const k = app.clientWidth > 520 ? 1 : 1.45;
   rig.persp.position.copy(toWorld(s.x + 3.0 * k, s.y - 1.2 * k, 1.35));
   rig.orbit.enabled = false;
-  rig.orbit.autoRotate = true;
+  rig.orbit.autoRotate = !calm;
   rig.orbit.autoRotateSpeed = 1.6;
   framePreview();
 }
@@ -1873,7 +1883,12 @@ function frame(now: number): void {
   if (phase === 'playing' && playing) {
     if (!frozen) playT += dt;
     // The sounds of the shot as playback passes them (a fast-forward skips them).
-    if (playT - heardTo < 0.25) for (const c of due(shotCues, heardTo, playT)) sound.play(c);
+    if (playT - heardTo < 0.25)
+      for (const c of due(shotCues, heardTo, playT)) {
+        sound.play(c);
+        // A short buzz as a ball drops.
+        if (c.kind === 'drop' && haptics) navigator.vibrate?.(18);
+      }
     heardTo = playT;
     // The drop animation keeps running after the simulation ends.
     ballsView.showFrame(playing, playT);
