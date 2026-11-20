@@ -649,6 +649,10 @@ input {
   --yellow-lip: #c08c00;
   --purple: #7c5ce0;
   --purple-lip: #573bb3;
+  --red: #e0413a;
+  --red-lip: #a9241f;
+  --teal: #17a7a0;
+  --teal-lip: #0d7671;
   --navy: #1b2740;
   --navy-lip: #0e1628;
   --panel: rgba(16, 24, 40, 0.92);
@@ -837,6 +841,14 @@ body {
 .tile.purple {
   --c: var(--purple);
   --c-lip: var(--purple-lip);
+}
+.tile.red {
+  --c: var(--red);
+  --c-lip: var(--red-lip);
+}
+.tile.teal {
+  --c: var(--teal);
+  --c-lip: var(--teal-lip);
 }
 
 .tile.locked {
@@ -1513,4 +1525,276 @@ body {
 }
 .saved-frames[hidden] {
   display: none;
+}
+
+/* ---- One button style for every menu ------------------------------------------------------
+   The home tiles' look, smaller: a solid navy face on a darker lip that presses down. The chosen
+   option turns yellow, like the POOL · SNOOKER tag. */
+
+.menu .seg,
+.sheet .seg {
+  padding: 0;
+  gap: 8px;
+  background: none;
+}
+
+.menu .seg button,
+.menu .game-pick button,
+.menu .ubtn,
+.menu .bar .ibtn,
+.menu .stepper .ibtn,
+.menu .saved-row > .ibtn,
+.menu .saved-frames button,
+.sheet .chip,
+.replay-bar .ibtn,
+.replay-bar .chip {
+  --c: var(--navy);
+  --c-lip: var(--navy-lip);
+  border: 0;
+  border-radius: 12px;
+  background: var(--c);
+  color: #fff;
+  box-shadow: 0 4px 0 var(--c-lip);
+  margin-bottom: 4px;
+  font-weight: 700;
+  backdrop-filter: none;
+  transition:
+    transform 0.08s,
+    box-shadow 0.08s;
+}
+
+.menu .bar .ibtn,
+.menu .stepper .ibtn,
+.menu .saved-row > .ibtn,
+.replay-bar .ibtn {
+  border-radius: 12px;
+}
+
+.menu .seg button:active,
+.menu .game-pick button:active,
+.menu .ubtn:active,
+.menu .bar .ibtn:active,
+.menu .stepper .ibtn:active,
+.menu .saved-row > .ibtn:active,
+.menu .saved-frames button:active,
+.sheet .chip:active,
+.replay-bar .ibtn:active:not(:disabled),
+.replay-bar .chip:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--c-lip);
+}
+
+.menu .seg button[aria-pressed='true'],
+.menu .game-pick button[aria-pressed='true'],
+.sheet .chip.on,
+.replay-bar .chip.on {
+  --c: var(--yellow);
+  --c-lip: var(--yellow-lip);
+  color: #1d1600;
+  border: 0;
+}
+
+.menu .seg button {
+  min-height: 40px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+
+.menu .game-pick button {
+  padding: 12px 4px 10px;
+  font-size: 17px;
+}
+
+.menu .game-pick.big button {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  box-shadow: 0 var(--lip) 0 var(--c-lip);
+  margin-bottom: var(--lip);
+  font-size: 20px;
+}
+
+.menu .game-pick.big button:nth-child(6n + 1) {
+  --c: var(--blue);
+  --c-lip: var(--blue-lip);
+}
+.menu .game-pick.big button:nth-child(6n + 2) {
+  --c: var(--orange);
+  --c-lip: var(--orange-lip);
+}
+.menu .game-pick.big button:nth-child(6n + 3) {
+  --c: var(--green);
+  --c-lip: var(--green-lip);
+}
+.menu .game-pick.big button:nth-child(6n + 4) {
+  --c: var(--red);
+  --c-lip: var(--red-lip);
+}
+.menu .game-pick.big button:nth-child(6n + 5) {
+  --c: var(--purple);
+  --c-lip: var(--purple-lip);
+}
+.menu .game-pick.big button:nth-child(6n + 6) {
+  --c: var(--teal);
+  --c-lip: var(--teal-lip);
+}
+
+/* Section headings and the Rules toggle as small coloured labels, like the home tag. */
+.menu .scroll h3 {
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--yellow);
+  color: #1d1600;
+  box-shadow: 0 3px 0 var(--yellow-lip);
+  font-size: 14px;
+}
+
+/* Settings and set-up rows sit on soft cards. */
+.menu .scroll > .field,
+.menu .scroll > .switch,
+.menu .rules {
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.menu .rules summary {
+  color: var(--text);
+}
+
+/* How to play: each icon in a coloured square, like a tile's icon. */
+.menu .help-ico {
+  background: var(--c, var(--blue));
+  box-shadow: 0 3px 0 var(--c-lip, var(--blue-lip));
+  color: #fff;
+}
+.menu .help-row:nth-child(5n + 2) .help-ico {
+  --c: var(--blue);
+  --c-lip: var(--blue-lip);
+}
+.menu .help-row:nth-child(5n + 3) .help-ico {
+  --c: var(--orange);
+  --c-lip: var(--orange-lip);
+}
+.menu .help-row:nth-child(5n + 4) .help-ico {
+  --c: var(--green);
+  --c-lip: var(--green-lip);
+}
+.menu .help-row:nth-child(5n + 5) .help-ico {
+  --c: var(--red);
+  --c-lip: var(--red-lip);
+}
+.menu .help-row:nth-child(5n + 1) .help-ico {
+  --c: var(--purple);
+  --c-lip: var(--purple-lip);
+}
+
+/* Stats: every number on its own coloured tile. */
+.menu .stat {
+  --c: var(--navy);
+  --c-lip: var(--navy-lip);
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--c);
+  box-shadow: 0 var(--lip) 0 var(--c-lip);
+  margin-bottom: var(--lip);
+  color: #fff;
+}
+.menu .stat strong {
+  font: 700 30px/1.05 var(--font-display);
+}
+.menu .stat small {
+  color: rgba(255, 255, 255, 0.85);
+}
+.menu .stat:nth-child(6n + 1) {
+  --c: var(--blue);
+  --c-lip: var(--blue-lip);
+}
+.menu .stat:nth-child(6n + 2) {
+  --c: var(--orange);
+  --c-lip: var(--orange-lip);
+}
+.menu .stat:nth-child(6n + 3) {
+  --c: var(--green);
+  --c-lip: var(--green-lip);
+}
+.menu .stat:nth-child(6n + 4) {
+  --c: var(--red);
+  --c-lip: var(--red-lip);
+}
+.menu .stat:nth-child(6n + 5) {
+  --c: var(--purple);
+  --c-lip: var(--purple-lip);
+}
+.menu .stat:nth-child(6n + 6) {
+  --c: var(--teal);
+  --c-lip: var(--teal-lip);
+}
+
+/* Replays: highlights on yellow tiles, matches on blue. */
+.menu .saved-row {
+  --c: var(--blue);
+  --c-lip: var(--blue-lip);
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--c);
+  box-shadow: 0 var(--lip) 0 var(--c-lip);
+  margin-bottom: var(--lip);
+  color: #fff;
+}
+.menu .saved-row.highlight {
+  --c: var(--yellow);
+  --c-lip: var(--yellow-lip);
+  color: #1d1600;
+}
+.menu .saved-main strong {
+  font: 700 20px/1.1 var(--font-display);
+}
+.menu .saved-main small {
+  color: inherit;
+  opacity: 0.85;
+}
+.menu .saved-main .ico {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 7px;
+  border: 2px solid currentColor;
+  border-radius: 10px;
+}
+.menu .saved-frames {
+  padding-left: 50px;
+}
+.menu .empty {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Match sheets: the main choice in blue. */
+.sheet .chip {
+  min-height: 44px;
+  padding: 8px 16px;
+  font-family: var(--font-display);
+  font-size: 18px;
+}
+.sheet .result-actions .chip.on {
+  --c: var(--blue);
+  --c-lip: var(--blue-lip);
+  color: #fff;
+}
+.sheet .result-actions .chip.watch {
+  --c: var(--purple);
+  --c-lip: var(--purple-lip);
+}
+
+.menu .game-pick .ball-badge {
+  flex: none;
 }
