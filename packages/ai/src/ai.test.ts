@@ -74,8 +74,11 @@ describe('AI shot choice', () => {
 
   it('is deterministic for a given seed', () => {
     const balls = position({ cue: [0.3, 0.1], '1': [0.9, 0.35], '9': [-0.8, -0.3] });
-    const a = chooseShot(nineInput(balls, 4, 7));
-    const b = chooseShot(nineInput(balls, 4, 7));
+    // A frozen clock: the search stops on a thinking budget, which on a slow machine could cut
+    // the two runs off at different points.
+    const now = () => 0;
+    const a = chooseShot({ ...nineInput(balls, 4, 7), now });
+    const b = chooseShot({ ...nineInput(balls, 4, 7), now });
     expect(a.shot).toEqual(b.shot);
     expect(a.label).toBe(b.label);
   });
