@@ -1864,3 +1864,51 @@ body {
 .menu .stats .stat small {
   font-size: 12px;
 }
+
+/* Game choosers scroll sideways once there are more games than fit: up to four show in full,
+   beyond that the row scrolls (with snap) and fades at the edge that has more. */
+.menu .chooser {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+.menu .chooser::-webkit-scrollbar {
+  display: none;
+}
+.menu .chooser > button {
+  flex: 1 0 calc((100% - 3 * 8px) / 4);
+  min-width: max-content;
+  scroll-snap-align: start;
+}
+.menu .stats .chooser > button {
+  flex: 1 0 auto;
+  min-width: max-content;
+  padding: 2px 12px;
+}
+.menu .chooser.more-right {
+  mask-image: linear-gradient(90deg, #000 85%, transparent);
+}
+.menu .chooser.more-left {
+  mask-image: linear-gradient(90deg, transparent, #000 15%);
+}
+.menu .chooser.more-left.more-right {
+  mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent);
+}
+
+/* On a phone every set-up row puts its label above the options, so the options get the full width. */
+@media (max-width: 520px) {
+  .menu .scroll .field:has(.seg),
+  .menu .scroll .field:has(.chooser) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .menu .seg button {
+    flex: 1 1 0;
+    min-width: max-content;
+  }
+}

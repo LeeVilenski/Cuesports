@@ -93,3 +93,11 @@ describe('playerStats', () => {
     expect(percent(0, 0)).toBe('–');
   });
 });
+
+describe('visitWord', () => {
+  it('says run for American pool and break elsewhere', async () => {
+    const { visitWord } = await import('./games');
+    expect(['nine-ball', 'ten-ball', 'eight-ball'].map(visitWord)).toEqual(['run', 'run', 'run']);
+    expect(['english', 'snooker'].map(visitWord)).toEqual(['break', 'break']);
+  });
+});
