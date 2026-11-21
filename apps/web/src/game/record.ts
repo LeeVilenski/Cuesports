@@ -1,7 +1,7 @@
 import { makeBall, type BallState, type ShotInput, type ShotResult } from '@cuesports/physics';
 import type { Judgement, ShotDeclaration } from '@cuesports/rules';
 import type { ClothSpeed } from './games';
-import type { MatchConfig } from './match';
+import { POINTS_GAMES, type MatchConfig } from './match';
 
 /**
  * Compact match records. These are what a replay or the stats screen reads back: a shot is the
@@ -142,7 +142,7 @@ export interface Reel {
 }
 
 export function reelOfRack(m: MatchRecord, rack: number): Reel {
-  const unit = m.config.game === 'snooker' ? 'Frame' : 'Rack';
+  const unit = m.config.game === 'snooker' ? 'Frame' : POINTS_GAMES.has(m.config.game) ? 'Game' : 'Rack';
   return {
     title: `${m.config.players[0]} v ${m.config.players[1]} · ${unit} ${rack + 1}`,
     table: m.config.game,

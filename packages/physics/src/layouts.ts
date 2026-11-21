@@ -63,7 +63,15 @@ function spot(table: TableSpec, id: string, fallback: Vec2): Vec2 {
 }
 
 export type LayoutId =
-  'snooker' | 'eight-ball' | 'nine-ball' | 'ten-ball' | 'blackball' | 'two-balls' | 'empty';
+  | 'snooker'
+  | 'billiards'
+  | 'carom'
+  | 'eight-ball'
+  | 'nine-ball'
+  | 'ten-ball'
+  | 'blackball'
+  | 'two-balls'
+  | 'empty';
 
 /** A break-off layout for the given game, with the cue ball in a typical break position. */
 export function layout(table: TableSpec, id: LayoutId, seed = 1): BallState[] {
@@ -85,6 +93,25 @@ export function layout(table: TableSpec, id: LayoutId, seed = 1): BallState[] {
       const brown = spot(table, 'brown', { x: -hl / 2, y: 0 });
       balls.push(cueBall({ x: brown.x - 0.05, y: 0.12 }));
       return balls;
+    }
+    case 'billiards': {
+      // English Billiards: red on the billiard spot, both whites in the D.
+      const brown = spot(table, 'brown', { x: -hl / 2, y: 0 });
+      const d = spot(table, 'green', { x: brown.x, y: 0.29 }).y;
+      return [
+        makeBall('red', obj, spot(table, 'black', foot)),
+        makeBall('spot', table.balls.cue, { x: brown.x, y: d / 2 }),
+        cueBall({ x: brown.x - 0.02, y: -d / 2 }),
+      ];
+    }
+    case 'carom': {
+      // Carom opening: red on the foot spot, yellow on the head spot, white beside it.
+      const head = spot(table, 'head', { x: -hl / 2, y: 0 });
+      return [
+        makeBall('red', obj, foot),
+        makeBall('yellow', table.balls.cue, head),
+        cueBall(spot(table, 'start-right', { x: head.x, y: -0.18 })),
+      ];
     }
     case 'eight-ball':
     case 'blackball': {

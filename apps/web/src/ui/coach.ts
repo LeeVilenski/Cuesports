@@ -13,7 +13,9 @@ export class Coach {
     const dots = h(
       'div',
       { className: 'coach-dots', ariaHidden: 'true' },
-      ...STEPS.slice(0, -1).map((_, i) => h('span', { className: i < index ? 'on' : i === index ? 'now' : '' })),
+      ...STEPS.slice(0, -1).map((_, i) =>
+        h('span', { className: i < index ? 'on' : i === index ? 'now' : '' }),
+      ),
     );
     const actions = last
       ? h(

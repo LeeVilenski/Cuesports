@@ -249,4 +249,69 @@ export const AMERICAN_POOL_9FT: TableSpec = {
   },
 };
 
-export const TABLE_PRESETS: readonly TableSpec[] = [SNOOKER_12FT, ENGLISH_POOL_7FT, AMERICAN_POOL_9FT];
+// --- Carom ------------------------------------------------------------------------------------
+// Match table (UMB): 2840 x 1420 mm playing area, 61.5 mm balls of 205–220 g, no pockets, heated
+// slate and a fast cloth, with livelier, higher cushions than pool.
+
+const CAROM_L = 2.84;
+const CAROM_W = 1.42;
+
+export const CAROM_10FT: TableSpec = {
+  id: 'carom-10ft',
+  name: 'Carom 10 ft',
+  playfield: { length: CAROM_L, width: CAROM_W },
+  trim: { cushionWidth: 0.05, railWidth: 0.11, cushionTopAboveNose: 0.006, railTopAboveNose: 0.012 },
+  cushion: {
+    noseHeight: 0.037,
+    restitution: 0.9,
+    restitutionSlope: 0.03,
+    minRestitution: 0.7,
+    hugSpeed: 0.12,
+    friction: 0.22,
+    profile: 'carom',
+  },
+  cloth: { slideFriction: 0.2, rollFriction: 0.0095, spinFriction: 0.006 },
+  pockets: [],
+  markings: [
+    { type: 'spot', id: 'head', position: { x: -CAROM_L / 4, y: 0 } },
+    { type: 'spot', id: 'centre', position: { x: 0, y: 0 } },
+    { type: 'spot', id: 'foot', position: { x: CAROM_L / 4, y: 0 } },
+    // The opening positions: the striker's ball 18.25 cm either side of the head spot.
+    { type: 'spot', id: 'start-left', position: { x: -CAROM_L / 4, y: 0.1825 } },
+    { type: 'spot', id: 'start-right', position: { x: -CAROM_L / 4, y: -0.1825 } },
+  ],
+  balls: {
+    object: { radius: 0.03075, mass: 0.21 },
+    cue: { radius: 0.03075, mass: 0.21 },
+    restitution: 0.93,
+    friction: STANDARD_BALL_FRICTION,
+  },
+};
+
+/** Balkline: the carom table with lines `d` from each cushion, making nine areas. */
+export function balklineTable(d: number, id: string): TableSpec {
+  const hl = CAROM_L / 2;
+  const hw = CAROM_W / 2;
+  return {
+    ...CAROM_10FT,
+    id,
+    name: `Balkline ${id}`,
+    markings: [
+      ...CAROM_10FT.markings,
+      { type: 'line', id: 'balk-x1', a: { x: -hl + d, y: -hw }, b: { x: -hl + d, y: hw } },
+      { type: 'line', id: 'balk-x2', a: { x: hl - d, y: -hw }, b: { x: hl - d, y: hw } },
+      { type: 'line', id: 'balk-y1', a: { x: -hl, y: -hw + d }, b: { x: hl, y: -hw + d } },
+      { type: 'line', id: 'balk-y2', a: { x: -hl, y: hw - d }, b: { x: hl, y: hw - d } },
+    ],
+  };
+}
+
+export const BALKLINE_47: TableSpec = balklineTable(0.47, 'balkline-47');
+export const BALKLINE_71: TableSpec = balklineTable(0.71, 'balkline-71');
+
+export const TABLE_PRESETS: readonly TableSpec[] = [
+  SNOOKER_12FT,
+  ENGLISH_POOL_7FT,
+  AMERICAN_POOL_9FT,
+  CAROM_10FT,
+];

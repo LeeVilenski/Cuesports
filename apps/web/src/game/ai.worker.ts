@@ -1,7 +1,18 @@
 /// <reference lib="webworker" />
 import { chooseShot, type AiShot } from '@cuesports/ai';
 import type { BallState } from '@cuesports/physics';
-import { ENGLISH_POOL, NINE_BALL, SNOOKER, TEN_BALL, type Ruleset, type Turn } from '@cuesports/rules';
+import {
+  BALKLINE_47_2,
+  BALKLINE_71_2,
+  ENGLISH_BILLIARDS,
+  ENGLISH_POOL,
+  NINE_BALL,
+  SNOOKER,
+  TEN_BALL,
+  THREE_CUSHION,
+  type Ruleset,
+  type Turn,
+} from '@cuesports/rules';
 import type { TableSpec } from '@cuesports/shared';
 
 export interface AiRequest {
@@ -31,6 +42,10 @@ const RULESETS: Record<string, Ruleset<unknown, unknown>> = {
   'ten-ball': TEN_BALL as Ruleset<unknown, unknown>,
   snooker: SNOOKER as Ruleset<unknown, unknown>,
   english: ENGLISH_POOL as Ruleset<unknown, unknown>,
+  billiards: ENGLISH_BILLIARDS as Ruleset<unknown, unknown>,
+  'three-cushion': THREE_CUSHION as Ruleset<unknown, unknown>,
+  'balkline-47-2': BALKLINE_47_2 as Ruleset<unknown, unknown>,
+  'balkline-71-2': BALKLINE_71_2 as Ruleset<unknown, unknown>,
 };
 
 self.onmessage = (e: MessageEvent<AiRequest>) => {

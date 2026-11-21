@@ -45,9 +45,16 @@ export function ballAt(result: ShotResult, id: string, t: number): P2 | null {
 
 /** The pots worth cutting to: object balls (not the cue ball), in order. */
 export function potCuts(result: ShotResult): { ball: string; pocket: string; t: number }[] {
+  const cue = struck(result);
   return result.events.flatMap((e) =>
-    e.type === 'pocket' && e.ball !== 'cue' ? [{ ball: e.ball, pocket: e.pocket, t: e.t }] : [],
+    e.type === 'pocket' && e.ball !== cue ? [{ ball: e.ball, pocket: e.pocket, t: e.t }] : [],
   );
+}
+
+/** The ball the cue struck ('cue' unless billiards' spot white). */
+export function struck(result: ShotResult): string {
+  const s = result.events.find((e) => e.type === 'strike');
+  return s && s.type === 'strike' ? s.ball : 'cue';
 }
 
 /** Seconds before a pot that the cinematic camera cuts to the pocket, and how long it stays after. */
@@ -58,6 +65,7 @@ export const CUT_AFTER = 0.9;
 export class ShotCamera {
   private dir: P2 = { x: 1, y: 0 };
   private subject = 'cue';
+  private cue = 'cue';
   private lastCut = -1;
   private readonly cuts: { ball: string; pocket: string; t: number }[];
   private readonly firstHit: { t: number; ball: string } | null;
@@ -70,8 +78,10 @@ export class ShotCamera {
   ) {
     this.dir = { x: Math.cos(aim), y: Math.sin(aim) };
     this.cuts = mode === 'cinematic' ? potCuts(result) : [];
-    const hit = result.events.find((e) => e.type === 'ball' && (e.a === 'cue' || e.b === 'cue'));
-    this.firstHit = hit && hit.type === 'ball' ? { t: hit.t, ball: hit.a === 'cue' ? hit.b : hit.a } : null;
+    const cue = (this.cue = struck(result));
+    this.subject = cue;
+    const hit = result.events.find((e) => e.type === 'ball' && (e.a === cue || e.b === cue));
+    this.firstHit = hit && hit.type === 'ball' ? { t: hit.t, ball: hit.a === cue ? hit.b : hit.a } : null;
   }
 
   /** The view at time t, or null to leave the camera as it is (overview and stay). */
@@ -109,7 +119,7 @@ export class ShotCamera {
     // Follow: the cue ball, then the first ball it hits.
     if (this.firstHit && t > this.firstHit.t + 0.12) this.subject = this.firstHit.ball;
     let at = ballAt(this.result, this.subject, t);
-    if (!at) at = ballAt(this.result, 'cue', t);
+    if (!at) at = ballAt(this.result, this.cue, t);
     if (!at) return null;
     const ahead = ballAt(this.result, this.subject, t + 0.12);
     if (ahead) {

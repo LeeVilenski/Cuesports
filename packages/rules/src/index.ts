@@ -6,3 +6,4 @@ export * from './snooker';
 export * from './snookered';
 export * from './english';
 export * from './billiards';
+export * from './carom';

@@ -94,7 +94,10 @@ export function advance(s: TutorialState, e: TutorialEvent): Advance {
       return stay({
         state: { ...s, tries },
         reset: true,
-        say: tries >= 2 ? 'Tip: in the top view the guide line shows exactly where the 1 will go.' : 'Close. Try again.',
+        say:
+          tries >= 2
+            ? 'Tip: in the top view the guide line shows exactly where the 1 will go.'
+            : 'Close. Try again.',
       });
     }
     case 'spin':

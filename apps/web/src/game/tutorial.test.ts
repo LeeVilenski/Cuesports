@@ -20,7 +20,10 @@ describe('tutorial', () => {
     expect(stepOf(run([{ type: 'spin' }, { type: 'camera' }])).id).toBe('aim');
   });
   it('resets the table after a miss and hints on the second', () => {
-    let s = run([{ type: 'aim', amount: 1 }, { type: 'settled', potted: false }]);
+    let s = run([
+      { type: 'aim', amount: 1 },
+      { type: 'settled', potted: false },
+    ]);
     const a = advance(s, { type: 'settled', potted: false });
     expect(a.reset).toBe(true);
     s = a.state;
@@ -29,7 +32,10 @@ describe('tutorial', () => {
     expect(stepOf(b.state).id).toBe('pot');
   });
   it('skips the pot step if the first shot pots', () => {
-    const s = run([{ type: 'aim', amount: 1 }, { type: 'settled', potted: true }]);
+    const s = run([
+      { type: 'aim', amount: 1 },
+      { type: 'settled', potted: true },
+    ]);
     expect(stepOf(s).id).toBe('spin');
   });
 });

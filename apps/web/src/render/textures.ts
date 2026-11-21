@@ -28,10 +28,15 @@ export interface BallArt {
   stripe: string | null;
   number: string | null;
   spots: boolean;
+  /** Colour of the spots (the cue ball's are red). */
+  spotColour?: string;
 }
 
 export function ballArt(id: string): BallArt {
   if (id === 'cue') return { base: '#f7f3e8', stripe: null, number: null, spots: true };
+  // English Billiards' second white: two black spots.
+  if (id === 'spot')
+    return { base: '#f4efe0', stripe: null, number: null, spots: true, spotColour: '#111111' };
   if (id.startsWith('red') || /^r\d+$/.test(id))
     return { base: '#c4161c', stripe: null, number: null, spots: false };
   if (/^y\d+$/.test(id)) return { base: '#f2c419', stripe: null, number: null, spots: false };
@@ -82,7 +87,15 @@ export function ballTexture(id: string): Texture {
       g.fillText(art.number, x, y + 2);
     }
   }
-  if (art.spots) {
+  if (art.spots && art.spotColour) {
+    // A billiards spot white: one spot each side.
+    g.fillStyle = art.spotColour;
+    for (const u of [0.25, 0.75]) {
+      g.beginPath();
+      g.arc(u * w, h / 2, 7, 0, Math.PI * 2);
+      g.fill();
+    }
+  } else if (art.spots) {
     // Red spots (as on a TV "spot" cue ball) make spin visible.
     g.fillStyle = '#c62026';
     for (const u of [0, 0.25, 0.5, 0.75]) {
