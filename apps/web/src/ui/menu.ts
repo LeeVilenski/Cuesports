@@ -56,6 +56,9 @@ import {
   type IconName,
 } from './kit';
 
+import type { TierChoice } from '../render/quality';
+import { markTutorialSeen, tutorialSeen } from '../game/tutorial';
+
 export type ClothSpeedId = 'fast' | 'medium' | 'slow';
 export type OptionName = 'guide' | 'squirt' | 'player' | 'labels' | 'haptics' | 'calm';
 export type TextSize = 'normal' | 'large' | 'larger';
@@ -65,6 +68,7 @@ export type Settings = Record<OptionName, boolean> & {
   shotCam: ShotCamId;
   stroke: StrokeId;
   textSize: TextSize;
+  graphics: TierChoice;
   /** Older saves: false meant the camera stayed put during shots. */
   overview?: boolean;
 };
@@ -92,6 +96,8 @@ export interface MenuCallbacks {
   onSaveHighlight(): void;
   onDrill(id: DrillId): void;
   onChallenge(id: string): void;
+  /** Starts the first-run lesson. */
+  onTutorial(): void;
   /** The player's profile, and a change to it from the customiser. */
   profile(): Profile;
   onProfile(p: Profile): void;
@@ -173,6 +179,10 @@ export class Menu {
   private statsPlayer: string | null = null;
   private statsGame: MatchConfig['game'] | 'all' = 'all';
   private quickSub = h('small', {});
+  private graphicsNote = Object.assign(
+    h('p', { className: 'fine-print' }, 'Restart the game to apply.'),
+    { hidden: true },
+  );
 
   constructor(
     private cb: MenuCallbacks,
@@ -191,6 +201,7 @@ export class Menu {
       shotCam: saved0.overview === false ? 'stay' : 'cinematic',
       stroke: 'bar',
       textSize: 'normal',
+      graphics: 'auto',
       ...saved0,
     };
     applyTextSize(this.settings.textSize);
@@ -321,6 +332,7 @@ export class Menu {
         h('span', { className: 'wordmark' }, 'CUESPORTS'),
         h('span', { className: 'tag' }, 'POOL · SNOOKER'),
       ),
+      tutorialSeen() ? '' : this.welcome(),
       h(
         'div',
         { className: 'tiles' },
@@ -339,7 +351,55 @@ export class Menu {
         h('button', { className: 'ubtn', onclick: () => this.go('help') }, icon('help'), 'How to play'),
         h('button', { className: 'ubtn', onclick: () => this.go('settings') }, icon('settings'), 'Settings'),
       ),
+      this.status,
     );
+  }
+
+  /** First launch: an offer of the tutorial above the tiles. */
+  private welcome(): HTMLElement {
+    const el: HTMLElement = h(
+      'div',
+      { className: 'welcome' },
+      h('span', {}, h('strong', {}, 'New here?'), ' Learn to aim, shoot and spin in a minute.'),
+      h(
+        'button',
+        {
+          className: 'coach-btn primary',
+          onclick: () => {
+            this.close();
+            this.cb.onTutorial();
+          },
+        },
+        'Show me',
+      ),
+      h(
+        'button',
+        {
+          className: 'coach-skip',
+          onclick: () => {
+            markTutorialSeen('skipped');
+            el.remove();
+          },
+        },
+        'No thanks',
+      ),
+    );
+    return el;
+  }
+
+  /** The line under the home screen: offline readiness, or a waiting update. */
+  private status = h('div', { className: 'app-status', role: 'status' });
+
+  setStatus(s: { offline?: boolean; update?: () => void }): void {
+    this.status.replaceChildren();
+    if (s.update) {
+      this.status.append(
+        h('span', {}, 'A new version is ready.'),
+        h('button', { className: 'link-btn', onclick: s.update }, 'Restart to update'),
+      );
+    } else if (s.offline) {
+      this.status.append(h('span', { className: 'dot' }), h('span', {}, 'Available offline'));
+    }
   }
 
   private play(): HTMLElement {
@@ -586,6 +646,26 @@ export class Menu {
             'wide',
           ),
         ),
+        h('h3', {}, 'Graphics'),
+        this.field(
+          'Quality',
+          segmented<TierChoice>(
+            'Quality',
+            [
+              { value: 'auto', label: autoLabel() },
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' },
+            ],
+            this.settings.graphics,
+            (v) => {
+              this.settings.graphics = v;
+              save(SETTINGS_KEY, this.settings);
+              this.graphicsNote.hidden = false;
+            },
+          ).el,
+        ),
+        this.graphicsNote,
         h('h3', {}, 'Table'),
         this.field('Cloth', cloth.el),
       ),
@@ -1023,6 +1103,10 @@ export class Menu {
         row('camera', 'Tap the camera to switch views. Pinch to zoom.'),
         row('undo', 'Undo and replay: bottom left.'),
         h('p', { className: 'fine-print' }, 'Keys: ← → aim (Shift: bigger steps), ↑ ↓ tilt, Space shoots.'),
+        this.tile('yellow', 'target', 'Tutorial', 'Aim, shoot, pot, spin: one minute', () => {
+          this.close();
+          this.cb.onTutorial();
+        }),
       ),
     );
   }
@@ -1264,4 +1348,10 @@ export class Menu {
   get lastConfig(): MatchConfig {
     return structuredClone(this.config);
   }
+}
+
+/** "Auto (Medium)": the tier Auto chose this time, if one is running. */
+function autoLabel(): string {
+  const t = typeof document !== 'undefined' ? document.documentElement.dataset.tier : undefined;
+  return t ? `Auto (${t[0]!.toUpperCase()}${t.slice(1)})` : 'Auto';
 }

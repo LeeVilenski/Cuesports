@@ -102,14 +102,37 @@ import '@fontsource/barlow-condensed/700.css';
 import '@fontsource/barlow-condensed/800-italic.css';
 import { chooseDecision } from '@cuesports/ai';
 import { AiClient } from './game/ai-client';
+import {
+  advance as tutorialAdvance,
+  markTutorialSeen,
+  newTutorial,
+  stepOf,
+  type TutorialEvent,
+  type TutorialState,
+} from './game/tutorial';
+import { Coach } from './ui/coach';
+import { resolveTier, TIERS, type TierChoice } from './render/quality';
 import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
 import { canPlaceCueBall, numberedOnTable, pocketName, type ShotDeclaration } from '@cuesports/rules';
 
 // ---------------------------------------------------------------------------------------------
 // Renderer and scene
 
+function loadTierChoice(): TierChoice {
+  try {
+    const v = (JSON.parse(localStorage.getItem('cuesports.settings') ?? '{}') as { graphics?: TierChoice }).graphics;
+    return v ?? 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
 const app = document.getElementById('app')!;
-const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const tierChoice = loadTierChoice();
+const tier = resolveTier(tierChoice);
+const tierParams = TIERS[tier];
+document.documentElement.dataset.tier = tier;
+const renderer = new WebGLRenderer({ antialias: tierParams.antialias, powerPreference: 'high-performance' });
 renderer.toneMapping = ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 app.append(renderer.domElement);
@@ -121,7 +144,7 @@ scene.background = new Color('#0b0e0c');
 scene.fog = new Fog('#0b0e0c', 6, 16);
 const pmrem = new PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.22;
+scene.environmentIntensity = tierParams.reflections;
 scene.add(new HemisphereLight('#fff6e8', '#20160e', 0.18));
 
 const world = physicsGroup();
@@ -149,6 +172,7 @@ type Phase = 'aim' | 'striking' | 'playing';
 
 const sim = new SimClient();
 const ballsView = new BallsView();
+ballsView.segments = tierParams.ballSegments;
 const cueView = new CueView();
 const guideView = new GuideView();
 world.add(ballsView.group, cueView.group, guideView.group);
@@ -598,7 +622,7 @@ function endPlayback(): void {
   const cue = cueBall();
   ballsView.commit(result);
   // In a challenge a scratch ends the attempt; the table is set up again instead.
-  if (cue && cue.state === 'pocketed' && !challenge) respawnCue(cue);
+  if (cue && cue.state === 'pocketed' && !challenge && !tutorial) respawnCue(cue);
   ballsView.showState(balls);
   playing = null;
   phase = 'aim';
@@ -618,6 +642,7 @@ function endPlayback(): void {
       .join(' · '),
   );
   if (challenge) challengeShot(result);
+  teach({ type: 'settled', potted: potted.includes('1') });
   dirty = true;
 }
 
@@ -781,6 +806,7 @@ function undo(): void {
 
 const hud = new Hud({
   onCamera: (mode: CameraMode) => {
+    teach({ type: 'camera' });
     rig.setMode(mode);
     hud.setCamera(mode);
     dirty = true;
@@ -792,11 +818,13 @@ const hud = new Hud({
   onShoot: shoot,
   onFineAim: (dx) => {
     shot.aim -= dx * 0.00012;
+    teach({ type: 'aim', amount: dx * 0.00012 });
     rig.followAimInstantly();
     dirty = true;
   },
   onTip: (a, b) => {
     shot.tip = { a, b };
+    if (a || b) teach({ type: 'spin' });
     dirty = true;
   },
   onElevation: (deg) => {
@@ -935,6 +963,7 @@ const menu: Menu = new Menu(
       saveCareer(career);
     },
     onCareerPlay: () => startCareerMatch(),
+    onTutorial: () => startTutorial(),
     onChallenge: (id) => {
       const spec = CHALLENGES.find((c) => c.id === id);
       if (spec) startChallenge(spec);
@@ -1265,6 +1294,74 @@ function challengeShot(result: ShotResult): void {
 function endChallenge(): void {
   challenge = null;
   targetRings.visible = false;
+  if (tutorial) {
+    tutorial = null;
+    coach.hide();
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The first-run tutorial: a straight-in pot on a pool table, with a card saying what to do next.
+
+let tutorial: TutorialState | null = null;
+const coach = new Coach({
+  onSkip: () => {
+    markTutorialSeen('skipped');
+    endChallenge();
+    matchHud.say('The tutorial is in How to play whenever you want it.', 3000);
+  },
+  onPractice: () => endChallenge(),
+  onHome: () => {
+    endChallenge();
+    quitToHome();
+    menu.open('home');
+  },
+});
+app.append(coach.root);
+
+function startTutorial(): void {
+  setGame(GAMES.find((g) => g.id === 'nine-ball') ?? GAMES[0]!);
+  tutorial = newTutorial();
+  setupTutorialTable();
+  coach.show(stepOf(tutorial), 0);
+}
+
+function setupTutorialTable(): void {
+  const t = game.table;
+  const specs = { cue: [t.balls.cue.radius, t.balls.cue.mass] as [number, number] };
+  const layout = CHALLENGES.find((c) => c.id === 'straight-in')!.balls.filter(([id]) => id !== '2');
+  balls = expandBalls(layout, {
+    ...specs,
+    '1': [t.balls.object.radius, t.balls.object.mass],
+  });
+  cueStart = { ...cueBall()!.pos };
+  ballsView.setBalls(balls);
+  last = null;
+  phase = 'aim';
+  aimAtFirstBall();
+  // Start a little off line, so there is something to aim.
+  shot.aim += 0.12;
+  placePlayers();
+  rig.snap();
+  status('Tutorial');
+  dirty = true;
+}
+
+/** Feeds what the player just did to the tutorial. */
+function teach(e: TutorialEvent): void {
+  if (!tutorial) return;
+  const a = tutorialAdvance(tutorial, e);
+  tutorial = a.state;
+  if (a.say) matchHud.say(a.say, 2500);
+  if (a.reset) {
+    const t = tutorial;
+    window.setTimeout(() => tutorial === t && phase === 'aim' && setupTutorialTable(), 1200);
+  }
+  if (a.next) {
+    const step = stepOf(tutorial);
+    if (step.id === 'done') markTutorialSeen('done');
+    coach.show(step, tutorial.step);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1602,7 +1699,10 @@ function aimAtPoint(p: { x: number; y: number }): void {
   const cue = cueBall();
   if (!cue) return;
   if (Math.hypot(p.x - cue.pos.x, p.y - cue.pos.y) < cue.radius * 1.2) return;
+  const before = shot.aim;
   shot.aim = Math.atan2(p.y - cue.pos.y, p.x - cue.pos.x);
+  const turn = Math.atan2(Math.sin(shot.aim - before), Math.cos(shot.aim - before));
+  teach({ type: 'aim', amount: turn });
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -1657,6 +1757,7 @@ canvas.addEventListener('pointermove', (e) => {
     const speed = Math.abs(dx) / dt; // px per ms
     const gain = Math.min(1, Math.max(0.06, speed / 1.2));
     shot.aim -= dx * 0.0035 * gain;
+    teach({ type: 'aim', amount: dx * 0.0035 * gain });
     rig.followAimInstantly();
   }
   dirty = true;
@@ -1842,7 +1943,7 @@ window.addEventListener('keydown', (e) => {
 // ---------------------------------------------------------------------------------------------
 // Frame loop: renders only when something changes, and lowers the resolution if frames are slow.
 
-let pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+let pixelRatio = Math.min(window.devicePixelRatio || 1, tierParams.maxRatio);
 const maxRatio = pixelRatio;
 let slowFrames = 0;
 let fastFrames = 0;
@@ -1998,11 +2099,60 @@ menu.open('home');
 resize();
 requestAnimationFrame(frame);
 
-registerSW({ immediate: true });
+// Updates wait for the player (an automatic reload could land mid-frame); once everything is
+// cached the home screen says the game works offline.
+let offlineReady = false;
+const updateSW = registerSW({
+  immediate: true,
+  onOfflineReady() {
+    offlineReady = true;
+    menu.setStatus({ offline: true });
+  },
+  onNeedRefresh() {
+    menu.setStatus({ offline: offlineReady, update: () => void updateSW(true) });
+  },
+  onRegisteredSW(_url, reg) {
+    // An installed copy that already works offline reports nothing new: say so from the cache.
+    if (reg?.active && navigator.serviceWorker.controller) {
+      offlineReady = true;
+      menu.setStatus({ offline: true });
+    }
+    // Check for a new version now and then while the game stays open.
+    if (reg) setInterval(() => void reg.update().catch(() => {}), 60 * 60 * 1000);
+  },
+});
+// Ask the browser not to clear saved matches, replays and career progress under storage pressure.
+void navigator.storage?.persist?.().catch(() => false);
 
 // Exposed for automated smoke tests.
 (window as unknown as { __cuesports: unknown }).__cuesports = {
   shoot,
+  /** The last frame's draw calls and triangles, and the quality tier. */
+  /** The last frame's draw calls and triangles, and the quality tier. */
+  perfTree: () => {
+    const lines: string[] = [];
+    const count = (o: import('three').Object3D): [number, number] => {
+      if (!o.visible) return [0, 0];
+      let n = 0, t = 0;
+      const m = o as import('three').Mesh;
+      if (m.isMesh || (o as import('three').Sprite).isSprite) {
+        n++;
+        const g = m.geometry;
+        t += g.index ? g.index.count / 3 : (g.attributes.position?.count ?? 0) / 3;
+      }
+      for (const c of o.children) { const [a, b] = count(c); n += a; t += b; }
+      return [n, Math.round(t)];
+    };
+    const show = (o: import('three').Object3D, d: number) => {
+      const [n, t] = count(o);
+      if (n < 3) return;
+      lines.push('  '.repeat(d) + `${o.name || o.type} (${o.children.length}): ${n} draws, ${t} tris`);
+      if (d < 4) for (const c of o.children) show(c, d + 1);
+    };
+    show(scene, 0);
+    return lines.join('\n');
+  },
+  perf: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, tier }),
   state: () => ({
     phase,
     balls,

@@ -106,6 +106,8 @@ const NET_STACK = 3;
  */
 export class BallsView {
   readonly group = new Group();
+  /** Sphere detail (set from the quality tier before setBalls); low detail also drops the clearcoat. */
+  segments: [number, number] = [48, 32];
   private balls: BallMesh[] = [];
   private readonly shadowTex = shadowTexture();
   private rest = new Map<string, Vec2>();
@@ -177,12 +179,12 @@ export class BallsView {
     this.potted = [];
     this.balls = balls.map((s) => {
       const mesh = new Mesh(
-        new SphereGeometry(s.radius, 48, 32),
+        new SphereGeometry(s.radius, this.segments[0], this.segments[1]),
         new MeshPhysicalMaterial({
           map: ballTexture(s.id),
           roughness: 0.18,
           metalness: 0,
-          clearcoat: 1,
+          clearcoat: this.segments[0] >= 32 ? 1 : 0,
           clearcoatRoughness: 0.06,
           envMapIntensity: 0.9,
         }),

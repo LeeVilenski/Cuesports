@@ -150,7 +150,7 @@ test('plays 10-ball: after the break the shot is called automatically from the a
   if (m.turn.ballInHand === 'none') {
     await expect(page.getByRole('button', { name: 'Called shot' })).toBeVisible();
     await page.getByRole('button', { name: 'Called shot' }).click();
-    await expect(page.getByRole('heading', { name: 'Call your shot' })).toBeVisible();
+    await expect(page.locator('.pick-bar')).toBeVisible();
     await page.getByRole('button', { name: 'Safety' }).click();
     await expect(page.getByRole('button', { name: 'Called shot' })).toHaveText('Call: safety');
   }

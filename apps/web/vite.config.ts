@@ -7,7 +7,7 @@ export default defineConfig({
   build: { chunkSizeWarningLimit: 900 },
   plugins: [
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Cuesports',

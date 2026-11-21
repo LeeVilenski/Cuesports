@@ -987,6 +987,31 @@ body {
   margin-top: 2px;
 }
 
+.app-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 1.4em;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+.app-status .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3fbf6a;
+}
+.app-status .link-btn {
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  color: #ffd34d;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .ubtn {
   flex: 1;
   display: flex;
@@ -2122,4 +2147,108 @@ body {
 .replay-bar,
 .editor-bar {
   zoom: var(--ui-scale, 1);
+}
+
+/* Tutorial coach card */
+.coach {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 56px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 32px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(10, 18, 14, 0.92);
+  border: 2px solid #ffd34d;
+  color: #fff;
+  z-index: 20;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.coach.pop {
+  animation: coach-pop 0.3s ease-out;
+}
+@keyframes coach-pop {
+  from {
+    transform: translateX(-50%) scale(0.94);
+    opacity: 0;
+  }
+}
+.coach-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 17px;
+}
+.coach p {
+  margin: 6px 0 8px;
+  font-size: 15px;
+  line-height: 1.35;
+}
+.coach-dots {
+  display: flex;
+  gap: 5px;
+}
+.coach-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+}
+.coach-dots .on {
+  background: #3fbf6a;
+}
+.coach-dots .now {
+  background: #ffd34d;
+}
+.coach-skip {
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  color: rgba(255, 255, 255, 0.6);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.coach-actions {
+  display: flex;
+  gap: 8px;
+}
+.coach-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: 0;
+  font: inherit;
+  font-weight: 600;
+  background: #2a3a32;
+  color: #fff;
+  cursor: pointer;
+}
+.coach-btn.primary {
+  background: #ffd34d;
+  color: #1a1a1a;
+}
+@media (prefers-reduced-motion: reduce) {
+  .coach.pop {
+    animation: none;
+  }
+}
+.welcome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 211, 77, 0.12);
+  border: 1px solid rgba(255, 211, 77, 0.5);
+  color: #fff;
+  font-size: 14px;
+}
+.welcome > span {
+  flex: 1;
+}
+.welcome .coach-btn {
+  flex: none;
+  padding: 8px 14px;
 }
