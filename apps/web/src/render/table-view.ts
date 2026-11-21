@@ -227,7 +227,8 @@ export function buildTableView(
   const railTop = table.cushion.noseHeight + trim.railTopAboveNose;
   const hx = hl + CUSHION_WIDTH + RAIL_WIDTH;
   const hy = hw + CUSHION_WIDTH + RAIL_WIDTH;
-  const snooker = table.id.startsWith('snooker');
+  // Chinese 8-ball (heyball) tables are built like snooker tables: leathers, nets and a wooden body.
+  const snooker = table.id.startsWith('snooker') || table.id.startsWith('chinese');
 
   // Cloth, slightly larger than the cushion line so it shows inside the pocket mouths.
   const ex = hl + CUSHION_WIDTH + 0.06;

@@ -28,8 +28,6 @@ export interface BallArt {
   stripe: string | null;
   number: string | null;
   spots: boolean;
-  /** Colour of the spots (the cue ball's are red). */
-  spotColour?: string;
 }
 
 export function ballArt(id: string): BallArt {
@@ -37,9 +35,8 @@ export function ballArt(id: string): BallArt {
   // Russian Pyramid: ivory balls with numbers, and a coloured cue ball.
   if (id === 'pcue') return { base: '#c9402c', stripe: null, number: null, spots: false };
   if (/^p\d+$/.test(id)) return { base: '#f3ead2', stripe: null, number: id.slice(1), spots: false };
-  // English Billiards' second white: two black spots.
-  if (id === 'spot')
-    return { base: '#f4efe0', stripe: null, number: null, spots: true, spotColour: '#111111' };
+  // English Billiards' second cue ball: yellow (as in the modern game, in place of the spot white).
+  if (id === 'spot') return { base: '#f2c419', stripe: null, number: null, spots: false };
   if (id.startsWith('red') || /^r\d+$/.test(id))
     return { base: '#c4161c', stripe: null, number: null, spots: false };
   if (/^y\d+$/.test(id)) return { base: '#f2c419', stripe: null, number: null, spots: false };
@@ -90,15 +87,7 @@ export function ballTexture(id: string): Texture {
       g.fillText(art.number, x, y + 2);
     }
   }
-  if (art.spots && art.spotColour) {
-    // A billiards spot white: one spot each side.
-    g.fillStyle = art.spotColour;
-    for (const u of [0.25, 0.75]) {
-      g.beginPath();
-      g.arc(u * w, h / 2, 7, 0, Math.PI * 2);
-      g.fill();
-    }
-  } else if (art.spots) {
+  if (art.spots) {
     // Red spots (as on a TV "spot" cue ball) make spin visible.
     g.fillStyle = '#c62026';
     for (const u of [0, 0.25, 0.5, 0.75]) {

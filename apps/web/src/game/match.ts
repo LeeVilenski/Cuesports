@@ -83,6 +83,8 @@ export interface MatchConfig {
   billiards?: BilliardsOptions | undefined;
   /** Carom games: points to win a game (0 = the game's own default). */
   caromTarget?: number | undefined;
+  /** Straight pool: points to win (25, 50 or 100). Older saves lack it. */
+  straightTarget?: number | undefined;
   /** English pool rulebook preset. */
   english: EnglishPreset;
   /** Skill level (1–5) of the computer playing as player 2, or null for a second human. */
@@ -188,7 +190,7 @@ export class Match {
       slosh: [SLOSH as AnyRuleset, SLOSH.defaults],
       'straight-pool': [
         STRAIGHT_POOL as AnyRuleset,
-        { target: config.caromTarget || STRAIGHT_POOL.defaults.target },
+        { target: config.straightTarget || STRAIGHT_POOL.defaults.target },
       ],
       'balkline-71-2': [
         BALKLINE_71_2 as AnyRuleset,

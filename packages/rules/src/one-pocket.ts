@@ -15,6 +15,9 @@ import type { Foul, Judgement, Ruleset, ShotDeclaration, Turn } from './types';
  *   scratch) costs 1 point (scores can go below zero) and gives the opponent ball in hand behind
  *   the head string if the cue ball went in; on a foul no balls score for the shooter (balls in
  *   their pocket are spotted).
+ * - A ball is spotted for each point lost to a foul, taken from the fouler's pocket. A player with
+ *   no points to give owes the ball instead; once their run ends with 1 or more points, the owed
+ *   balls come out of their pocket and are spotted.
  * - First to 8 wins.
  */
 
@@ -29,6 +32,8 @@ export interface OnePocketState {
   break: number;
   /** Each player's pocket. */
   pockets: [string, string] | null;
+  /** Balls each player owes the table for fouls committed with no points (spotted later). */
+  owed?: [number, number];
   opening: boolean;
   inHand: boolean;
 }
@@ -78,6 +83,7 @@ export const ONE_POCKET: Ruleset<OnePocketState, OnePocketOptions> = {
       scores: [0, 0],
       break: 0,
       pockets: null,
+      owed: [0, 0],
       opening: true,
       inHand: true,
     };
@@ -92,6 +98,7 @@ export const ONE_POCKET: Ruleset<OnePocketState, OnePocketOptions> = {
     const state: OnePocketState = {
       ...s,
       scores: [...s.scores] as [number, number],
+      owed: [...(s.owed ?? [0, 0])] as [number, number],
       opening: false,
       phase: 'play',
     };
@@ -111,7 +118,11 @@ export const ONE_POCKET: Ruleset<OnePocketState, OnePocketOptions> = {
 
     const cue = balls.find((b) => b.id === 'cue')!;
     if (fouls.length) {
+      // A point is paid with a ball from the fouler's pocket, or owed if they have no points.
+      if (state.scores[me] >= 1) returnBalls(balls, pockets[me]!, 1);
+      else state.owed![me] += 1;
       state.scores[me] -= 1;
+      settle(state, balls, pockets, me);
       state.break = 0;
       state.shooter = other(me);
       state.inHand = cue.state === 'pocketed';
@@ -127,6 +138,7 @@ export const ONE_POCKET: Ruleset<OnePocketState, OnePocketOptions> = {
     state.inHand = false;
     const gift = theirs.length ? ` ${theirs.length} for ${name(other(me))}.` : '';
     if (!mine.length) {
+      settle(state, balls, pockets, me);
       state.break = 0;
       state.shooter = other(me);
       return done(
@@ -166,6 +178,20 @@ export const ONE_POCKET: Ruleset<OnePocketState, OnePocketOptions> = {
     };
   },
 };
+
+/** Spots up to `n` balls from `pocket`. Returns how many came out. */
+function returnBalls(balls: BallState[], pocket: string, n: number): number {
+  const inPocket = balls.filter((b) => b.state === 'pocketed' && b.id !== 'cue' && b.pocket === pocket);
+  const out = inPocket.slice(-n);
+  for (const b of out) spotBall(table, balls, b.id, footSpot(table));
+  return out.length;
+}
+
+/** At the end of a run: a player back on 1 or more points pays the balls they owe. */
+function settle(state: OnePocketState, balls: BallState[], pockets: readonly string[], p: Seat): void {
+  const owed = state.owed!;
+  if (owed[p] > 0 && state.scores[p] >= 1) owed[p] -= returnBalls(balls, pockets[p]!, owed[p]);
+}
 
 function done(
   state: OnePocketState,

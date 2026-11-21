@@ -5,7 +5,7 @@ import type { Foul, Judgement, Ruleset, ShotDeclaration, Turn } from './types';
 
 /**
  * English Billiards (WPBSA rules, the parts that matter in play):
- * - Three balls on a snooker table: each player's cue ball (plain white 'cue' and spot white
+ * - Three balls on a snooker table: each player's cue ball (plain white 'cue' and yellow
  *   'spot') and the red. The red starts on the billiard spot (the black's spot).
  * - Scoring: a cannon (the cue ball hits both other balls) 2; potting the red 3; potting the
  *   opponent's white 2; an in-off (the cue ball goes into a pocket after hitting a ball) 3 off the
@@ -166,8 +166,8 @@ export const ENGLISH_BILLIARDS: Ruleset<BilliardsState, BilliardsOptions> = {
   name: 'English Billiards',
   table,
   players: { min: 2, max: 2 },
-  options: [{ id: 'target', label: 'Points to win', type: 'number', default: 100, min: 50, max: 500 }],
-  defaults: { target: 100 },
+  options: [{ id: 'target', label: 'Points to win', type: 'number', default: 50, min: 50, max: 500 }],
+  defaults: { target: 50 },
 
   newFrame(_opts: BilliardsOptions, _rng: Rng, breaker: number) {
     const d = theD(table)!;
