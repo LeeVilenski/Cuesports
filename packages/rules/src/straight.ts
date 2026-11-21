@@ -17,7 +17,7 @@ import type { Foul, Judgement, Ruleset, ShotDeclaration, Turn } from './types';
  *   a third foul in a row costs a further 15.
  * - A foul gives the incoming player ball in hand behind the head string if the cue ball was
  *   potted, otherwise they play it where it lies.
- * - The game is to a points target (100 by default).
+ * - The game is to a points target (50 by default).
  */
 
 export interface StraightOptions {
@@ -87,8 +87,8 @@ export const STRAIGHT_POOL: Ruleset<StraightState, StraightOptions> = {
   name: 'Straight pool',
   table,
   players: { min: 2, max: 2 },
-  options: [{ id: 'target', label: 'Points to win', type: 'number', default: 100, min: 25, max: 150 }],
-  defaults: { target: 100 },
+  options: [{ id: 'target', label: 'Points to win', type: 'number', default: 50, min: 25, max: 150 }],
+  defaults: { target: 50 },
 
   newFrame(_opts, rng: Rng, breaker) {
     const balls = rackRows(IDS, table.balls.object, footSpot(table), [1, 2, 3, 4, 5], { rng });

@@ -40,6 +40,7 @@ import { PRESETS } from '../render/figure';
 import { bestLabel, DRILLS, type DrillId } from '../game/drills';
 import { visitWord } from '../game/games';
 import { DEFAULT_MATCH, type MatchConfig } from '../game/match';
+import { STRAIGHT_POOL } from '@cuesports/rules';
 import { reelOfHighlight, reelOfRack, type Highlight, type MatchRecord, type Reel } from '../game/record';
 import { knownPlayers, percent, playerStats } from '../game/stats';
 import {
@@ -541,11 +542,23 @@ export class Menu {
       String(c.caromTarget ?? 0),
       (v) => (c.caromTarget = Number(v)),
     );
+    const straightTarget = segmented(
+      'Points to win',
+      [
+        { value: '25', label: '25' },
+        { value: '50', label: '50' },
+        { value: '100', label: '100' },
+      ],
+      String(c.straightTarget ?? STRAIGHT_POOL.defaults.target),
+      (v) => (c.straightTarget = Number(v)),
+    );
+    const straightField = this.field('Points to win', straightTarget.el);
+    const raceField = h('div', { className: 'field' }, raceLabel, race.el);
     const caromRules = h(
       'div',
       {},
       this.field('Points to win a game', caromTarget.el),
-      h('p', { className: 'fine-print' }, 'Standard: 25 for 3-Cushion, 100 for Balkline and straight pool.'),
+      h('p', { className: 'fine-print' }, 'Standard: 25 for 3-Cushion, 100 for Balkline.'),
     );
     const rules = h(
       'details',
@@ -563,7 +576,8 @@ export class Menu {
       gameButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(MATCH_GAMES[i]!.id === id)));
       const snooker = id === 'snooker';
       raceLabel.textContent = snooker ? 'Frames to win' : id === 'billiards' ? 'Games to win' : 'Race to';
-      const carom = id === 'three-cushion' || id.startsWith('balkline') || id === 'straight-pool';
+      const straight = id === 'straight-pool';
+      const carom = id === 'three-cushion' || id.startsWith('balkline');
       if (carom) raceLabel.textContent = 'Games to win';
       poolRules.hidden =
         snooker ||
@@ -571,10 +585,14 @@ export class Menu {
         id === 'chinese-8ball' ||
         id === 'billiards' ||
         carom ||
+        straight ||
         id === 'pyramid';
       if (id === 'pyramid' || id === 'one-pocket' || id === 'cowboy' || id === 'slosh')
         raceLabel.textContent = 'Games to win';
       caromRules.hidden = !carom;
+      raceField.hidden = straight;
+      straightField.hidden = !straight;
+      rules.hidden = straight;
       snookerRules.hidden = !snooker;
       englishRules.hidden = id !== 'english';
       billiardsRules.hidden = id !== 'billiards';
@@ -583,6 +601,10 @@ export class Menu {
     showOpponent();
 
     const start = () => {
+      if (c.game === 'straight-pool') {
+        c.raceTo = 1;
+        c.straightTarget ??= STRAIGHT_POOL.defaults.target;
+      }
       c.players = [
         name1.value.trim() || 'Player 1',
         c.ai ? `CPU (${LEVELS[c.ai - 1]})` : name2.value.trim() || 'Player 2',
@@ -602,7 +624,8 @@ export class Menu {
         levelField,
         this.field('Player 1', name1),
         name2Field,
-        h('div', { className: 'field' }, raceLabel, race.el),
+        raceField,
+        straightField,
         rules,
       ),
       h('button', { className: 'tile blue cta', onclick: start }, icon('play'), h('strong', {}, 'Start')),
