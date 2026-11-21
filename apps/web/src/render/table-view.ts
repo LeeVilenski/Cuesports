@@ -1,3 +1,4 @@
+import { mergeStatic } from './merge';
 import { wellCentre } from './well';
 import {
   dropEdgePoints,
@@ -413,15 +414,16 @@ export function buildTableView(
   floor.position.z = floorZ;
   group.add(floor);
 
+  const merged = mergeStatic(group);
   return {
-    group,
+    group: merged,
     railTop,
     pocketRest: rest,
     pocketRunners: runners,
     outer: { hx, hy },
     floorZ,
     dispose() {
-      group.traverse((o) => {
+      merged.traverse((o) => {
         if (o instanceof Mesh) {
           o.geometry.dispose();
           const mats = Array.isArray(o.material) ? o.material : [o.material];

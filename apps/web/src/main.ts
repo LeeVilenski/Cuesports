@@ -102,14 +102,28 @@ import '@fontsource/barlow-condensed/700.css';
 import '@fontsource/barlow-condensed/800-italic.css';
 import { chooseDecision } from '@cuesports/ai';
 import { AiClient } from './game/ai-client';
+import { resolveTier, TIERS, type TierChoice } from './render/quality';
 import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
 import { canPlaceCueBall, numberedOnTable, pocketName, type ShotDeclaration } from '@cuesports/rules';
 
 // ---------------------------------------------------------------------------------------------
 // Renderer and scene
 
+function loadTierChoice(): TierChoice {
+  try {
+    const v = (JSON.parse(localStorage.getItem('cuesports.settings') ?? '{}') as { graphics?: TierChoice }).graphics;
+    return v ?? 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
 const app = document.getElementById('app')!;
-const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const tierChoice = loadTierChoice();
+const tier = resolveTier(tierChoice);
+const tierParams = TIERS[tier];
+document.documentElement.dataset.tier = tier;
+const renderer = new WebGLRenderer({ antialias: tierParams.antialias, powerPreference: 'high-performance' });
 renderer.toneMapping = ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 app.append(renderer.domElement);
@@ -121,7 +135,7 @@ scene.background = new Color('#0b0e0c');
 scene.fog = new Fog('#0b0e0c', 6, 16);
 const pmrem = new PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.22;
+scene.environmentIntensity = tierParams.reflections;
 scene.add(new HemisphereLight('#fff6e8', '#20160e', 0.18));
 
 const world = physicsGroup();
@@ -149,6 +163,7 @@ type Phase = 'aim' | 'striking' | 'playing';
 
 const sim = new SimClient();
 const ballsView = new BallsView();
+ballsView.segments = tierParams.ballSegments;
 const cueView = new CueView();
 const guideView = new GuideView();
 world.add(ballsView.group, cueView.group, guideView.group);
@@ -1842,7 +1857,7 @@ window.addEventListener('keydown', (e) => {
 // ---------------------------------------------------------------------------------------------
 // Frame loop: renders only when something changes, and lowers the resolution if frames are slow.
 
-let pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+let pixelRatio = Math.min(window.devicePixelRatio || 1, tierParams.maxRatio);
 const maxRatio = pixelRatio;
 let slowFrames = 0;
 let fastFrames = 0;
@@ -2003,6 +2018,32 @@ registerSW({ immediate: true });
 // Exposed for automated smoke tests.
 (window as unknown as { __cuesports: unknown }).__cuesports = {
   shoot,
+  /** The last frame's draw calls and triangles, and the quality tier. */
+  /** The last frame's draw calls and triangles, and the quality tier. */
+  perfTree: () => {
+    const lines: string[] = [];
+    const count = (o: import('three').Object3D): [number, number] => {
+      if (!o.visible) return [0, 0];
+      let n = 0, t = 0;
+      const m = o as import('three').Mesh;
+      if (m.isMesh || (o as import('three').Sprite).isSprite) {
+        n++;
+        const g = m.geometry;
+        t += g.index ? g.index.count / 3 : (g.attributes.position?.count ?? 0) / 3;
+      }
+      for (const c of o.children) { const [a, b] = count(c); n += a; t += b; }
+      return [n, Math.round(t)];
+    };
+    const show = (o: import('three').Object3D, d: number) => {
+      const [n, t] = count(o);
+      if (n < 3) return;
+      lines.push('  '.repeat(d) + `${o.name || o.type} (${o.children.length}): ${n} draws, ${t} tris`);
+      if (d < 4) for (const c of o.children) show(c, d + 1);
+    };
+    show(scene, 0);
+    return lines.join('\n');
+  },
+  perf: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, tier }),
   state: () => ({
     phase,
     balls,

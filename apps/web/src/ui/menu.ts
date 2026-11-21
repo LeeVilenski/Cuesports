@@ -56,6 +56,8 @@ import {
   type IconName,
 } from './kit';
 
+import type { TierChoice } from '../render/quality';
+
 export type ClothSpeedId = 'fast' | 'medium' | 'slow';
 export type OptionName = 'guide' | 'squirt' | 'player' | 'labels' | 'haptics' | 'calm';
 export type TextSize = 'normal' | 'large' | 'larger';
@@ -65,6 +67,7 @@ export type Settings = Record<OptionName, boolean> & {
   shotCam: ShotCamId;
   stroke: StrokeId;
   textSize: TextSize;
+  graphics: TierChoice;
   /** Older saves: false meant the camera stayed put during shots. */
   overview?: boolean;
 };
@@ -173,6 +176,10 @@ export class Menu {
   private statsPlayer: string | null = null;
   private statsGame: MatchConfig['game'] | 'all' = 'all';
   private quickSub = h('small', {});
+  private graphicsNote = Object.assign(
+    h('p', { className: 'fine-print' }, 'Restart the game to apply.'),
+    { hidden: true },
+  );
 
   constructor(
     private cb: MenuCallbacks,
@@ -191,6 +198,7 @@ export class Menu {
       shotCam: saved0.overview === false ? 'stay' : 'cinematic',
       stroke: 'bar',
       textSize: 'normal',
+      graphics: 'auto',
       ...saved0,
     };
     applyTextSize(this.settings.textSize);
@@ -586,6 +594,26 @@ export class Menu {
             'wide',
           ),
         ),
+        h('h3', {}, 'Graphics'),
+        this.field(
+          'Quality',
+          segmented<TierChoice>(
+            'Quality',
+            [
+              { value: 'auto', label: autoLabel() },
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' },
+            ],
+            this.settings.graphics,
+            (v) => {
+              this.settings.graphics = v;
+              save(SETTINGS_KEY, this.settings);
+              this.graphicsNote.hidden = false;
+            },
+          ).el,
+        ),
+        this.graphicsNote,
         h('h3', {}, 'Table'),
         this.field('Cloth', cloth.el),
       ),
@@ -1264,4 +1292,10 @@ export class Menu {
   get lastConfig(): MatchConfig {
     return structuredClone(this.config);
   }
+}
+
+/** "Auto (Medium)": the tier Auto chose this time, if one is running. */
+function autoLabel(): string {
+  const t = typeof document !== 'undefined' ? document.documentElement.dataset.tier : undefined;
+  return t ? `Auto (${t[0]!.toUpperCase()}${t.slice(1)})` : 'Auto';
 }
