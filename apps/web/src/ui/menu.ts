@@ -130,6 +130,7 @@ const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: 
   { id: 'nine-ball', label: '9-Ball', ball: '#f2c14e', sub: '9' },
   { id: 'ten-ball', label: '10-Ball', ball: '#2f6fdc', sub: '10' },
   { id: 'english', label: 'UK 8-Ball', ball: '#d8342c', sub: '8' },
+  { id: 'chinese-8ball', label: 'Chinese 8-Ball', ball: '#1b1b1b', sub: '8' },
   { id: 'snooker', label: 'Snooker', ball: '#c4202b', sub: '' },
   { id: 'billiards', label: 'Billiards', ball: '#f4efe0', sub: '' },
   { id: 'three-cushion', label: '3-Cushion', ball: '#f2c419', sub: '' },
@@ -560,7 +561,13 @@ export class Menu {
       raceLabel.textContent = snooker ? 'Frames to win' : id === 'billiards' ? 'Games to win' : 'Race to';
       const carom = id === 'three-cushion' || id.startsWith('balkline');
       if (carom) raceLabel.textContent = 'Games to win';
-      poolRules.hidden = snooker || id === 'english' || id === 'billiards' || carom || id === 'pyramid';
+      poolRules.hidden =
+        snooker ||
+        id === 'english' ||
+        id === 'chinese-8ball' ||
+        id === 'billiards' ||
+        carom ||
+        id === 'pyramid';
       if (id === 'pyramid') raceLabel.textContent = 'Games to win';
       caromRules.hidden = !carom;
       snookerRules.hidden = !snooker;
@@ -609,6 +616,7 @@ export class Menu {
       'balkline-47-2': ['#c4161c', ''],
       'balkline-71-2': ['#c4161c', ''],
       pyramid: ['#f3ead2', ''],
+      'chinese-8ball': ['#1b1b1b', '8'],
       practice: ['#f6f3ea', ''],
     };
     const cloth = segmented<ClothSpeedId>(

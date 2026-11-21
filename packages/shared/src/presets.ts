@@ -369,10 +369,46 @@ export const PYRAMID_12FT: TableSpec = {
   },
 };
 
+// --- Chinese 8-ball (heyball) ---------------------------------------------------------------------
+// A 9 ft table (2540 x 1270 mm) with 57.15 mm balls but tight, rounded pockets cut like a snooker
+// table's: about 85 mm at the corners and 90 mm in the middle.
+
+export const CHINESE_8BALL_9FT: TableSpec = {
+  ...AMERICAN_POOL_9FT,
+  id: 'chinese-8ball-9ft',
+  name: 'Chinese 8-ball 9 ft',
+  cushion: { ...AMERICAN_POOL_9FT.cushion, profile: 'snooker' },
+  pockets: sixPockets(
+    AP_L,
+    AP_W,
+    {
+      mouthWidth: 0.085,
+      jawAngle: 135,
+      jawRadius: 0.016,
+      shelfDepth: 0.02,
+      dropSag: 0.01,
+      fallRadius: 0.05,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
+    },
+    {
+      mouthWidth: 0.09,
+      jawAngle: 95,
+      jawRadius: 0.016,
+      shelfDepth: 0.015,
+      dropSag: 0.008,
+      fallRadius: 0.055,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
+    },
+  ),
+};
+
 export const TABLE_PRESETS: readonly TableSpec[] = [
   SNOOKER_12FT,
   ENGLISH_POOL_7FT,
   AMERICAN_POOL_9FT,
   CAROM_10FT,
   PYRAMID_12FT,
+  CHINESE_8BALL_9FT,
 ];

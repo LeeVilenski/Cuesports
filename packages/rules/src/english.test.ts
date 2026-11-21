@@ -333,3 +333,25 @@ describe('English pool: WEPF rules', () => {
     expect(j.turn.targets).toContain('r1');
   });
 });
+
+describe('Chinese 8-ball', () => {
+  it('racks numbered solids and stripes on its own table', async () => {
+    const { CHINESE_8BALL } = await import('./english');
+    const f = CHINESE_8BALL.newFrame(CHINESE_8BALL.defaults, new Rng(1), 0);
+    expect(CHINESE_8BALL.table.id).toBe('chinese-8ball-9ft');
+    expect(f.balls.map((b) => b.id).sort()).toContain('15');
+    expect(f.balls.some((b) => b.id.startsWith('r'))).toBe(false);
+  });
+
+  it('names the groups solids and stripes, and a pot of each offers the choice', async () => {
+    const { CHINESE_8BALL } = await import('./english');
+    const C = CHINESE_8BALL;
+    const { balls, state: s } = C.newFrame(C.defaults, new Rng(2), 0);
+    const strikeC: PhysicsEvent = { type: 'strike', t: 0, ball: 'cue', speed: 5, miscue: false };
+    const j = C.judge(s, {}, balls, shot(balls, [strikeC, hit('1'), pot('3'), pot('11', 'top-left')]), C.defaults);
+    expect(j.turn.decision?.choices.map((c) => c.label)).toEqual(['Solids', 'Stripes']);
+    const d = C.decide(j.state, 'yellow', j.balls, C.defaults);
+    expect(d.state.groups).toEqual(['yellow', 'red']);
+    expect(d.message).toMatch(/stripes/);
+  });
+});

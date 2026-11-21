@@ -1,5 +1,5 @@
 import { cloneBall, makeBall, rackRows, type BallState, type ShotResult } from '@cuesports/physics';
-import { ENGLISH_POOL_7FT, type Rng, type TableSpec } from '@cuesports/shared';
+import { CHINESE_8BALL_9FT, ENGLISH_POOL_7FT, type Rng, type TableSpec } from '@cuesports/shared';
 import { shotFacts } from './analysis';
 import { headStringX, spotBall, spotOf } from './placement';
 import { anyPartHittable, isSnookered } from './snookered';
@@ -23,8 +23,21 @@ import type { BallInHand, Foul, Judgement, Ruleset, ShotDeclaration, Turn } from
  */
 
 export type Group = 'red' | 'yellow';
-const groupOf = (id: string): Group | null =>
-  id.startsWith('r') ? 'red' : id.startsWith('y') ? 'yellow' : null;
+/**
+ * Internally the two groups are always 'red' and 'yellow'. With numbered balls (Chinese 8-ball)
+ * the solids 1–7 are the 'red' group and the stripes 9–15 the 'yellow' group.
+ */
+const groupOf = (id: string): Group | null => {
+  if (id.startsWith('r')) return 'red';
+  if (id.startsWith('y')) return 'yellow';
+  const n = Number(id);
+  return n >= 1 && n <= 7 ? 'red' : n >= 9 && n <= 15 ? 'yellow' : null;
+};
+
+/** How the groups are named to the player. */
+export type BallStyle = 'colours' | 'numbers';
+const plural = (g: Group, style: BallStyle): string =>
+  style === 'numbers' ? (g === 'red' ? 'solids' : 'stripes') : `${g}s`;
 const otherGroup = (g: Group): Group => (g === 'red' ? 'yellow' : 'red');
 
 export interface EnglishOptions {
@@ -112,13 +125,16 @@ function ballsOn(state: EnglishState, balls: readonly BallState[]): string[] {
   return own.length ? own : live(balls).some((b) => b.id === '8') ? ['8'] : [];
 }
 
-function rack(table: TableSpec, rng: Rng): BallState[] {
+function rack(table: TableSpec, rng: Rng, style: BallStyle): BallState[] {
   const spec = table.balls.object;
-  const spot = spotOf(table, 'black') ?? { x: table.playfield.length / 4, y: 0 };
+  const spot = spotOf(table, 'black') ?? spotOf(table, 'foot') ?? { x: table.playfield.length / 4, y: 0 };
   // Rule 5: the 8 on the 8-ball spot, in the middle of the third row.
   const pitch = 2 * spec.radius + 0.0002;
   const apex = { x: spot.x - 2 * ((pitch * Math.sqrt(3)) / 2), y: 0 };
-  const ids = ['r1', 'y1', 'r2', 'r3', '8', 'y2', 'y3', 'r4', 'y4', 'r5', 'r6', 'y5', 'y6', 'r7', 'y7'];
+  const ids =
+    style === 'numbers'
+      ? ['1', '9', '2', '10', '8', '3', '11', '4', '12', '5', '13', '6', '14', '7', '15']
+      : ['r1', 'y1', 'r2', 'r3', '8', 'y2', 'y3', 'r4', 'y4', 'r5', 'r6', 'y5', 'y6', 'r7', 'y7'];
   const balls = rackRows(ids, spec, apex, [1, 2, 3, 4, 5], { rng });
   balls.push(makeBall('cue', table.balls.cue, { x: headStringX(table) - 0.12, y: 0.05 }));
   return balls;
@@ -160,17 +176,22 @@ function returnCueBall(table: TableSpec, balls: BallState[]): void {
   if (cue && cue.state === 'pocketed') spotBall(table, balls, 'cue', { x: headStringX(table) - 0.1, y: 0 });
 }
 
-export function makeEnglish(table: TableSpec = ENGLISH_POOL_7FT): Ruleset<EnglishState, EnglishOptions> {
+export function makeEnglish(
+  table: TableSpec = ENGLISH_POOL_7FT,
+  style: BallStyle = 'colours',
+  id = 'english',
+  title = 'English pool',
+): Ruleset<EnglishState, EnglishOptions> {
   const ruleset: Ruleset<EnglishState, EnglishOptions> = {
-    id: 'english',
-    name: 'English pool',
+    id,
+    name: title,
     table,
     players: { min: 2, max: 2 },
     options: [],
     defaults: INTERNATIONAL_RULES,
 
     newFrame(_opts, rng, breaker) {
-      const balls = rack(table, rng);
+      const balls = rack(table, rng, style);
       const state: EnglishState = {
         phase: 'break',
         shooter: breaker,
@@ -299,7 +320,7 @@ export function makeEnglish(table: TableSpec = ENGLISH_POOL_7FT): Ruleset<Englis
         if (state.pendingGroup && pottedGroups.includes(state.pendingGroup)) {
           groups = assign(shooter, state.pendingGroup);
           continues = true;
-          message = `${name(shooter)} is on ${state.pendingGroup}s.`;
+          message = `${name(shooter)} is on ${plural(state.pendingGroup!, style)}.`;
         } else if (opts.groupChoice === 'first-contact') {
           if (firstGroup && pottedGroups.includes(firstGroup)) {
             groups = assign(shooter, firstGroup);
@@ -343,7 +364,7 @@ export function makeEnglish(table: TableSpec = ENGLISH_POOL_7FT): Ruleset<Englis
           balls,
           fouls: [],
           potted,
-          turn: turnFor(next, balls, chooseGroupDecision(shooter)),
+          turn: turnFor(next, balls, chooseGroupDecision(shooter, style)),
           frame: null,
           message,
         };
@@ -417,8 +438,8 @@ export function makeEnglish(table: TableSpec = ENGLISH_POOL_7FT): Ruleset<Englis
           turn: turnFor(next, balls),
           frame: null,
           message: assigned
-            ? `${name(state.shooter)} is on ${g}s.`
-            : `${name(state.shooter)} chooses ${g}s and must pot one next to be on them.`,
+            ? `${name(state.shooter)} is on ${plural(g, style)}.`
+            : `${name(state.shooter)} chooses ${plural(g, style)} and must pot one next to be on them.`,
         };
       }
       throw new Error('No decision is pending');
@@ -524,7 +545,7 @@ export function makeEnglish(table: TableSpec = ENGLISH_POOL_7FT): Ruleset<Englis
         balls,
         fouls: [],
         potted,
-        turn: turnFor(next, balls, chooseGroupDecision(shooter)),
+        turn: turnFor(next, balls, chooseGroupDecision(shooter, style)),
         frame: null,
         message: `Good break. ${name(shooter)} chooses a colour.`,
       };
@@ -576,12 +597,12 @@ function assign(shooter: number, g: Group): [Group, Group] {
   return shooter === 0 ? [g, otherGroup(g)] : [otherGroup(g), g];
 }
 
-function chooseGroupDecision(shooter: number): Turn['decision'] {
+function chooseGroupDecision(shooter: number, style: BallStyle = 'colours'): Turn['decision'] {
   return {
-    prompt: `${name(shooter)}: choose your colour.`,
+    prompt: style === 'numbers' ? `${name(shooter)}: choose solids or stripes.` : `${name(shooter)}: choose your colour.`,
     choices: [
-      { id: 'red', label: 'Reds' },
-      { id: 'yellow', label: 'Yellows' },
+      { id: 'red', label: style === 'numbers' ? 'Solids' : 'Reds' },
+      { id: 'yellow', label: style === 'numbers' ? 'Stripes' : 'Yellows' },
     ],
   };
 }
@@ -589,7 +610,31 @@ function chooseGroupDecision(shooter: number): Turn['decision'] {
 function describe(id: string): string {
   if (id === '8') return 'the 8';
   const g = groupOf(id);
+  if (g && /^\d+$/.test(id)) return `the ${id}`;
   return g ? `a ${g}` : id;
 }
 
 export const ENGLISH_POOL = makeEnglish();
+
+/**
+ * Chinese 8-ball (heyball): solids and stripes on a 9 ft table with tight pockets. Played here
+ * with the shared eight-ball engine: a break must pot a ball or drive four to a cushion (or it is
+ * re-racked for the opponent), the table stays open until a group is potted, a foul gives ball in
+ * hand anywhere, and the 8 potted early or on a foul loses the frame.
+ */
+export const CHINESE_RULES: EnglishOptions = {
+  legalBreak: 'colour-or-four-cushions',
+  illegalBreak: 'rerack-opponent-breaks',
+  eightOnBreak: 'respot',
+  foulVisits: 1,
+  foulCueBall: 'in-hand-anywhere',
+  opponentBall: 'loss-of-turn',
+  totalSnooker: false,
+  foulSnooker: false,
+  groupChoice: 'choose-after-both',
+};
+
+export const CHINESE_8BALL = {
+  ...makeEnglish(CHINESE_8BALL_9FT, 'numbers', 'chinese-8ball', 'Chinese 8-ball'),
+  defaults: CHINESE_RULES,
+};

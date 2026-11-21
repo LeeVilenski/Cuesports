@@ -4,6 +4,7 @@ import {
   BALKLINE_71_2,
   THREE_CUSHION,
   RUSSIAN_PYRAMID,
+  CHINESE_8BALL,
   type PyramidState,
   type CaromState,
   ENGLISH_BILLIARDS,
@@ -37,7 +38,8 @@ export type MatchGame =
   | 'three-cushion'
   | 'balkline-47-2'
   | 'balkline-71-2'
-  | 'pyramid';
+  | 'pyramid'
+  | 'chinese-8ball';
 
 /** Games scored in points rather than racks won (frame or game to a target). */
 export const POINTS_GAMES = new Set<MatchGame>([
@@ -164,6 +166,7 @@ export class Match {
         { target: config.caromTarget || BALKLINE_47_2.defaults.target },
       ],
       pyramid: [RUSSIAN_PYRAMID as AnyRuleset, RUSSIAN_PYRAMID.defaults],
+      'chinese-8ball': [CHINESE_8BALL as AnyRuleset, CHINESE_8BALL.defaults],
       'balkline-71-2': [
         BALKLINE_71_2 as AnyRuleset,
         { target: config.caromTarget || BALKLINE_71_2.defaults.target },
