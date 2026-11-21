@@ -10,6 +10,9 @@ import {
 } from '@cuesports/physics';
 import {
   ACESFilmicToneMapping,
+  AdditiveBlending,
+  CanvasTexture,
+  CircleGeometry,
   Color,
   Fog,
   HemisphereLight,
@@ -120,6 +123,7 @@ import {
   pocketName,
   theD,
   type ShotDeclaration,
+  type OnePocketState,
 } from '@cuesports/rules';
 
 // ---------------------------------------------------------------------------------------------
@@ -184,6 +188,43 @@ ballsView.segments = tierParams.ballSegments;
 const cueView = new CueView();
 const guideView = new GuideView();
 world.add(ballsView.group, cueView.group, guideView.group);
+
+/** One-pocket: a soft glow on the pocket of the player at the table. */
+const pocketGlow = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  // A ring: clear over the hole itself, brightest round its edge, fading out across the cloth.
+  grad.addColorStop(0, 'rgba(255,200,120,0)');
+  grad.addColorStop(0.42, 'rgba(255,200,120,0)');
+  grad.addColorStop(0.55, 'rgba(255,210,140,0.9)');
+  grad.addColorStop(1, 'rgba(255,170,80,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  const mat = new MeshBasicMaterial({
+    map: new CanvasTexture(c),
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+    blending: AdditiveBlending,
+  });
+  const m = new Mesh(new CircleGeometry(1, 48), mat);
+  m.renderOrder = 2;
+  m.visible = false;
+  return m;
+})();
+world.add(pocketGlow);
+
+function showPocketGlow(): void {
+  const st = match?.config.game === 'one-pocket' ? (match.state as OnePocketState) : null;
+  const id = st?.pockets && st.phase !== 'over' ? st.pockets[st.shooter] : null;
+  const p = id ? game.table.pockets.find((q) => q.id === id) : undefined;
+  pocketGlow.visible = !!p;
+  if (!p) return;
+  pocketGlow.position.set(p.position.x, p.position.y, 0.002);
+  pocketGlow.scale.setScalar(p.mouthWidth * 1.4);
+}
 
 let game: GameDef = GAMES[0]!;
 let tableView: TableView | null = null;
@@ -305,6 +346,7 @@ function setGame(def: GameDef): void {
   // Practice has no calls or nominations: clear any chip left over from a match.
   matchHud.showCall(null, false, (p) => p, false);
   setTable(def);
+  pocketGlow.visible = false;
   rerack();
   sound.setAmbience(roomFor(null));
 }
@@ -430,6 +472,7 @@ function syncTurn(): void {
   manualCall = null;
   manualNominate = null;
   endPick();
+  showPocketGlow();
   matchHud.showBoard({
     players: match.config.players,
     score: match.score,
