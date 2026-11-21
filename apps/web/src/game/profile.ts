@@ -138,6 +138,7 @@ export const WRAPS: (Swatch | { value: null; label: string })[] = [
   { value: '#5a3a22', label: 'Leather' },
   { value: '#a3201c', label: 'Red' },
   { value: '#1f3f8a', label: 'Blue' },
+  { value: '#c9a227', label: 'Gold' },
 ];
 
 export const POOL_CLOTHS: Swatch[] = [

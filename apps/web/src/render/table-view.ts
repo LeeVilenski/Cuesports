@@ -54,6 +54,16 @@ export interface TableView {
 function innerOutline(geo: TableGeometry): Vec2[] {
   const angle = (p: Vec2) => Math.atan2(p.y, p.x);
   const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+  // A carom table: the nose line is just the rectangle.
+  if (geo.pockets.length === 0) {
+    const { halfLength: x, halfWidth: y } = geo;
+    return [
+      { x: -x, y: -y },
+      { x, y: -y },
+      { x, y },
+      { x: -x, y },
+    ];
+  }
   const pockets = [...geo.pockets].sort((a, b) => angle(a.position) - angle(b.position));
   const pts: Vec2[] = [];
   for (const p of pockets) {

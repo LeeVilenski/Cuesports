@@ -113,14 +113,22 @@ import {
 import { Coach } from './ui/coach';
 import { resolveTier, TIERS, type TierChoice } from './render/quality';
 import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
-import { canPlaceCueBall, numberedOnTable, pocketName, type ShotDeclaration } from '@cuesports/rules';
+import {
+  canPlaceCueBall,
+  headStringX,
+  numberedOnTable,
+  pocketName,
+  theD,
+  type ShotDeclaration,
+} from '@cuesports/rules';
 
 // ---------------------------------------------------------------------------------------------
 // Renderer and scene
 
 function loadTierChoice(): TierChoice {
   try {
-    const v = (JSON.parse(localStorage.getItem('cuesports.settings') ?? '{}') as { graphics?: TierChoice }).graphics;
+    const v = (JSON.parse(localStorage.getItem('cuesports.settings') ?? '{}') as { graphics?: TierChoice })
+      .graphics;
     return v ?? 'auto';
   } catch {
     return 'auto';
@@ -253,7 +261,9 @@ let frozen = false;
 
 const rig = new CameraRig(canvas, game.table);
 
-const cueBall = (): BallState | undefined => balls.find((b) => b.id === 'cue');
+/** The ball the player at the table strikes ('cue', or in billiards 'spot' for player 2). */
+let cueId = 'cue';
+const cueBall = (): BallState | undefined => balls.find((b) => b.id === cueId);
 
 /**
  * Drops anything left over from the last table: a computer turn still thinking or waiting to
@@ -275,6 +285,8 @@ function resetTurnState(): void {
 function setGame(def: GameDef): void {
   resetTurnState();
   match = null;
+  cueId = 'cue';
+  shot.ball = 'cue';
   endChallenge();
   viewer = null;
   replayBar.show(null);
@@ -406,6 +418,8 @@ function loadRack(): void {
 function syncTurn(): void {
   if (!match) return;
   const t = match.turn;
+  cueId = t.cueBall ?? 'cue';
+  shot.ball = cueId;
   manualCall = null;
   manualNominate = null;
   endPick();
@@ -422,6 +436,15 @@ function syncTurn(): void {
     (t.decision?.choices ?? []).map((c) => ({ ...c, label: match!.names(c.label) })),
   );
   placing = t.ballInHand !== 'none' && !match.rackResult;
+  // A ball off the table (billiards: in hand after an in-off, or not yet in play) comes back in the D.
+  const inHand = cueBall();
+  if (placing && inHand?.state === 'pocketed') {
+    const d = theD(match.table);
+    cueStart = d ? { x: d.centre.x - 0.02, y: 0 } : { x: headStringX(match.table) - 0.1, y: 0 };
+    respawnCue(inHand);
+    ballsView.showState(balls);
+    aimAtFirstBall();
+  }
   hud.setPlacing(placing);
   hud.setPlacingAllowed(placing);
   if (placing && rig.mode === 'aim') {
@@ -486,7 +509,7 @@ function placePlayers(): void {
 
 function aimAtFirstBall(): void {
   const cue = cueBall();
-  const target = balls.find((b) => b.id !== 'cue' && b.state !== 'pocketed');
+  const target = balls.find((b) => b.id !== cueId && b.state !== 'pocketed');
   if (cue && target) shot.aim = Math.atan2(target.pos.y - cue.pos.y, target.pos.x - cue.pos.x);
 }
 
@@ -1016,6 +1039,10 @@ app.append(menu.root);
 
 /** Cloth colour for a table, from the profile. */
 function clothFor(t: TableSpec): string {
+  // Carom tables: the classic tournament blue.
+  if (t.pockets.length === 0) return '#2b5fa6';
+  // Russian Pyramid: green.
+  if (t.id.startsWith('pyramid')) return '#1f6a3c';
   return t.id.startsWith('snooker')
     ? profile.cloth.snooker
     : t.id.startsWith('english')
@@ -1148,6 +1175,7 @@ function startCareerMatch(): void {
     raceTo: e.raceTo[run.round] ?? 3,
     breaks: 'alternate',
     snooker: { ...DEFAULT_MATCH.snooker, reds: e.reds ?? 15 },
+    ...(e.target ? { billiards: { target: e.target }, caromTarget: e.target } : {}),
     ai: opp.level,
     aiAttack: o.attack,
     aiLook: o.look,
@@ -2019,7 +2047,7 @@ function frame(now: number): void {
   updatePlayers(dt, cue);
   const guide =
     phase === 'aim' && cue
-      ? computeGuide(game.table, balls, 'cue', guideSquirt ? launchDirection(cue, shot) : shot.aim)
+      ? computeGuide(game.table, balls, cueId, guideSquirt ? launchDirection(cue, shot) : shot.aim)
       : null;
   guideView.update(showGuide && !placing ? guide : null);
   if (match && phase === 'aim') {
@@ -2133,14 +2161,19 @@ void navigator.storage?.persist?.().catch(() => false);
     const lines: string[] = [];
     const count = (o: import('three').Object3D): [number, number] => {
       if (!o.visible) return [0, 0];
-      let n = 0, t = 0;
+      let n = 0,
+        t = 0;
       const m = o as import('three').Mesh;
       if (m.isMesh || (o as import('three').Sprite).isSprite) {
         n++;
         const g = m.geometry;
         t += g.index ? g.index.count / 3 : (g.attributes.position?.count ?? 0) / 3;
       }
-      for (const c of o.children) { const [a, b] = count(c); n += a; t += b; }
+      for (const c of o.children) {
+        const [a, b] = count(c);
+        n += a;
+        t += b;
+      }
       return [n, Math.round(t)];
     };
     const show = (o: import('three').Object3D, d: number) => {

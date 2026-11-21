@@ -1,5 +1,15 @@
 import type { LayoutId } from '@cuesports/physics';
-import { AMERICAN_POOL_9FT, ENGLISH_POOL_7FT, SNOOKER_12FT, type TableSpec } from '@cuesports/shared';
+import {
+  AMERICAN_POOL_9FT,
+  BALKLINE_47,
+  CHINESE_8BALL_9FT,
+  BALKLINE_71,
+  CAROM_10FT,
+  ENGLISH_POOL_7FT,
+  PYRAMID_12FT,
+  SNOOKER_12FT,
+  type TableSpec,
+} from '@cuesports/shared';
 
 export interface GameDef {
   id: string;
@@ -16,7 +26,19 @@ export const GAMES: GameDef[] = [
   { id: 'eight-ball', label: '8-ball', table: AMERICAN_POOL_9FT, layout: 'eight-ball', maxSpeed: 9 },
   { id: 'ten-ball', label: '10-ball', table: AMERICAN_POOL_9FT, layout: 'ten-ball', maxSpeed: 9 },
   { id: 'english', label: 'English pool', table: ENGLISH_POOL_7FT, layout: 'blackball', maxSpeed: 8 },
+  {
+    id: 'chinese-8ball',
+    label: 'Chinese 8-ball',
+    table: CHINESE_8BALL_9FT,
+    layout: 'eight-ball',
+    maxSpeed: 9,
+  },
   { id: 'snooker', label: 'Snooker', table: SNOOKER_12FT, layout: 'snooker', maxSpeed: 7.5 },
+  { id: 'billiards', label: 'English Billiards', table: SNOOKER_12FT, layout: 'billiards', maxSpeed: 7.5 },
+  { id: 'three-cushion', label: '3-Cushion', table: CAROM_10FT, layout: 'carom', maxSpeed: 9 },
+  { id: 'balkline-47-2', label: 'Balkline 47/2', table: BALKLINE_47, layout: 'carom', maxSpeed: 9 },
+  { id: 'balkline-71-2', label: 'Balkline 71/2', table: BALKLINE_71, layout: 'carom', maxSpeed: 9 },
+  { id: 'pyramid', label: 'Russian Pyramid', table: PYRAMID_12FT, layout: 'pyramid', maxSpeed: 9 },
   {
     id: 'practice',
     label: 'Practice: two balls',
@@ -74,6 +96,6 @@ export function withClothSpeed(table: TableSpec, speed: ClothSpeed): TableSpec {
 export type VisitWord = 'break' | 'run';
 
 /** Games played under American terms. New American games (straight pool, one-pocket) go here. */
-const AMERICAN = new Set(['nine-ball', 'ten-ball', 'eight-ball']);
+const AMERICAN = new Set(['nine-ball', 'ten-ball', 'eight-ball', 'straight-pool', 'one-pocket']);
 
 export const visitWord = (game: string): VisitWord => (AMERICAN.has(game) ? 'run' : 'break');

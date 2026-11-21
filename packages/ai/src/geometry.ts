@@ -84,8 +84,9 @@ export function bestPotEase(
   table: TableSpec,
   balls: readonly BallState[],
   targets: readonly string[],
+  cueId = 'cue',
 ): number {
-  const cue = balls.find((b) => b.id === 'cue' && b.state !== 'pocketed');
+  const cue = balls.find((b) => b.id === cueId && b.state !== 'pocketed');
   if (!cue) return 0.6; // ball in hand: usually a good chance
   // A cue ball on (or very near) a cushion is harder to cue: the bridge is awkward and spin is limited.
   const hl = table.playfield.length / 2;

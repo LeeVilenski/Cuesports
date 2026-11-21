@@ -26,6 +26,8 @@ export interface Decision {
 /** What the player at the table may or must do next. */
 export interface Turn {
   player: number;
+  /** The ball the player strikes, when it isn't 'cue' (billiards: each player has their own). */
+  cueBall?: string;
   ballInHand: BallInHand;
   /** Balls the cue ball must hit first. Empty means any ball. */
   targets: string[];

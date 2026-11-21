@@ -44,12 +44,17 @@ export interface CareerEvent {
   reward: string;
   /** Snooker: reds in the rack. */
   reds?: 15 | 10 | 6;
+  /** Billiards and carom: points to win a game (shorter than the standard for the career). */
+  target?: number;
 }
 
 export const VENUES: Venue[] = [
   { id: 'red-lion', name: 'The Red Lion', kind: 'Pub', tier: 0 },
   { id: 'corner-pocket', name: 'Corner Pocket Club', kind: 'Club', tier: 1 },
+  { id: 'cannon-room', name: 'The Cannon Room', kind: 'Club', tier: 1 },
   { id: 'riverside', name: 'Riverside Hall', kind: 'Hall', tier: 2 },
+  { id: 'carambole', name: 'Café Carambole', kind: 'Hall', tier: 2 },
+  { id: 'neva', name: 'Neva Billiard Hall', kind: 'Hall', tier: 2 },
   { id: 'northgate', name: 'Northgate Arena', kind: 'Arena', tier: 3 },
 ];
 
@@ -181,6 +186,45 @@ export const EVENTS: CareerEvent[] = [
   },
 ];
 
+// The newer games: billiards at a club, then carom and pyramid in the halls.
+EVENTS.push(
+  {
+    id: 'cannon-billiards',
+    title: 'Cannon Room Billiards Handicap',
+    venue: 'cannon-room',
+    tier: 1,
+    game: 'billiards',
+    raceTo: [1, 1, 1],
+    levels: [2, 3],
+    rival: 'priya',
+    reward: 'waistcoat:#5c3d12',
+    target: 50,
+  },
+  {
+    id: 'carambole-3c',
+    title: 'Café Carambole 3-Cushion Open',
+    venue: 'carambole',
+    tier: 2,
+    game: 'three-cushion',
+    raceTo: [1, 1, 1],
+    levels: [3, 4],
+    rival: 'viktor',
+    reward: 'wrap:#c9a227',
+    target: 10,
+  },
+  {
+    id: 'neva-pyramid',
+    title: 'Neva Pyramid Cup',
+    venue: 'neva',
+    tier: 2,
+    game: 'pyramid',
+    raceTo: [2, 2, 3],
+    levels: [3, 4],
+    rival: 'viktor',
+    reward: 'cloth.pool:#5a2f7a',
+  },
+);
+
 export const careerEvent = (id: string): CareerEvent | undefined => EVENTS.find((e) => e.id === id);
 
 /**
@@ -197,6 +241,9 @@ export const REWARDS: Record<string, string> = {
   'wrap:#a3201c': 'Red wrap',
   'cloth.pool:#7a1f2b': 'Burgundy cloth',
   'waistcoat:#3a1f52': 'Plum waistcoat',
+  'waistcoat:#5c3d12': 'Tan waistcoat',
+  'wrap:#c9a227': 'Gold wrap',
+  'cloth.pool:#5a2f7a': 'Purple cloth',
 };
 
 // ---------------------------------------------------------------------------------------------

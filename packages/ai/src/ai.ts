@@ -66,6 +66,9 @@ const STRIKE_TO_BALL = 1.33; // cue speed → ball speed for a centre hit (appro
 const MIN_CUE = 0.6;
 const MAX_CUE = 9;
 
+/** The ball this player strikes. */
+const cueOf = (i: AiInput): string => i.turn.cueBall ?? 'cue';
+
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
 /** Cue speed to get the object ball to the pocket with a little to spare. */
@@ -123,8 +126,8 @@ interface Contact {
 function contactSpots(input: AiInput, rulesTable: TableSpec, max = 12): Contact[] {
   const zone = input.turn.ballInHand;
   if (zone === 'none') return [];
-  const cue = input.balls.find((b) => b.id === 'cue')!;
-  const live = input.balls.filter((b) => b.state !== 'pocketed' && b.id !== 'cue');
+  const cue = input.balls.find((b) => b.id === cueOf(input))!;
+  const live = input.balls.filter((b) => b.state !== 'pocketed' && b.id !== cueOf(input));
   const ids = input.turn.targets.length ? input.turn.targets : live.map((b) => b.id);
   const out: Contact[] = [];
   const N = 24;
@@ -169,12 +172,12 @@ function placements(
   lines: { target: BallState; pocket: string }[],
 ): Vec2[] {
   const zone = input.turn.ballInHand;
-  const cue = input.balls.find((b) => b.id === 'cue')!;
-  const ok = (p: Vec2) => canPlaceCueBall(rulesTable, input.balls, zone, p);
-  const live = input.balls.filter((b) => b.state !== 'pocketed' && b.id !== 'cue');
+  const cue = input.balls.find((b) => b.id === cueOf(input))!;
+  const ok = (p: Vec2) => canPlaceCueBall(rulesTable, input.balls, zone, p, cueOf(input));
+  const live = input.balls.filter((b) => b.state !== 'pocketed' && b.id !== cueOf(input));
   const targetIds = input.turn.targets.length ? input.turn.targets : live.map((b) => b.id);
   const targetBalls = live.filter((b) => targetIds.includes(b.id));
-  const ballsWith = (p: Vec2) => input.balls.map((b) => (b.id === 'cue' ? { ...b, pos: p } : b));
+  const ballsWith = (p: Vec2) => input.balls.map((b) => (b.id === cueOf(input) ? { ...b, pos: p } : b));
   const potsFrom = (p: Vec2) => {
     const balls = ballsWith(p);
     const c = { ...cue, pos: p };
@@ -231,8 +234,8 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
   const rulesTable = input.ruleset.table;
   const simTable = input.simTable ?? rulesTable;
   const cands: Candidate[] = [];
-  const cue = input.balls.find((b) => b.id === 'cue')!;
-  const live = input.balls.filter((b) => b.state !== 'pocketed' && b.id !== 'cue');
+  const cue = input.balls.find((b) => b.id === cueOf(input))!;
+  const live = input.balls.filter((b) => b.state !== 'pocketed' && b.id !== cueOf(input));
   const targets = input.turn.targets.length ? input.turn.targets : live.map((b) => b.id);
   const targetBalls = live.filter((b) => targets.includes(b.id));
 
@@ -243,7 +246,7 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
       for (const speed of [7.5, 8.5, 9]) {
         const aim = Math.atan2(apex.pos.y - cue.pos.y + dy, apex.pos.x - cue.pos.x);
         cands.push({
-          shot: { ball: 'cue', aim, elevation: 0, tip: { a: 0, b: 0.05 }, speed },
+          shot: { ball: cueOf(input), aim, elevation: 0, tip: { a: 0, b: 0.05 }, speed },
           decl: {},
           label: 'break',
         });
@@ -266,7 +269,7 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
           for (const speed of [2.8, 3.4, 4]) {
             cands.push({
               shot: {
-                ball: 'cue',
+                ball: cueOf(input),
                 aim: base + side * f * half,
                 elevation: 0,
                 tip: { a: -side * 0.3, b: 0 },
@@ -281,6 +284,11 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
     }
     if (cands.length) return cands;
   }
+
+  // Carom games (billiards): a sweep of contacts on each ball at a few paces and spins. The physics
+  // and the rules then find the cannons, in-offs and pots.
+  if (rulesTable.pockets.length === 0 || input.ruleset.id === 'english-billiards')
+    return caromCandidates(input, sk, cue, live, rulesTable);
 
   // Pots (from where the cue ball lies, or from good positions when it can be placed).
   const lines: { target: BallState; pocket: string }[] = [];
@@ -300,7 +308,7 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
   const mult = sk.level >= 3 ? [1, 1.5, 2.2] : [1.2, 1.8];
   for (const spot of spots) {
     const cueHere = { ...cue, pos: spot };
-    const balls = input.balls.map((b) => (b.id === 'cue' ? cueHere : b));
+    const balls = input.balls.map((b) => (b.id === cueOf(input) ? cueHere : b));
     for (const t of targetBalls)
       for (const p of rulesTable.pockets) {
         const l = potLine(rulesTable, balls, cueHere, t, p);
@@ -310,7 +318,7 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
         for (const m of mult)
           for (const tip of tips) {
             cands.push({
-              shot: { ball: 'cue', aim, elevation: 0, tip, speed: clamp(base * m, MIN_CUE, MAX_CUE) },
+              shot: { ball: cueOf(input), aim, elevation: 0, tip, speed: clamp(base * m, MIN_CUE, MAX_CUE) },
               decl: declFor(input, t.id, p.id, false),
               ...(input.turn.ballInHand !== 'none' ? { place: spot } : {}),
               label: `pot the ${ballName(t.id)} in the ${describePocket(p.id)}`,
@@ -323,7 +331,7 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
   if (sk.level >= 2) {
     for (const spot of spots.slice(0, 2)) {
       const cueHere = { ...cue, pos: spot };
-      const balls = input.balls.map((b) => (b.id === 'cue' ? cueHere : b));
+      const balls = input.balls.map((b) => (b.id === cueOf(input) ? cueHere : b));
       for (const a of targetBalls) {
         for (const b of live) {
           if (b === a || len(sub(b.pos, a.pos)) > 0.9) continue;
@@ -348,7 +356,7 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
             for (const m of [1, 1.4]) {
               cands.push({
                 shot: {
-                  ball: 'cue',
+                  ball: cueOf(input),
                   aim,
                   elevation: 0,
                   tip: { a: 0, b: 0 },
@@ -392,7 +400,7 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
           for (const speed of [1.8, 2.8]) {
             cands.push({
               shot: {
-                ball: 'cue',
+                ball: cueOf(input),
                 aim: base + (deg * Math.PI) / 180,
                 elevation: 0,
                 tip: { a: 0, b: 0 },
@@ -413,7 +421,7 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
   for (const c of contactSpots(input, rulesTable))
     for (const speed of [1.6, 2.6, 3.8])
       cands.push({
-        shot: { ball: 'cue', aim: c.aim, elevation: 0, tip: { a: 0, b: 0 }, speed },
+        shot: { ball: cueOf(input), aim: c.aim, elevation: 0, tip: { a: 0, b: 0 }, speed },
         decl: declFor(input, c.target.id, null, true),
         place: c.place,
         label: `play safe off the ${ballName(c.target.id)}`,
@@ -433,13 +441,61 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
       for (const f of fractions)
         for (const speed of speeds) {
           cands.push({
-            shot: { ball: 'cue', aim: base + f * half, elevation: 0, tip: { a: 0, b: 0 }, speed },
+            shot: { ball: cueOf(input), aim: base + f * half, elevation: 0, tip: { a: 0, b: 0 }, speed },
             decl: declFor(input, t.id, null, true),
             ...(input.turn.ballInHand !== 'none' ? { place: spot } : {}),
             label: `play safe off the ${ballName(t.id)}`,
           });
         }
     }
+  return cands;
+}
+
+function caromCandidates(
+  input: AiInput,
+  sk: SkillProfile,
+  cue: BallState,
+  live: BallState[],
+  rulesTable: TableSpec,
+): Candidate[] {
+  const cands: Candidate[] = [];
+  const id = cueOf(input);
+  let spots: Vec2[] = [cue.pos];
+  if (input.turn.ballInHand !== 'none') {
+    const d = theD(rulesTable);
+    spots = d
+      ? [-0.8, -0.4, 0, 0.4, 0.8].map((f) => ({ x: d.centre.x - 0.01, y: f * d.radius }))
+      : [{ x: -rulesTable.playfield.length / 4, y: 0 }];
+    spots = spots.filter((p) => canPlaceCueBall(rulesTable, input.balls, input.turn.ballInHand, p, id));
+  }
+  const fractions =
+    sk.level >= 3 ? [-0.75, -0.5, -0.3, -0.12, 0, 0.12, 0.3, 0.5, 0.75] : [-0.6, -0.3, 0, 0.3, 0.6];
+  const tips =
+    sk.level >= 3
+      ? [
+          { a: 0, b: 0 },
+          { a: 0, b: 0.35 },
+          { a: 0, b: -0.35 },
+        ]
+      : [{ a: 0, b: 0 }];
+  const speeds = [1.6, 2.6, 4];
+  for (const place of spots) {
+    for (const t of live) {
+      const dist = len(sub(t.pos, place));
+      if (dist < 1e-6) continue;
+      const half = Math.asin(Math.min(1, (cue.radius + t.radius) / dist));
+      const base = Math.atan2(t.pos.y - place.y, t.pos.x - place.x);
+      for (const f of fractions)
+        for (const tip of tips)
+          for (const speed of speeds)
+            cands.push({
+              shot: { ball: id, aim: base + f * half, elevation: 0, tip, speed },
+              decl: {},
+              ...(input.turn.ballInHand !== 'none' ? { place } : {}),
+              label: `play off the ${t.id}`,
+            });
+    }
+  }
   return cands;
 }
 
@@ -462,12 +518,14 @@ function score(
   const rulesTable = input.ruleset.table;
   const myTurn = j.turn.player === me && !j.turn.decision;
   if (myTurn) {
-    const ease = j.turn.ballInHand !== 'none' ? 0.7 : bestPotEase(rulesTable, j.balls, j.turn.targets);
+    const ease =
+      j.turn.ballInHand !== 'none' ? 0.7 : bestPotEase(rulesTable, j.balls, j.turn.targets, j.turn.cueBall);
     // Keeping the table dominates; position is worth less than the pot itself, so a stronger player
     // still prefers a pot it will make over a riskier one with better position.
     s += 1000 + 300 * sk.position * ease + 30 * j.potted.length;
   } else {
-    const ease = j.turn.ballInHand !== 'none' ? 0.75 : bestPotEase(rulesTable, j.balls, j.turn.targets);
+    const ease =
+      j.turn.ballInHand !== 'none' ? 0.75 : bestPotEase(rulesTable, j.balls, j.turn.targets, j.turn.cueBall);
     const attack = Math.max(-1, Math.min(1, input.attack ?? 0));
     s -= (sk.safeties ? 300 : 120) * ease * (1 - 0.6 * attack);
   }
@@ -478,7 +536,7 @@ function evaluate(input: AiInput, c: Candidate, sk: SkillProfile, rng: Rng | nul
   const simTable = input.simTable ?? input.ruleset.table;
   const before = input.balls.map(cloneBall);
   if (c.place) {
-    const cue = before.find((b) => b.id === 'cue')!;
+    const cue = before.find((b) => b.id === cueOf(input))!;
     cue.pos = { ...c.place };
     cue.state = 'stationary';
     delete cue.pocket;
@@ -599,10 +657,10 @@ export function chooseShot(input: AiInput): AiShot {
     if (alternatives.length) pick = alternatives[rng.int(alternatives.length)];
   }
   if (!pick) {
-    const cue = input.balls.find((b) => b.id === 'cue')!;
+    const cue = input.balls.find((b) => b.id === cueOf(input))!;
     return {
       shot: {
-        ball: 'cue',
+        ball: cueOf(input),
         aim: Math.atan2(-cue.pos.y, -cue.pos.x),
         elevation: 0,
         tip: { a: 0, b: 0 },
@@ -633,11 +691,16 @@ export function chooseDecision(input: AiInput): string {
   const d = input.turn.decision;
   if (!d) return '';
   const ids = d.choices.map((c) => c.id);
-  const ease = bestPotEase(input.ruleset.table, input.balls, input.turn.targets);
+  const ease = bestPotEase(input.ruleset.table, input.balls, input.turn.targets, cueOf(input));
   if (ids.includes('red') && ids.includes('yellow')) {
     // Choose the colour with fewer balls left to pot.
-    const left = (p: string) =>
-      input.balls.filter((b) => b.state !== 'pocketed' && b.id.startsWith(p)).length;
+    // ('red' is also the solids 1–7 and 'yellow' the stripes 9–15 in Chinese 8-ball.)
+    const inGroup = (id: string, g: 'r' | 'y') => {
+      const n = Number(id);
+      return id.startsWith(g) || (g === 'r' ? n >= 1 && n <= 7 : n >= 9 && n <= 15);
+    };
+    const left = (g: 'r' | 'y') =>
+      input.balls.filter((b) => b.state !== 'pocketed' && inGroup(b.id, g)).length;
     return left('r') <= left('y') ? 'red' : 'yellow';
   }
   if (ids.includes('break')) return 'break';

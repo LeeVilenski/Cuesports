@@ -1,5 +1,19 @@
 import type { BallState, ShotInput, ShotResult } from '@cuesports/physics';
 import {
+  BALKLINE_47_2,
+  BALKLINE_71_2,
+  THREE_CUSHION,
+  RUSSIAN_PYRAMID,
+  CHINESE_8BALL,
+  STRAIGHT_POOL,
+  ONE_POCKET,
+  type OnePocketState,
+  type StraightState,
+  type PyramidState,
+  type CaromState,
+  ENGLISH_BILLIARDS,
+  type BilliardsOptions,
+  type BilliardsState,
   ENGLISH_POOL,
   ENGLISH_PRESETS,
   NINE_BALL,
@@ -19,7 +33,33 @@ import { drillRule, lineupBalls, type DrillId } from './drills';
 import type { ClothSpeed } from './games';
 import { recordId, shotRecord, specsOf, type MatchRecord, type RackRecord } from './record';
 
-export type MatchGame = 'nine-ball' | 'ten-ball' | 'snooker' | 'english';
+export type MatchGame =
+  | 'nine-ball'
+  | 'ten-ball'
+  | 'snooker'
+  | 'english'
+  | 'billiards'
+  | 'three-cushion'
+  | 'balkline-47-2'
+  | 'balkline-71-2'
+  | 'pyramid'
+  | 'chinese-8ball'
+  | 'straight-pool'
+  | 'one-pocket';
+
+/** Games scored in points rather than racks won (frame or game to a target). */
+export const POINTS_GAMES = new Set<MatchGame>([
+  'snooker',
+  'billiards',
+  'three-cushion',
+  'balkline-47-2',
+  'balkline-71-2',
+  'pyramid',
+  'straight-pool',
+  'one-pocket',
+]);
+/** Games without pockets. */
+export const CAROM_GAMES = new Set<MatchGame>(['three-cushion', 'balkline-47-2', 'balkline-71-2']);
 export type EnglishPreset = keyof typeof ENGLISH_PRESETS;
 
 export interface MatchConfig {
@@ -31,6 +71,10 @@ export interface MatchConfig {
   breaks: 'winner' | 'alternate';
   rules: RotationOptions;
   snooker: SnookerOptions;
+  /** English Billiards: points to win a game. Older saves lack it. */
+  billiards?: BilliardsOptions | undefined;
+  /** Carom games: points to win a game (0 = the game's own default). */
+  caromTarget?: number | undefined;
   /** English pool rulebook preset. */
   english: EnglishPreset;
   /** Skill level (1–5) of the computer playing as player 2, or null for a second human. */
@@ -60,7 +104,8 @@ export const DEFAULT_MATCH: MatchConfig = {
 export interface FramePoints {
   points: [number, number];
   break: number;
-  remaining: number;
+  /** Snooker only: points left on the table. */
+  remaining: number | null;
 }
 
 // The match only needs the common ruleset interface; each game's state stays inside its ruleset.
@@ -119,6 +164,26 @@ export class Match {
       'ten-ball': [TEN_BALL as AnyRuleset, config.rules],
       snooker: [SNOOKER as AnyRuleset, config.snooker],
       english: [ENGLISH_POOL as AnyRuleset, ENGLISH_PRESETS[config.english].options],
+      billiards: [ENGLISH_BILLIARDS as AnyRuleset, config.billiards ?? ENGLISH_BILLIARDS.defaults],
+      'three-cushion': [
+        THREE_CUSHION as AnyRuleset,
+        { target: config.caromTarget || THREE_CUSHION.defaults.target },
+      ],
+      'balkline-47-2': [
+        BALKLINE_47_2 as AnyRuleset,
+        { target: config.caromTarget || BALKLINE_47_2.defaults.target },
+      ],
+      pyramid: [RUSSIAN_PYRAMID as AnyRuleset, RUSSIAN_PYRAMID.defaults],
+      'chinese-8ball': [CHINESE_8BALL as AnyRuleset, CHINESE_8BALL.defaults],
+      'one-pocket': [ONE_POCKET as AnyRuleset, ONE_POCKET.defaults],
+      'straight-pool': [
+        STRAIGHT_POOL as AnyRuleset,
+        { target: config.caromTarget || STRAIGHT_POOL.defaults.target },
+      ],
+      'balkline-71-2': [
+        BALKLINE_71_2 as AnyRuleset,
+        { target: config.caromTarget || BALKLINE_71_2.defaults.target },
+      ],
     };
     [this.ruleset, this.options] = games[config.game];
     this.startRack();
@@ -142,13 +207,33 @@ export class Match {
     return this.config.game === 'snooker';
   }
 
-  /** "rack" or "frame". */
+  /** "rack", "frame" or "game". */
   get unit(): string {
-    return this.isSnooker ? 'frame' : 'rack';
+    return this.isSnooker ? 'frame' : POINTS_GAMES.has(this.config.game) ? 'game' : 'rack';
   }
 
   /** Snooker frame points, break and points remaining, or null for pool. */
   get framePoints(): FramePoints | null {
+    if (this.config.game === 'one-pocket') {
+      const op = this.state as OnePocketState;
+      return { points: op.scores, break: op.break, remaining: null };
+    }
+    if (this.config.game === 'straight-pool') {
+      const sp = this.state as StraightState;
+      return { points: sp.scores, break: sp.break, remaining: null };
+    }
+    if (this.config.game === 'pyramid') {
+      const py = this.state as PyramidState;
+      return { points: py.scores, break: py.break, remaining: null };
+    }
+    if (CAROM_GAMES.has(this.config.game)) {
+      const c = this.state as CaromState;
+      return { points: c.scores, break: c.break, remaining: null };
+    }
+    if (this.config.game === 'billiards') {
+      const b = this.state as BilliardsState;
+      return { points: b.scores, break: b.break, remaining: null };
+    }
     if (!this.isSnooker) return null;
     const s = this.state as SnookerState;
     return { points: s.scores, break: s.break, remaining: pointsRemaining(s, this.balls) };
@@ -176,7 +261,11 @@ export class Match {
         : `Rack ${this.rack}: ${this.config.players[0]} to break.`
       : this.isSnooker
         ? `Frame ${this.rack}: ${this.config.players[this.breaker]} to break off.`
-        : `Rack ${this.rack}: ${this.config.players[this.breaker]} to break.`;
+        : POINTS_GAMES.has(this.config.game) && this.config.game !== 'billiards'
+          ? `Game ${this.rack}: ${this.config.players[this.breaker]} to open on the red.`
+          : this.config.game === 'billiards'
+            ? `Game ${this.rack}: ${this.config.players[this.breaker]} to play first, from the D.`
+            : `Rack ${this.rack}: ${this.config.players[this.breaker]} to break.`;
     this.message = what;
     this.notable = true;
   }

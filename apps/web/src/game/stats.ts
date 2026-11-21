@@ -1,5 +1,5 @@
 import { GAMES } from './games';
-import type { MatchConfig } from './match';
+import { POINTS_GAMES, type MatchConfig } from './match';
 import { ballAt, type MatchRecord, type RackRecord, type ShotRecord } from './record';
 
 /**
@@ -115,9 +115,10 @@ export function addMatch(stats: PlayerStats, m: MatchRecord, seat: number): void
       if (v[0]!.player !== seat) return;
       const points = v.reduce((n, s) => n + s.scored, 0);
       stats.highestBreak = Math.max(stats.highestBreak, points);
-      if (m.config.game === 'snooker' && points >= 100) stats.centuries++;
+      const pointsGame = POINTS_GAMES.has(m.config.game);
+      if (pointsGame && points >= 100) stats.centuries++;
       const won = rack.winner === seat && i === vs.length - 1;
-      if (!won || m.config.game === 'snooker') return;
+      if (!won || pointsGame) return;
       if (i === 0 && v[0]!.isBreak) stats.breakAndRuns++;
       else if (i > 0) stats.runOuts++;
     });

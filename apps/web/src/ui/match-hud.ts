@@ -58,7 +58,7 @@ export class MatchHud {
       raceTo: number;
       turn: Turn;
       /** Snooker: points in the frame, current break, points remaining. */
-      frame?: { points: [number, number]; break: number; remaining: number } | null;
+      frame?: { points: [number, number]; break: number; remaining: number | null } | null;
     } | null,
   ): void {
     this.board.hidden = info === null;
@@ -92,13 +92,24 @@ export class MatchHud {
       ? h(
           'div',
           { className: 'mid' },
-          h('small', {}, `best of ${raceTo * 2 - 1}`),
+          h('small', {}, frame.remaining === null ? `race to ${raceTo}` : `best of ${raceTo * 2 - 1}`),
           h(
             'small',
             {},
-            frame.break > 0 ? `break ${frame.break}` : turn.freeBall ? 'free ball' : `on: ${onLabel(turn)}`,
+            frame.break > 0
+              ? `break ${frame.break}`
+              : frame.remaining === null
+                ? ((
+                    { spot: 'spot white', yellow: 'yellow', cue: 'white', pcue: 'first to 8' } as Record<
+                      string,
+                      string
+                    >
+                  )[turn.cueBall ?? ''] ?? (turn.mustCall ? 'call your shots' : ''))
+                : turn.freeBall
+                  ? 'free ball'
+                  : `on: ${onLabel(turn)}`,
           ),
-          h('small', {}, `${frame.remaining} left`),
+          frame.remaining === null ? '' : h('small', {}, `${frame.remaining} left`),
         )
       : h(
           'div',

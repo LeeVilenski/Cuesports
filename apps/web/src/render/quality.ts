@@ -32,8 +32,10 @@ export interface DeviceHints {
 }
 
 /** Known weak GPUs (old Mali/Adreno/PowerVR, software renderers). */
-const WEAK = /swiftshader|llvmpipe|software|mali-[4t]|mali-g(31|51|52|57)|adreno \(tm\) [1-5]\d\d|powervr|intel.*hd graphics [2-5]/i;
-const STRONG = /apple (m\d|gpu)|nvidia|geforce|radeon (rx|pro)|adreno \(tm\) (7\d\d|8\d\d)|mali-g7\d\d|immortalis/i;
+const WEAK =
+  /swiftshader|llvmpipe|software|mali-[4t]|mali-g(31|51|52|57)|adreno \(tm\) [1-5]\d\d|powervr|intel.*hd graphics [2-5]/i;
+const STRONG =
+  /apple (m\d|gpu)|nvidia|geforce|radeon (rx|pro)|adreno \(tm\) (7\d\d|8\d\d)|mali-g7\d\d|immortalis/i;
 
 export function detectTier(d: DeviceHints): Tier {
   if (d.gpu && WEAK.test(d.gpu)) return 'low';

@@ -130,7 +130,15 @@ const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: 
   { id: 'nine-ball', label: '9-Ball', ball: '#f2c14e', sub: '9' },
   { id: 'ten-ball', label: '10-Ball', ball: '#2f6fdc', sub: '10' },
   { id: 'english', label: 'UK 8-Ball', ball: '#d8342c', sub: '8' },
+  { id: 'chinese-8ball', label: 'Chinese 8-Ball', ball: '#1b1b1b', sub: '8' },
+  { id: 'straight-pool', label: 'Straight Pool', ball: '#e0702a', sub: '14' },
+  { id: 'one-pocket', label: 'One-Pocket', ball: '#2f6fdc', sub: '1' },
   { id: 'snooker', label: 'Snooker', ball: '#c4202b', sub: '' },
+  { id: 'billiards', label: 'Billiards', ball: '#f4efe0', sub: '' },
+  { id: 'three-cushion', label: '3-Cushion', ball: '#f2c419', sub: '' },
+  { id: 'balkline-47-2', label: 'Balkline 47/2', ball: '#c4161c', sub: '' },
+  { id: 'balkline-71-2', label: 'Balkline 71/2', ball: '#c4161c', sub: '' },
+  { id: 'pyramid', label: 'Pyramid', ball: '#f3ead2', sub: '' },
 ];
 
 const LEVELS = ['Beginner', 'Amateur', 'Club', 'Semi-pro', 'Pro'];
@@ -179,10 +187,9 @@ export class Menu {
   private statsPlayer: string | null = null;
   private statsGame: MatchConfig['game'] | 'all' = 'all';
   private quickSub = h('small', {});
-  private graphicsNote = Object.assign(
-    h('p', { className: 'fine-print' }, 'Restart the game to apply.'),
-    { hidden: true },
-  );
+  private graphicsNote = Object.assign(h('p', { className: 'fine-print' }, 'Restart the game to apply.'), {
+    hidden: true,
+  });
 
   constructor(
     private cb: MenuCallbacks,
@@ -508,6 +515,36 @@ export class Menu {
       (v) => (c.english = v as MatchConfig['english']),
     );
     const englishRules = this.field('Rulebook', preset.el);
+    const target = segmented(
+      'Points to win',
+      [
+        { value: '50', label: '50' },
+        { value: '100', label: '100' },
+        { value: '200', label: '200' },
+        { value: '300', label: '300' },
+      ],
+      String(c.billiards?.target ?? 100),
+      (v) => (c.billiards = { target: Number(v) }),
+    );
+    const billiardsRules = this.field('Points to win a game', target.el);
+    const caromTarget = segmented(
+      'Points to win',
+      [
+        { value: '0', label: 'Standard' },
+        { value: '10', label: '10' },
+        { value: '15', label: '15' },
+        { value: '25', label: '25' },
+        { value: '50', label: '50' },
+      ],
+      String(c.caromTarget ?? 0),
+      (v) => (c.caromTarget = Number(v)),
+    );
+    const caromRules = h(
+      'div',
+      {},
+      this.field('Points to win a game', caromTarget.el),
+      h('p', { className: 'fine-print' }, 'Standard: 25 for 3-Cushion, 100 for Balkline and straight pool.'),
+    );
     const rules = h(
       'details',
       { className: 'rules' },
@@ -515,16 +552,29 @@ export class Menu {
       poolRules,
       snookerRules,
       englishRules,
+      billiardsRules,
+      caromRules,
     );
 
     const setGame = (id: MatchConfig['game']) => {
       c.game = id;
       gameButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(MATCH_GAMES[i]!.id === id)));
       const snooker = id === 'snooker';
-      raceLabel.textContent = snooker ? 'Frames to win' : 'Race to';
-      poolRules.hidden = snooker || id === 'english';
+      raceLabel.textContent = snooker ? 'Frames to win' : id === 'billiards' ? 'Games to win' : 'Race to';
+      const carom = id === 'three-cushion' || id.startsWith('balkline') || id === 'straight-pool';
+      if (carom) raceLabel.textContent = 'Games to win';
+      poolRules.hidden =
+        snooker ||
+        id === 'english' ||
+        id === 'chinese-8ball' ||
+        id === 'billiards' ||
+        carom ||
+        id === 'pyramid';
+      if (id === 'pyramid' || id === 'one-pocket') raceLabel.textContent = 'Games to win';
+      caromRules.hidden = !carom;
       snookerRules.hidden = !snooker;
       englishRules.hidden = id !== 'english';
+      billiardsRules.hidden = id !== 'billiards';
     };
     setGame(c.game);
     showOpponent();
@@ -563,6 +613,14 @@ export class Menu {
       'ten-ball': ['#2f6fdc', '10'],
       english: ['#d8342c', '8'],
       snooker: ['#c4202b', ''],
+      billiards: ['#f4efe0', ''],
+      'three-cushion': ['#f2c419', ''],
+      'balkline-47-2': ['#c4161c', ''],
+      'balkline-71-2': ['#c4161c', ''],
+      pyramid: ['#f3ead2', ''],
+      'chinese-8ball': ['#1b1b1b', '8'],
+      'straight-pool': ['#e0702a', '14'],
+      'one-pocket': ['#2f6fdc', '1'],
       practice: ['#f6f3ea', ''],
     };
     const cloth = segmented<ClothSpeedId>(

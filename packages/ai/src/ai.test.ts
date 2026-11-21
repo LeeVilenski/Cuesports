@@ -339,3 +339,32 @@ describe('skill levels', () => {
     expect(skill(9)).toBe(skill(5));
   });
 });
+
+describe('AI at English Billiards', () => {
+  it('scores from the opening position with its own ball in hand', async () => {
+    const { ENGLISH_BILLIARDS } = await import('@cuesports/rules');
+    const { cloneBall } = await import('@cuesports/physics');
+    const R = ENGLISH_BILLIARDS;
+    const f = R.newFrame(R.defaults, new Rng(1), 0);
+    const ai = chooseShot({
+      ruleset: R as never,
+      options: R.defaults,
+      state: f.state,
+      turn: f.turn,
+      balls: f.balls,
+      me: 0,
+      level: 4,
+      seed: 3,
+      perfect: true,
+      budgetMs: 1e9,
+      now: () => 0,
+    });
+    expect(ai.place).toBeDefined();
+    const before = f.balls.map(cloneBall);
+    const cue = before.find((b) => b.id === 'cue')!;
+    Object.assign(cue, { pos: ai.place, state: 'stationary' });
+    const result = simulate(R.table, before, ai.shot, { sampleRate: 0, maxTime: 40 });
+    const j = R.judge(f.state, ai.decl, before, result, R.defaults);
+    expect(j.points![0]).toBeGreaterThan(0);
+  });
+});

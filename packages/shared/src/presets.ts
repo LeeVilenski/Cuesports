@@ -249,4 +249,166 @@ export const AMERICAN_POOL_9FT: TableSpec = {
   },
 };
 
-export const TABLE_PRESETS: readonly TableSpec[] = [SNOOKER_12FT, ENGLISH_POOL_7FT, AMERICAN_POOL_9FT];
+// --- Carom ------------------------------------------------------------------------------------
+// Match table (UMB): 2840 x 1420 mm playing area, 61.5 mm balls of 205–220 g, no pockets, heated
+// slate and a fast cloth, with livelier, higher cushions than pool.
+
+const CAROM_L = 2.84;
+const CAROM_W = 1.42;
+
+export const CAROM_10FT: TableSpec = {
+  id: 'carom-10ft',
+  name: 'Carom 10 ft',
+  playfield: { length: CAROM_L, width: CAROM_W },
+  trim: { cushionWidth: 0.05, railWidth: 0.11, cushionTopAboveNose: 0.006, railTopAboveNose: 0.012 },
+  cushion: {
+    noseHeight: 0.037,
+    restitution: 0.9,
+    restitutionSlope: 0.03,
+    minRestitution: 0.7,
+    hugSpeed: 0.12,
+    friction: 0.22,
+    profile: 'carom',
+  },
+  cloth: { slideFriction: 0.2, rollFriction: 0.0095, spinFriction: 0.006 },
+  pockets: [],
+  markings: [
+    { type: 'spot', id: 'head', position: { x: -CAROM_L / 4, y: 0 } },
+    { type: 'spot', id: 'centre', position: { x: 0, y: 0 } },
+    { type: 'spot', id: 'foot', position: { x: CAROM_L / 4, y: 0 } },
+    // The opening positions: the striker's ball 18.25 cm either side of the head spot.
+    { type: 'spot', id: 'start-left', position: { x: -CAROM_L / 4, y: 0.1825 } },
+    { type: 'spot', id: 'start-right', position: { x: -CAROM_L / 4, y: -0.1825 } },
+  ],
+  balls: {
+    object: { radius: 0.03075, mass: 0.21 },
+    cue: { radius: 0.03075, mass: 0.21 },
+    restitution: 0.93,
+    friction: STANDARD_BALL_FRICTION,
+  },
+};
+
+/** Balkline: the carom table with lines `d` from each cushion, making nine areas. */
+export function balklineTable(d: number, id: string): TableSpec {
+  const hl = CAROM_L / 2;
+  const hw = CAROM_W / 2;
+  return {
+    ...CAROM_10FT,
+    id,
+    name: `Balkline ${id}`,
+    markings: [
+      ...CAROM_10FT.markings,
+      { type: 'line', id: 'balk-x1', a: { x: -hl + d, y: -hw }, b: { x: -hl + d, y: hw } },
+      { type: 'line', id: 'balk-x2', a: { x: hl - d, y: -hw }, b: { x: hl - d, y: hw } },
+      { type: 'line', id: 'balk-y1', a: { x: -hl, y: -hw + d }, b: { x: hl, y: -hw + d } },
+      { type: 'line', id: 'balk-y2', a: { x: -hl, y: hw - d }, b: { x: hl, y: hw - d } },
+    ],
+  };
+}
+
+export const BALKLINE_47: TableSpec = balklineTable(0.47, 'balkline-47');
+export const BALKLINE_71: TableSpec = balklineTable(0.71, 'balkline-71');
+
+// --- Russian Pyramid -----------------------------------------------------------------------------
+// 12 ft (3550 x 1775 mm playing area), 68 mm balls of about 280 g, and pockets only a few mm wider
+// than the ball: corners about 73 mm, middles about 83 mm at the mouth.
+
+const RP_L = 3.55;
+const RP_W = 1.775;
+
+export const PYRAMID_12FT: TableSpec = {
+  id: 'pyramid-12ft',
+  name: 'Russian Pyramid 12 ft',
+  playfield: { length: RP_L, width: RP_W },
+  trim: { cushionWidth: 0.055, railWidth: 0.11, cushionTopAboveNose: 0.008, railTopAboveNose: 0.014 },
+  cushion: {
+    noseHeight: 0.0435,
+    restitution: 0.82,
+    restitutionSlope: 0.04,
+    minRestitution: 0.6,
+    hugSpeed: 0.12,
+    friction: 0.2,
+    profile: 'snooker',
+  },
+  cloth: { slideFriction: 0.18, rollFriction: 0.0125, spinFriction: 0.0075 },
+  pockets: sixPockets(
+    RP_L,
+    RP_W,
+    {
+      mouthWidth: 0.073,
+      jawAngle: 138,
+      jawRadius: 0.012,
+      shelfDepth: 0.02,
+      dropSag: 0.01,
+      fallRadius: 0.05,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
+    },
+    {
+      mouthWidth: 0.083,
+      jawAngle: 95,
+      jawRadius: 0.012,
+      shelfDepth: 0.015,
+      dropSag: 0.008,
+      fallRadius: 0.055,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
+    },
+  ),
+  markings: [
+    { type: 'line', id: 'head-string', a: { x: -RP_L / 4, y: -RP_W / 2 }, b: { x: -RP_L / 4, y: RP_W / 2 } },
+    { type: 'spot', id: 'head', position: { x: -RP_L / 4, y: 0 } },
+    { type: 'spot', id: 'centre', position: { x: 0, y: 0 } },
+    { type: 'spot', id: 'foot', position: { x: RP_L / 4, y: 0 } },
+  ],
+  balls: {
+    object: { radius: 0.034, mass: 0.28 },
+    cue: { radius: 0.034, mass: 0.28 },
+    restitution: 0.94,
+    friction: STANDARD_BALL_FRICTION,
+  },
+};
+
+// --- Chinese 8-ball (heyball) ---------------------------------------------------------------------
+// A 9 ft table (2540 x 1270 mm) with 57.15 mm balls but tight, rounded pockets cut like a snooker
+// table's: about 85 mm at the corners and 90 mm in the middle.
+
+export const CHINESE_8BALL_9FT: TableSpec = {
+  ...AMERICAN_POOL_9FT,
+  id: 'chinese-8ball-9ft',
+  name: 'Chinese 8-ball 9 ft',
+  cushion: { ...AMERICAN_POOL_9FT.cushion, profile: 'snooker' },
+  pockets: sixPockets(
+    AP_L,
+    AP_W,
+    {
+      mouthWidth: 0.085,
+      jawAngle: 135,
+      jawRadius: 0.016,
+      shelfDepth: 0.02,
+      dropSag: 0.01,
+      fallRadius: 0.05,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
+    },
+    {
+      mouthWidth: 0.09,
+      jawAngle: 95,
+      jawRadius: 0.016,
+      shelfDepth: 0.015,
+      dropSag: 0.008,
+      fallRadius: 0.055,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
+    },
+  ),
+};
+
+export const TABLE_PRESETS: readonly TableSpec[] = [
+  SNOOKER_12FT,
+  ENGLISH_POOL_7FT,
+  AMERICAN_POOL_9FT,
+  CAROM_10FT,
+  PYRAMID_12FT,
+  CHINESE_8BALL_9FT,
+];
