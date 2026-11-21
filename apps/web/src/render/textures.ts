@@ -34,6 +34,9 @@ export interface BallArt {
 
 export function ballArt(id: string): BallArt {
   if (id === 'cue') return { base: '#f7f3e8', stripe: null, number: null, spots: true };
+  // Russian Pyramid: ivory balls with numbers, and a coloured cue ball.
+  if (id === 'pcue') return { base: '#c9402c', stripe: null, number: null, spots: false };
+  if (/^p\d+$/.test(id)) return { base: '#f3ead2', stripe: null, number: id.slice(1), spots: false };
   // English Billiards' second white: two black spots.
   if (id === 'spot')
     return { base: '#f4efe0', stripe: null, number: null, spots: true, spotColour: '#111111' };

@@ -113,7 +113,14 @@ import {
 import { Coach } from './ui/coach';
 import { resolveTier, TIERS, type TierChoice } from './render/quality';
 import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
-import { canPlaceCueBall, numberedOnTable, pocketName, theD, type ShotDeclaration } from '@cuesports/rules';
+import {
+  canPlaceCueBall,
+  headStringX,
+  numberedOnTable,
+  pocketName,
+  theD,
+  type ShotDeclaration,
+} from '@cuesports/rules';
 
 // ---------------------------------------------------------------------------------------------
 // Renderer and scene
@@ -433,7 +440,7 @@ function syncTurn(): void {
   const inHand = cueBall();
   if (placing && inHand?.state === 'pocketed') {
     const d = theD(match.table);
-    if (d) cueStart = { x: d.centre.x - 0.02, y: 0 };
+    cueStart = d ? { x: d.centre.x - 0.02, y: 0 } : { x: headStringX(match.table) - 0.1, y: 0 };
     respawnCue(inHand);
     ballsView.showState(balls);
     aimAtFirstBall();
@@ -1034,6 +1041,8 @@ app.append(menu.root);
 function clothFor(t: TableSpec): string {
   // Carom tables: the classic tournament blue.
   if (t.pockets.length === 0) return '#2b5fa6';
+  // Russian Pyramid: green.
+  if (t.id.startsWith('pyramid')) return '#1f6a3c';
   return t.id.startsWith('snooker')
     ? profile.cloth.snooker
     : t.id.startsWith('english')

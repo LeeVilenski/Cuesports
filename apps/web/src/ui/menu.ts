@@ -135,6 +135,7 @@ const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: 
   { id: 'three-cushion', label: '3-Cushion', ball: '#f2c419', sub: '' },
   { id: 'balkline-47-2', label: 'Balkline 47/2', ball: '#c4161c', sub: '' },
   { id: 'balkline-71-2', label: 'Balkline 71/2', ball: '#c4161c', sub: '' },
+  { id: 'pyramid', label: 'Pyramid', ball: '#f3ead2', sub: '' },
 ];
 
 const LEVELS = ['Beginner', 'Amateur', 'Club', 'Semi-pro', 'Pro'];
@@ -559,7 +560,8 @@ export class Menu {
       raceLabel.textContent = snooker ? 'Frames to win' : id === 'billiards' ? 'Games to win' : 'Race to';
       const carom = id === 'three-cushion' || id.startsWith('balkline');
       if (carom) raceLabel.textContent = 'Games to win';
-      poolRules.hidden = snooker || id === 'english' || id === 'billiards' || carom;
+      poolRules.hidden = snooker || id === 'english' || id === 'billiards' || carom || id === 'pyramid';
+      if (id === 'pyramid') raceLabel.textContent = 'Games to win';
       caromRules.hidden = !carom;
       snookerRules.hidden = !snooker;
       englishRules.hidden = id !== 'english';
@@ -606,6 +608,7 @@ export class Menu {
       'three-cushion': ['#f2c419', ''],
       'balkline-47-2': ['#c4161c', ''],
       'balkline-71-2': ['#c4161c', ''],
+      pyramid: ['#f3ead2', ''],
       practice: ['#f6f3ea', ''],
     };
     const cloth = segmented<ClothSpeedId>(

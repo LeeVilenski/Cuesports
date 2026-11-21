@@ -5,6 +5,7 @@ import {
   BALKLINE_71,
   CAROM_10FT,
   ENGLISH_POOL_7FT,
+  PYRAMID_12FT,
   SNOOKER_12FT,
   type TableSpec,
 } from '@cuesports/shared';
@@ -29,6 +30,7 @@ export const GAMES: GameDef[] = [
   { id: 'three-cushion', label: '3-Cushion', table: CAROM_10FT, layout: 'carom', maxSpeed: 9 },
   { id: 'balkline-47-2', label: 'Balkline 47/2', table: BALKLINE_47, layout: 'carom', maxSpeed: 9 },
   { id: 'balkline-71-2', label: 'Balkline 71/2', table: BALKLINE_71, layout: 'carom', maxSpeed: 9 },
+  { id: 'pyramid', label: 'Russian Pyramid', table: PYRAMID_12FT, layout: 'pyramid', maxSpeed: 9 },
   {
     id: 'practice',
     label: 'Practice: two balls',

@@ -104,6 +104,15 @@ export function layout(table: TableSpec, id: LayoutId, seed = 1): BallState[] {
         cueBall({ x: brown.x - 0.02, y: -d / 2 }),
       ];
     }
+    case 'pyramid': {
+      // Russian Pyramid: fifteen white balls, apex on the foot spot, and the coloured cue ball
+      // ('pcue') behind the head string.
+      const ids = Array.from({ length: 15 }, (_, i) => `p${i + 1}`);
+      const balls = rackRows(ids, obj, foot, [1, 2, 3, 4, 5], { rng });
+      const head = spot(table, 'head', { x: -hl / 2, y: 0 });
+      balls.push(makeBall('pcue', table.balls.cue, { x: head.x - 0.05, y: 0 }));
+      return balls;
+    }
     case 'carom': {
       // Carom opening: red on the foot spot, yellow on the head spot, white beside it.
       const head = spot(table, 'head', { x: -hl / 2, y: 0 });

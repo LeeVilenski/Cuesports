@@ -287,7 +287,8 @@ function generate(input: AiInput, sk: SkillProfile): Candidate[] {
 
   // Carom games (billiards): a sweep of contacts on each ball at a few paces and spins. The physics
   // and the rules then find the cannons, in-offs and pots.
-  if (input.turn.cueBall) return caromCandidates(input, sk, cue, live, rulesTable);
+  if (rulesTable.pockets.length === 0 || input.ruleset.id === 'english-billiards')
+    return caromCandidates(input, sk, cue, live, rulesTable);
 
   // Pots (from where the cue ball lies, or from good positions when it can be placed).
   const lines: { target: BallState; pocket: string }[] = [];

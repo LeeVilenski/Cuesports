@@ -3,6 +3,8 @@ import {
   BALKLINE_47_2,
   BALKLINE_71_2,
   THREE_CUSHION,
+  RUSSIAN_PYRAMID,
+  type PyramidState,
   type CaromState,
   ENGLISH_BILLIARDS,
   type BilliardsOptions,
@@ -34,7 +36,8 @@ export type MatchGame =
   | 'billiards'
   | 'three-cushion'
   | 'balkline-47-2'
-  | 'balkline-71-2';
+  | 'balkline-71-2'
+  | 'pyramid';
 
 /** Games scored in points rather than racks won (frame or game to a target). */
 export const POINTS_GAMES = new Set<MatchGame>([
@@ -43,6 +46,7 @@ export const POINTS_GAMES = new Set<MatchGame>([
   'three-cushion',
   'balkline-47-2',
   'balkline-71-2',
+  'pyramid',
 ]);
 /** Games without pockets. */
 export const CAROM_GAMES = new Set<MatchGame>(['three-cushion', 'balkline-47-2', 'balkline-71-2']);
@@ -159,6 +163,7 @@ export class Match {
         BALKLINE_47_2 as AnyRuleset,
         { target: config.caromTarget || BALKLINE_47_2.defaults.target },
       ],
+      pyramid: [RUSSIAN_PYRAMID as AnyRuleset, RUSSIAN_PYRAMID.defaults],
       'balkline-71-2': [
         BALKLINE_71_2 as AnyRuleset,
         { target: config.caromTarget || BALKLINE_71_2.defaults.target },
@@ -193,6 +198,10 @@ export class Match {
 
   /** Snooker frame points, break and points remaining, or null for pool. */
   get framePoints(): FramePoints | null {
+    if (this.config.game === 'pyramid') {
+      const py = this.state as PyramidState;
+      return { points: py.scores, break: py.break, remaining: null };
+    }
     if (CAROM_GAMES.has(this.config.game)) {
       const c = this.state as CaromState;
       return { points: c.scores, break: c.break, remaining: null };

@@ -7,3 +7,4 @@ export * from './snookered';
 export * from './english';
 export * from './billiards';
 export * from './carom';
+export * from './pyramid';

@@ -309,9 +309,70 @@ export function balklineTable(d: number, id: string): TableSpec {
 export const BALKLINE_47: TableSpec = balklineTable(0.47, 'balkline-47');
 export const BALKLINE_71: TableSpec = balklineTable(0.71, 'balkline-71');
 
+// --- Russian Pyramid -----------------------------------------------------------------------------
+// 12 ft (3550 x 1775 mm playing area), 68 mm balls of about 280 g, and pockets only a few mm wider
+// than the ball: corners about 73 mm, middles about 83 mm at the mouth.
+
+const RP_L = 3.55;
+const RP_W = 1.775;
+
+export const PYRAMID_12FT: TableSpec = {
+  id: 'pyramid-12ft',
+  name: 'Russian Pyramid 12 ft',
+  playfield: { length: RP_L, width: RP_W },
+  trim: { cushionWidth: 0.055, railWidth: 0.11, cushionTopAboveNose: 0.008, railTopAboveNose: 0.014 },
+  cushion: {
+    noseHeight: 0.0435,
+    restitution: 0.82,
+    restitutionSlope: 0.04,
+    minRestitution: 0.6,
+    hugSpeed: 0.12,
+    friction: 0.2,
+    profile: 'snooker',
+  },
+  cloth: { slideFriction: 0.18, rollFriction: 0.0125, spinFriction: 0.0075 },
+  pockets: sixPockets(
+    RP_L,
+    RP_W,
+    {
+      mouthWidth: 0.073,
+      jawAngle: 138,
+      jawRadius: 0.012,
+      shelfDepth: 0.02,
+      dropSag: 0.01,
+      fallRadius: 0.05,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
+    },
+    {
+      mouthWidth: 0.083,
+      jawAngle: 95,
+      jawRadius: 0.012,
+      shelfDepth: 0.015,
+      dropSag: 0.008,
+      fallRadius: 0.055,
+      dropFacingRestitution: null,
+      backRestitution: 0.15,
+    },
+  ),
+  markings: [
+    { type: 'line', id: 'head-string', a: { x: -RP_L / 4, y: -RP_W / 2 }, b: { x: -RP_L / 4, y: RP_W / 2 } },
+    { type: 'spot', id: 'head', position: { x: -RP_L / 4, y: 0 } },
+    { type: 'spot', id: 'centre', position: { x: 0, y: 0 } },
+    { type: 'spot', id: 'foot', position: { x: RP_L / 4, y: 0 } },
+  ],
+  balls: {
+    object: { radius: 0.034, mass: 0.28 },
+    cue: { radius: 0.034, mass: 0.28 },
+    restitution: 0.94,
+    friction: STANDARD_BALL_FRICTION,
+  },
+};
+
 export const TABLE_PRESETS: readonly TableSpec[] = [
   SNOOKER_12FT,
   ENGLISH_POOL_7FT,
   AMERICAN_POOL_9FT,
   CAROM_10FT,
+  PYRAMID_12FT,
 ];

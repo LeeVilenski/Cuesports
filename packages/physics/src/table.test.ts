@@ -324,3 +324,30 @@ describe('carom table', () => {
     expect(Math.abs(r.final[0]!.pos.x)).toBeLessThan(t.playfield.length / 2);
   });
 });
+
+describe('Russian Pyramid pockets', () => {
+  it('take a straight ball into the corner and middle, but not one a few mm off line', async () => {
+    const { PYRAMID_12FT } = await import('@cuesports/shared');
+    const t = PYRAMID_12FT;
+    const run = (id: string, offset: number) => {
+      const p = t.pockets.find((x) => x.id === id)!;
+      const perp = { x: -p.axis.y, y: p.axis.x };
+      const start = {
+        x: p.position.x - p.axis.x * 0.6 + perp.x * offset,
+        y: p.position.y - p.axis.y * 0.6 + perp.y * offset,
+      };
+      const r = simulate(
+        t,
+        [cueAt(t, start.x, start.y)],
+        shot({ aim: Math.atan2(p.axis.y, p.axis.x), speed: 1.2, tip: { a: 0, b: 0.3 } }),
+        {
+          sampleRate: 0,
+        },
+      );
+      return r.events.some((e) => e.type === 'pocket');
+    };
+    expect(run('top-right', 0)).toBe(true);
+    expect(run('top-side', 0)).toBe(true);
+    expect(run('top-right', 0.012)).toBe(false);
+  });
+});
