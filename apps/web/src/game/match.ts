@@ -7,6 +7,8 @@ import {
   CHINESE_8BALL,
   STRAIGHT_POOL,
   ONE_POCKET,
+  COWBOY_POOL,
+  type CowboyState,
   type OnePocketState,
   type StraightState,
   type PyramidState,
@@ -45,7 +47,8 @@ export type MatchGame =
   | 'pyramid'
   | 'chinese-8ball'
   | 'straight-pool'
-  | 'one-pocket';
+  | 'one-pocket'
+  | 'cowboy';
 
 /** Games scored in points rather than racks won (frame or game to a target). */
 export const POINTS_GAMES = new Set<MatchGame>([
@@ -57,6 +60,7 @@ export const POINTS_GAMES = new Set<MatchGame>([
   'pyramid',
   'straight-pool',
   'one-pocket',
+  'cowboy',
 ]);
 /** Games without pockets. */
 export const CAROM_GAMES = new Set<MatchGame>(['three-cushion', 'balkline-47-2', 'balkline-71-2']);
@@ -176,6 +180,7 @@ export class Match {
       pyramid: [RUSSIAN_PYRAMID as AnyRuleset, RUSSIAN_PYRAMID.defaults],
       'chinese-8ball': [CHINESE_8BALL as AnyRuleset, CHINESE_8BALL.defaults],
       'one-pocket': [ONE_POCKET as AnyRuleset, ONE_POCKET.defaults],
+      cowboy: [COWBOY_POOL as AnyRuleset, COWBOY_POOL.defaults],
       'straight-pool': [
         STRAIGHT_POOL as AnyRuleset,
         { target: config.caromTarget || STRAIGHT_POOL.defaults.target },
@@ -214,6 +219,10 @@ export class Match {
 
   /** Snooker frame points, break and points remaining, or null for pool. */
   get framePoints(): FramePoints | null {
+    if (this.config.game === 'cowboy') {
+      const cb = this.state as CowboyState;
+      return { points: cb.scores, break: cb.inning, remaining: null };
+    }
     if (this.config.game === 'one-pocket') {
       const op = this.state as OnePocketState;
       return { points: op.scores, break: op.break, remaining: null };

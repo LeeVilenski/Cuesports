@@ -96,6 +96,6 @@ export function withClothSpeed(table: TableSpec, speed: ClothSpeed): TableSpec {
 export type VisitWord = 'break' | 'run';
 
 /** Games played under American terms. New American games (straight pool, one-pocket) go here. */
-const AMERICAN = new Set(['nine-ball', 'ten-ball', 'eight-ball', 'straight-pool', 'one-pocket']);
+const AMERICAN = new Set(['nine-ball', 'ten-ball', 'eight-ball', 'straight-pool', 'one-pocket', 'cowboy']);
 
 export const visitWord = (game: string): VisitWord => (AMERICAN.has(game) ? 'run' : 'break');

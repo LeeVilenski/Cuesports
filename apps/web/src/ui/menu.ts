@@ -133,6 +133,7 @@ const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: 
   { id: 'chinese-8ball', label: 'Chinese 8-Ball', ball: '#1b1b1b', sub: '8' },
   { id: 'straight-pool', label: 'Straight Pool', ball: '#e0702a', sub: '14' },
   { id: 'one-pocket', label: 'One-Pocket', ball: '#2f6fdc', sub: '1' },
+  { id: 'cowboy', label: 'Cowboy', ball: '#f2c14e', sub: '5' },
   { id: 'snooker', label: 'Snooker', ball: '#c4202b', sub: '' },
   { id: 'billiards', label: 'Billiards', ball: '#f4efe0', sub: '' },
   { id: 'three-cushion', label: '3-Cushion', ball: '#f2c419', sub: '' },
@@ -570,7 +571,7 @@ export class Menu {
         id === 'billiards' ||
         carom ||
         id === 'pyramid';
-      if (id === 'pyramid' || id === 'one-pocket') raceLabel.textContent = 'Games to win';
+      if (id === 'pyramid' || id === 'one-pocket' || id === 'cowboy') raceLabel.textContent = 'Games to win';
       caromRules.hidden = !carom;
       snookerRules.hidden = !snooker;
       englishRules.hidden = id !== 'english';
@@ -621,6 +622,7 @@ export class Menu {
       'chinese-8ball': ['#1b1b1b', '8'],
       'straight-pool': ['#e0702a', '14'],
       'one-pocket': ['#2f6fdc', '1'],
+      cowboy: ['#f2c14e', '5'],
       practice: ['#f6f3ea', ''],
     };
     const cloth = segmented<ClothSpeedId>(
