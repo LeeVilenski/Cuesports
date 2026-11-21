@@ -57,6 +57,7 @@ import {
 } from './kit';
 
 import type { TierChoice } from '../render/quality';
+import { markTutorialSeen, tutorialSeen } from '../game/tutorial';
 
 export type ClothSpeedId = 'fast' | 'medium' | 'slow';
 export type OptionName = 'guide' | 'squirt' | 'player' | 'labels' | 'haptics' | 'calm';
@@ -95,6 +96,8 @@ export interface MenuCallbacks {
   onSaveHighlight(): void;
   onDrill(id: DrillId): void;
   onChallenge(id: string): void;
+  /** Starts the first-run lesson. */
+  onTutorial(): void;
   /** The player's profile, and a change to it from the customiser. */
   profile(): Profile;
   onProfile(p: Profile): void;
@@ -329,6 +332,7 @@ export class Menu {
         h('span', { className: 'wordmark' }, 'CUESPORTS'),
         h('span', { className: 'tag' }, 'POOL · SNOOKER'),
       ),
+      tutorialSeen() ? '' : this.welcome(),
       h(
         'div',
         { className: 'tiles' },
@@ -349,6 +353,38 @@ export class Menu {
       ),
       this.status,
     );
+  }
+
+  /** First launch: an offer of the tutorial above the tiles. */
+  private welcome(): HTMLElement {
+    const el: HTMLElement = h(
+      'div',
+      { className: 'welcome' },
+      h('span', {}, h('strong', {}, 'New here?'), ' Learn to aim, shoot and spin in a minute.'),
+      h(
+        'button',
+        {
+          className: 'coach-btn primary',
+          onclick: () => {
+            this.close();
+            this.cb.onTutorial();
+          },
+        },
+        'Show me',
+      ),
+      h(
+        'button',
+        {
+          className: 'coach-skip',
+          onclick: () => {
+            markTutorialSeen('skipped');
+            el.remove();
+          },
+        },
+        'No thanks',
+      ),
+    );
+    return el;
   }
 
   /** The line under the home screen: offline readiness, or a waiting update. */
@@ -1067,6 +1103,10 @@ export class Menu {
         row('camera', 'Tap the camera to switch views. Pinch to zoom.'),
         row('undo', 'Undo and replay: bottom left.'),
         h('p', { className: 'fine-print' }, 'Keys: ← → aim (Shift: bigger steps), ↑ ↓ tilt, Space shoots.'),
+        this.tile('yellow', 'target', 'Tutorial', 'Aim, shoot, pot, spin: one minute', () => {
+          this.close();
+          this.cb.onTutorial();
+        }),
       ),
     );
   }

@@ -102,6 +102,15 @@ import '@fontsource/barlow-condensed/700.css';
 import '@fontsource/barlow-condensed/800-italic.css';
 import { chooseDecision } from '@cuesports/ai';
 import { AiClient } from './game/ai-client';
+import {
+  advance as tutorialAdvance,
+  markTutorialSeen,
+  newTutorial,
+  stepOf,
+  type TutorialEvent,
+  type TutorialState,
+} from './game/tutorial';
+import { Coach } from './ui/coach';
 import { resolveTier, TIERS, type TierChoice } from './render/quality';
 import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
 import { canPlaceCueBall, numberedOnTable, pocketName, type ShotDeclaration } from '@cuesports/rules';
@@ -613,7 +622,7 @@ function endPlayback(): void {
   const cue = cueBall();
   ballsView.commit(result);
   // In a challenge a scratch ends the attempt; the table is set up again instead.
-  if (cue && cue.state === 'pocketed' && !challenge) respawnCue(cue);
+  if (cue && cue.state === 'pocketed' && !challenge && !tutorial) respawnCue(cue);
   ballsView.showState(balls);
   playing = null;
   phase = 'aim';
@@ -633,6 +642,7 @@ function endPlayback(): void {
       .join(' · '),
   );
   if (challenge) challengeShot(result);
+  teach({ type: 'settled', potted: potted.includes('1') });
   dirty = true;
 }
 
@@ -796,6 +806,7 @@ function undo(): void {
 
 const hud = new Hud({
   onCamera: (mode: CameraMode) => {
+    teach({ type: 'camera' });
     rig.setMode(mode);
     hud.setCamera(mode);
     dirty = true;
@@ -807,11 +818,13 @@ const hud = new Hud({
   onShoot: shoot,
   onFineAim: (dx) => {
     shot.aim -= dx * 0.00012;
+    teach({ type: 'aim', amount: dx * 0.00012 });
     rig.followAimInstantly();
     dirty = true;
   },
   onTip: (a, b) => {
     shot.tip = { a, b };
+    if (a || b) teach({ type: 'spin' });
     dirty = true;
   },
   onElevation: (deg) => {
@@ -950,6 +963,7 @@ const menu: Menu = new Menu(
       saveCareer(career);
     },
     onCareerPlay: () => startCareerMatch(),
+    onTutorial: () => startTutorial(),
     onChallenge: (id) => {
       const spec = CHALLENGES.find((c) => c.id === id);
       if (spec) startChallenge(spec);
@@ -1280,6 +1294,74 @@ function challengeShot(result: ShotResult): void {
 function endChallenge(): void {
   challenge = null;
   targetRings.visible = false;
+  if (tutorial) {
+    tutorial = null;
+    coach.hide();
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// The first-run tutorial: a straight-in pot on a pool table, with a card saying what to do next.
+
+let tutorial: TutorialState | null = null;
+const coach = new Coach({
+  onSkip: () => {
+    markTutorialSeen('skipped');
+    endChallenge();
+    matchHud.say('The tutorial is in How to play whenever you want it.', 3000);
+  },
+  onPractice: () => endChallenge(),
+  onHome: () => {
+    endChallenge();
+    quitToHome();
+    menu.open('home');
+  },
+});
+app.append(coach.root);
+
+function startTutorial(): void {
+  setGame(GAMES.find((g) => g.id === 'nine-ball') ?? GAMES[0]!);
+  tutorial = newTutorial();
+  setupTutorialTable();
+  coach.show(stepOf(tutorial), 0);
+}
+
+function setupTutorialTable(): void {
+  const t = game.table;
+  const specs = { cue: [t.balls.cue.radius, t.balls.cue.mass] as [number, number] };
+  const layout = CHALLENGES.find((c) => c.id === 'straight-in')!.balls.filter(([id]) => id !== '2');
+  balls = expandBalls(layout, {
+    ...specs,
+    '1': [t.balls.object.radius, t.balls.object.mass],
+  });
+  cueStart = { ...cueBall()!.pos };
+  ballsView.setBalls(balls);
+  last = null;
+  phase = 'aim';
+  aimAtFirstBall();
+  // Start a little off line, so there is something to aim.
+  shot.aim += 0.12;
+  placePlayers();
+  rig.snap();
+  status('Tutorial');
+  dirty = true;
+}
+
+/** Feeds what the player just did to the tutorial. */
+function teach(e: TutorialEvent): void {
+  if (!tutorial) return;
+  const a = tutorialAdvance(tutorial, e);
+  tutorial = a.state;
+  if (a.say) matchHud.say(a.say, 2500);
+  if (a.reset) {
+    const t = tutorial;
+    window.setTimeout(() => tutorial === t && phase === 'aim' && setupTutorialTable(), 1200);
+  }
+  if (a.next) {
+    const step = stepOf(tutorial);
+    if (step.id === 'done') markTutorialSeen('done');
+    coach.show(step, tutorial.step);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1617,7 +1699,10 @@ function aimAtPoint(p: { x: number; y: number }): void {
   const cue = cueBall();
   if (!cue) return;
   if (Math.hypot(p.x - cue.pos.x, p.y - cue.pos.y) < cue.radius * 1.2) return;
+  const before = shot.aim;
   shot.aim = Math.atan2(p.y - cue.pos.y, p.x - cue.pos.x);
+  const turn = Math.atan2(Math.sin(shot.aim - before), Math.cos(shot.aim - before));
+  teach({ type: 'aim', amount: turn });
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -1672,6 +1757,7 @@ canvas.addEventListener('pointermove', (e) => {
     const speed = Math.abs(dx) / dt; // px per ms
     const gain = Math.min(1, Math.max(0.06, speed / 1.2));
     shot.aim -= dx * 0.0035 * gain;
+    teach({ type: 'aim', amount: dx * 0.0035 * gain });
     rig.followAimInstantly();
   }
   dirty = true;
