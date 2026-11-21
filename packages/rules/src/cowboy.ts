@@ -26,7 +26,7 @@ export interface CowboyOptions {
 
 export interface CowboyState {
   phase: 'break' | 'decision' | 'play' | 'over';
-  shooter: number;
+  shooter: Seat;
   scores: [number, number];
   /** Points scored in the current inning (lost on a foul). */
   inning: number;
@@ -34,7 +34,9 @@ export interface CowboyState {
 }
 
 const table = AMERICAN_POOL_9FT;
-const other = (p: number) => 1 - p;
+type Seat = 0 | 1;
+const other = (p: Seat): Seat => (p === 0 ? 1 : 0);
+const seat = (p: number): Seat => (p === 1 ? 1 : 0);
 const name = (p: number) => `{p${p}}`;
 export const COWBOY_BALLS = ['1', '3', '5'] as const;
 const VALUE: Record<string, number> = { '1': 1, '3': 3, '5': 5 };
@@ -86,7 +88,13 @@ export const COWBOY_POOL: Ruleset<CowboyState, CowboyOptions> = {
   defaults: { target: 101 },
 
   newFrame(_opts, _rng: Rng, breaker) {
-    const state: CowboyState = { phase: 'break', shooter: breaker, scores: [0, 0], inning: 0, inHand: true };
+    const state: CowboyState = {
+      phase: 'break',
+      shooter: seat(breaker),
+      scores: [0, 0],
+      inning: 0,
+      inHand: true,
+    };
     return { balls: rack(), state, turn: turnFor(state) };
   },
 
@@ -184,7 +192,7 @@ export const COWBOY_POOL: Ruleset<CowboyState, CowboyOptions> = {
 
   decide(s, choice, balls) {
     const breaker = choice === 'break' ? s.shooter : other(s.shooter);
-    const state: CowboyState = { ...s, phase: 'break', shooter: breaker, inHand: true };
+    const state: CowboyState = { ...s, phase: 'break', shooter: seat(breaker), inHand: true };
     return {
       state,
       balls,

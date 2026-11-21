@@ -26,7 +26,7 @@ export function mergeStatic(root: Object3D): Group {
     g.applyMatrix4(new Matrix4().multiplyMatrices(inv, m.matrixWorld));
     // Geometries only merge when they carry the same attributes.
     const key = Object.keys(g.attributes).sort().join(',');
-    for (const name of Object.keys(g.morphAttributes)) delete g.morphAttributes[name];
+    g.morphAttributes = {};
     const lists = byMaterial.get(m.material) ?? [];
     let list = lists.find((l) => l.key === key);
     if (!list) lists.push((list = { key, geos: [] }));

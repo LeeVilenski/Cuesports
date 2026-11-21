@@ -26,7 +26,7 @@ export interface StraightOptions {
 
 export interface StraightState {
   phase: 'play' | 'over';
-  shooter: number;
+  shooter: Seat;
   scores: [number, number];
   break: number;
   fouls: [number, number];
@@ -35,7 +35,9 @@ export interface StraightState {
 }
 
 const table = AMERICAN_POOL_9FT;
-const other = (p: number) => 1 - p;
+type Seat = 0 | 1;
+const other = (p: Seat): Seat => (p === 0 ? 1 : 0);
+const seat = (p: number): Seat => (p === 1 ? 1 : 0);
 const name = (p: number) => `{p${p}}`;
 const IDS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'];
 const liveObjects = (balls: readonly BallState[]) =>
@@ -93,7 +95,7 @@ export const STRAIGHT_POOL: Ruleset<StraightState, StraightOptions> = {
     balls.push(makeBall('cue', table.balls.cue, { x: headStringX(table) - 0.1, y: 0.05 }));
     const state: StraightState = {
       phase: 'play',
-      shooter: breaker,
+      shooter: seat(breaker),
       scores: [0, 0],
       break: 0,
       fouls: [0, 0],

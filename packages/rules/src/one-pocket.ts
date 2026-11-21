@@ -24,7 +24,7 @@ export interface OnePocketOptions {
 
 export interface OnePocketState {
   phase: 'choose' | 'play' | 'over';
-  shooter: number;
+  shooter: Seat;
   scores: [number, number];
   break: number;
   /** Each player's pocket. */
@@ -35,7 +35,9 @@ export interface OnePocketState {
 
 export const FOOT_POCKETS = ['top-right', 'bottom-right'] as const;
 const table = AMERICAN_POOL_9FT;
-const other = (p: number) => 1 - p;
+type Seat = 0 | 1;
+const other = (p: Seat): Seat => (p === 0 ? 1 : 0);
+const seat = (p: number): Seat => (p === 1 ? 1 : 0);
 const name = (p: number) => `{p${p}}`;
 const IDS = ['1', '9', '2', '10', '8', '3', '11', '4', '12', '5', '13', '6', '14', '7', '15'];
 const LABEL: Record<string, string> = { 'top-right': 'left corner', 'bottom-right': 'right corner' };
@@ -72,7 +74,7 @@ export const ONE_POCKET: Ruleset<OnePocketState, OnePocketOptions> = {
     balls.push(makeBall('cue', table.balls.cue, { x: headStringX(table) - 0.1, y: 0.05 }));
     const state: OnePocketState = {
       phase: 'choose',
-      shooter: breaker,
+      shooter: seat(breaker),
       scores: [0, 0],
       break: 0,
       pockets: null,

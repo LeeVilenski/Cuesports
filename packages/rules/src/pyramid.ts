@@ -24,7 +24,7 @@ export interface PyramidOptions {
 
 export interface PyramidState {
   phase: 'play' | 'over';
-  shooter: number;
+  shooter: Seat;
   scores: [number, number];
   break: number;
   inHand: boolean;
@@ -33,7 +33,9 @@ export interface PyramidState {
 
 export const PYRAMID_CUE = 'pcue';
 const table = PYRAMID_12FT;
-const other = (p: number) => 1 - p;
+type Seat = 0 | 1;
+const other = (p: Seat): Seat => (p === 0 ? 1 : 0);
+const seat = (p: number): Seat => (p === 1 ? 1 : 0);
 const name = (p: number) => `{p${p}}`;
 
 function turnFor(player: number, inHand: boolean, opening: boolean): Turn {
@@ -62,7 +64,7 @@ export const RUSSIAN_PYRAMID: Ruleset<PyramidState, PyramidOptions> = {
     const balls = layout(table, 'pyramid', Math.floor(rng.next() * 1e6));
     const state: PyramidState = {
       phase: 'play',
-      shooter: breaker,
+      shooter: seat(breaker),
       scores: [0, 0],
       break: 0,
       inHand: true,
