@@ -1123,8 +1123,8 @@ app.append(menu.root);
 function clothFor(t: TableSpec): string {
   // Carom tables: the classic tournament blue.
   if (t.pockets.length === 0) return '#2b5fa6';
-  // Russian Pyramid: green.
-  if (t.id.startsWith('pyramid')) return '#1f6a3c';
+  // Russian Pyramid and Chinese 8-ball: green.
+  if (t.id.startsWith('pyramid') || t.id.startsWith('chinese')) return '#1f6a3c';
   return t.id.startsWith('snooker')
     ? profile.cloth.snooker
     : t.id.startsWith('english')
