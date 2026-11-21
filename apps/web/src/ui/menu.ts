@@ -526,7 +526,7 @@ export class Menu {
         { value: '200', label: '200' },
         { value: '300', label: '300' },
       ],
-      String(c.billiards?.target ?? 100),
+      String(c.billiards?.target ?? 50),
       (v) => (c.billiards = { target: Number(v) }),
     );
     const billiardsField = this.field('Points to win', target.el);
@@ -602,7 +602,7 @@ export class Menu {
     const start = () => {
       if (c.game === 'billiards') {
         c.raceTo = 1;
-        c.billiards ??= { target: 100 };
+        c.billiards ??= { target: 50 };
       }
       if (c.game === 'straight-pool') {
         c.raceTo = 1;

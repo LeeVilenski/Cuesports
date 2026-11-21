@@ -166,8 +166,8 @@ export const ENGLISH_BILLIARDS: Ruleset<BilliardsState, BilliardsOptions> = {
   name: 'English Billiards',
   table,
   players: { min: 2, max: 2 },
-  options: [{ id: 'target', label: 'Points to win', type: 'number', default: 100, min: 50, max: 500 }],
-  defaults: { target: 100 },
+  options: [{ id: 'target', label: 'Points to win', type: 'number', default: 50, min: 50, max: 500 }],
+  defaults: { target: 50 },
 
   newFrame(_opts: BilliardsOptions, _rng: Rng, breaker: number) {
     const d = theD(table)!;
