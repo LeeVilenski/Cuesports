@@ -5,3 +5,4 @@ export * from './rotation';
 export * from './snooker';
 export * from './snookered';
 export * from './english';
+export * from './billiards';
