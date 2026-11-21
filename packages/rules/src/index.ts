@@ -11,3 +11,4 @@ export * from './pyramid';
 export * from './straight';
 export * from './one-pocket';
 export * from './cowboy';
+export * from './slosh';

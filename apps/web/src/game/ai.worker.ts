@@ -15,6 +15,7 @@ import {
   STRAIGHT_POOL,
   ONE_POCKET,
   COWBOY_POOL,
+  SLOSH,
   type Ruleset,
   type Turn,
 } from '@cuesports/rules';
@@ -56,6 +57,7 @@ const RULESETS: Record<string, Ruleset<unknown, unknown>> = {
   'straight-pool': STRAIGHT_POOL as Ruleset<unknown, unknown>,
   'one-pocket': ONE_POCKET as Ruleset<unknown, unknown>,
   cowboy: COWBOY_POOL as Ruleset<unknown, unknown>,
+  slosh: SLOSH as Ruleset<unknown, unknown>,
 };
 
 self.onmessage = (e: MessageEvent<AiRequest>) => {
