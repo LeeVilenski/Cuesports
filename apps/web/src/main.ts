@@ -1175,6 +1175,7 @@ function startCareerMatch(): void {
     raceTo: e.raceTo[run.round] ?? 3,
     breaks: 'alternate',
     snooker: { ...DEFAULT_MATCH.snooker, reds: e.reds ?? 15 },
+    ...(e.target ? { billiards: { target: e.target }, caromTarget: e.target } : {}),
     ai: opp.level,
     aiAttack: o.attack,
     aiLook: o.look,
