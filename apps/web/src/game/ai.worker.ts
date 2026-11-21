@@ -12,6 +12,8 @@ import {
   THREE_CUSHION,
   RUSSIAN_PYRAMID,
   CHINESE_8BALL,
+  STRAIGHT_POOL,
+  ONE_POCKET,
   type Ruleset,
   type Turn,
 } from '@cuesports/rules';
@@ -50,6 +52,8 @@ const RULESETS: Record<string, Ruleset<unknown, unknown>> = {
   'balkline-71-2': BALKLINE_71_2 as Ruleset<unknown, unknown>,
   pyramid: RUSSIAN_PYRAMID as Ruleset<unknown, unknown>,
   'chinese-8ball': CHINESE_8BALL as Ruleset<unknown, unknown>,
+  'straight-pool': STRAIGHT_POOL as Ruleset<unknown, unknown>,
+  'one-pocket': ONE_POCKET as Ruleset<unknown, unknown>,
 };
 
 self.onmessage = (e: MessageEvent<AiRequest>) => {

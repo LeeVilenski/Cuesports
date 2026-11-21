@@ -5,6 +5,10 @@ import {
   THREE_CUSHION,
   RUSSIAN_PYRAMID,
   CHINESE_8BALL,
+  STRAIGHT_POOL,
+  ONE_POCKET,
+  type OnePocketState,
+  type StraightState,
   type PyramidState,
   type CaromState,
   ENGLISH_BILLIARDS,
@@ -39,7 +43,9 @@ export type MatchGame =
   | 'balkline-47-2'
   | 'balkline-71-2'
   | 'pyramid'
-  | 'chinese-8ball';
+  | 'chinese-8ball'
+  | 'straight-pool'
+  | 'one-pocket';
 
 /** Games scored in points rather than racks won (frame or game to a target). */
 export const POINTS_GAMES = new Set<MatchGame>([
@@ -49,6 +55,8 @@ export const POINTS_GAMES = new Set<MatchGame>([
   'balkline-47-2',
   'balkline-71-2',
   'pyramid',
+  'straight-pool',
+  'one-pocket',
 ]);
 /** Games without pockets. */
 export const CAROM_GAMES = new Set<MatchGame>(['three-cushion', 'balkline-47-2', 'balkline-71-2']);
@@ -167,6 +175,11 @@ export class Match {
       ],
       pyramid: [RUSSIAN_PYRAMID as AnyRuleset, RUSSIAN_PYRAMID.defaults],
       'chinese-8ball': [CHINESE_8BALL as AnyRuleset, CHINESE_8BALL.defaults],
+      'one-pocket': [ONE_POCKET as AnyRuleset, ONE_POCKET.defaults],
+      'straight-pool': [
+        STRAIGHT_POOL as AnyRuleset,
+        { target: config.caromTarget || STRAIGHT_POOL.defaults.target },
+      ],
       'balkline-71-2': [
         BALKLINE_71_2 as AnyRuleset,
         { target: config.caromTarget || BALKLINE_71_2.defaults.target },
@@ -201,6 +214,14 @@ export class Match {
 
   /** Snooker frame points, break and points remaining, or null for pool. */
   get framePoints(): FramePoints | null {
+    if (this.config.game === 'one-pocket') {
+      const op = this.state as OnePocketState;
+      return { points: op.scores, break: op.break, remaining: null };
+    }
+    if (this.config.game === 'straight-pool') {
+      const sp = this.state as StraightState;
+      return { points: sp.scores, break: sp.break, remaining: null };
+    }
     if (this.config.game === 'pyramid') {
       const py = this.state as PyramidState;
       return { points: py.scores, break: py.break, remaining: null };

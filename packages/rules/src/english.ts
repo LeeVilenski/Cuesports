@@ -599,7 +599,10 @@ function assign(shooter: number, g: Group): [Group, Group] {
 
 function chooseGroupDecision(shooter: number, style: BallStyle = 'colours'): Turn['decision'] {
   return {
-    prompt: style === 'numbers' ? `${name(shooter)}: choose solids or stripes.` : `${name(shooter)}: choose your colour.`,
+    prompt:
+      style === 'numbers'
+        ? `${name(shooter)}: choose solids or stripes.`
+        : `${name(shooter)}: choose your colour.`,
     choices: [
       { id: 'red', label: style === 'numbers' ? 'Solids' : 'Reds' },
       { id: 'yellow', label: style === 'numbers' ? 'Stripes' : 'Yellows' },

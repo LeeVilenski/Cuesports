@@ -8,3 +8,5 @@ export * from './english';
 export * from './billiards';
 export * from './carom';
 export * from './pyramid';
+export * from './straight';
+export * from './one-pocket';

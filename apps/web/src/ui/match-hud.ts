@@ -99,12 +99,12 @@ export class MatchHud {
             frame.break > 0
               ? `break ${frame.break}`
               : frame.remaining === null
-                ? (
+                ? ((
                     { spot: 'spot white', yellow: 'yellow', cue: 'white', pcue: 'first to 8' } as Record<
                       string,
                       string
                     >
-                  )[turn.cueBall ?? 'cue']!
+                  )[turn.cueBall ?? ''] ?? (turn.mustCall ? 'call your shots' : ''))
                 : turn.freeBall
                   ? 'free ball'
                   : `on: ${onLabel(turn)}`,

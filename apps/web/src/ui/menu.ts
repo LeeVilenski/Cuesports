@@ -131,6 +131,8 @@ const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: 
   { id: 'ten-ball', label: '10-Ball', ball: '#2f6fdc', sub: '10' },
   { id: 'english', label: 'UK 8-Ball', ball: '#d8342c', sub: '8' },
   { id: 'chinese-8ball', label: 'Chinese 8-Ball', ball: '#1b1b1b', sub: '8' },
+  { id: 'straight-pool', label: 'Straight Pool', ball: '#e0702a', sub: '14' },
+  { id: 'one-pocket', label: 'One-Pocket', ball: '#2f6fdc', sub: '1' },
   { id: 'snooker', label: 'Snooker', ball: '#c4202b', sub: '' },
   { id: 'billiards', label: 'Billiards', ball: '#f4efe0', sub: '' },
   { id: 'three-cushion', label: '3-Cushion', ball: '#f2c419', sub: '' },
@@ -541,7 +543,7 @@ export class Menu {
       'div',
       {},
       this.field('Points to win a game', caromTarget.el),
-      h('p', { className: 'fine-print' }, 'Standard: 25 for 3-Cushion, 100 for Balkline.'),
+      h('p', { className: 'fine-print' }, 'Standard: 25 for 3-Cushion, 100 for Balkline and straight pool.'),
     );
     const rules = h(
       'details',
@@ -559,7 +561,7 @@ export class Menu {
       gameButtons.forEach((b, i) => b.setAttribute('aria-pressed', String(MATCH_GAMES[i]!.id === id)));
       const snooker = id === 'snooker';
       raceLabel.textContent = snooker ? 'Frames to win' : id === 'billiards' ? 'Games to win' : 'Race to';
-      const carom = id === 'three-cushion' || id.startsWith('balkline');
+      const carom = id === 'three-cushion' || id.startsWith('balkline') || id === 'straight-pool';
       if (carom) raceLabel.textContent = 'Games to win';
       poolRules.hidden =
         snooker ||
@@ -568,7 +570,7 @@ export class Menu {
         id === 'billiards' ||
         carom ||
         id === 'pyramid';
-      if (id === 'pyramid') raceLabel.textContent = 'Games to win';
+      if (id === 'pyramid' || id === 'one-pocket') raceLabel.textContent = 'Games to win';
       caromRules.hidden = !carom;
       snookerRules.hidden = !snooker;
       englishRules.hidden = id !== 'english';
@@ -617,6 +619,8 @@ export class Menu {
       'balkline-71-2': ['#c4161c', ''],
       pyramid: ['#f3ead2', ''],
       'chinese-8ball': ['#1b1b1b', '8'],
+      'straight-pool': ['#e0702a', '14'],
+      'one-pocket': ['#2f6fdc', '1'],
       practice: ['#f6f3ea', ''],
     };
     const cloth = segmented<ClothSpeedId>(

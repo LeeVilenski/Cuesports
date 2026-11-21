@@ -348,7 +348,13 @@ describe('Chinese 8-ball', () => {
     const C = CHINESE_8BALL;
     const { balls, state: s } = C.newFrame(C.defaults, new Rng(2), 0);
     const strikeC: PhysicsEvent = { type: 'strike', t: 0, ball: 'cue', speed: 5, miscue: false };
-    const j = C.judge(s, {}, balls, shot(balls, [strikeC, hit('1'), pot('3'), pot('11', 'top-left')]), C.defaults);
+    const j = C.judge(
+      s,
+      {},
+      balls,
+      shot(balls, [strikeC, hit('1'), pot('3'), pot('11', 'top-left')]),
+      C.defaults,
+    );
     expect(j.turn.decision?.choices.map((c) => c.label)).toEqual(['Solids', 'Stripes']);
     const d = C.decide(j.state, 'yellow', j.balls, C.defaults);
     expect(d.state.groups).toEqual(['yellow', 'red']);

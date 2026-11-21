@@ -694,8 +694,13 @@ export function chooseDecision(input: AiInput): string {
   const ease = bestPotEase(input.ruleset.table, input.balls, input.turn.targets, cueOf(input));
   if (ids.includes('red') && ids.includes('yellow')) {
     // Choose the colour with fewer balls left to pot.
-    const left = (p: string) =>
-      input.balls.filter((b) => b.state !== 'pocketed' && b.id.startsWith(p)).length;
+    // ('red' is also the solids 1–7 and 'yellow' the stripes 9–15 in Chinese 8-ball.)
+    const inGroup = (id: string, g: 'r' | 'y') => {
+      const n = Number(id);
+      return id.startsWith(g) || (g === 'r' ? n >= 1 && n <= 7 : n >= 9 && n <= 15);
+    };
+    const left = (g: 'r' | 'y') =>
+      input.balls.filter((b) => b.state !== 'pocketed' && inGroup(b.id, g)).length;
     return left('r') <= left('y') ? 'red' : 'yellow';
   }
   if (ids.includes('break')) return 'break';
