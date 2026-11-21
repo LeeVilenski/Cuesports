@@ -100,7 +100,7 @@ export class MatchHud {
               ? `break ${frame.break}`
               : frame.remaining === null
                 ? ((
-                    { spot: 'spot white', yellow: 'yellow', cue: 'white', pcue: 'first to 8' } as Record<
+                    { spot: 'yellow', yellow: 'yellow', cue: 'white', pcue: 'first to 8' } as Record<
                       string,
                       string
                     >

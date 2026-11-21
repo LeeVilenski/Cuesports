@@ -5,7 +5,7 @@ import type { Foul, Judgement, Ruleset, ShotDeclaration, Turn } from './types';
 
 /**
  * English Billiards (WPBSA rules, the parts that matter in play):
- * - Three balls on a snooker table: each player's cue ball (plain white 'cue' and spot white
+ * - Three balls on a snooker table: each player's cue ball (plain white 'cue' and yellow
  *   'spot') and the red. The red starts on the billiard spot (the black's spot).
  * - Scoring: a cannon (the cue ball hits both other balls) 2; potting the red 3; potting the
  *   opponent's white 2; an in-off (the cue ball goes into a pocket after hitting a ball) 3 off the

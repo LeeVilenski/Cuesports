@@ -51,7 +51,7 @@ export function potCuts(result: ShotResult): { ball: string; pocket: string; t: 
   );
 }
 
-/** The ball the cue struck ('cue' unless billiards' spot white). */
+/** The ball the cue struck ('cue' unless billiards' yellow). */
 export function struck(result: ShotResult): string {
   const s = result.events.find((e) => e.type === 'strike');
   return s && s.type === 'strike' ? s.ball : 'cue';
