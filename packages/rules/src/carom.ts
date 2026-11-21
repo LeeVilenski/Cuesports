@@ -23,7 +23,7 @@ export interface CaromOptions {
 
 export interface CaromState {
   phase: 'play' | 'over';
-  shooter: number;
+  shooter: Seat;
   scores: [number, number];
   break: number;
   /** Highest run so far, per player. */
@@ -34,7 +34,9 @@ export interface CaromState {
 }
 
 export const CAROM_BALLS = ['cue', 'yellow'] as const;
-const other = (p: number) => 1 - p;
+type Seat = 0 | 1;
+const other = (p: Seat): Seat => (p === 0 ? 1 : 0);
+const seat = (p: number): Seat => (p === 1 ? 1 : 0);
 const name = (p: number) => `{p${p}}`;
 
 export interface CaromFacts {
@@ -81,7 +83,7 @@ function makeCarom(game: CaromGame): Ruleset<CaromState, CaromOptions> {
   }[game];
   const target = game === 'three-cushion' ? 25 : 100;
 
-  const turnFor = (player: number, opening: boolean): Turn => ({
+  const turnFor = (player: Seat, opening: boolean): Turn => ({
     player,
     cueBall: CAROM_BALLS[player],
     ballInHand: 'none',
@@ -113,20 +115,20 @@ function makeCarom(game: CaromGame): Ruleset<CaromState, CaromOptions> {
     newFrame(_opts, _rng: Rng, breaker) {
       const side = spotOf(table, breaker === 0 ? 'start-right' : 'start-left')!;
       const balls = [
-        makeBall(CAROM_BALLS[breaker], table.balls.cue, side),
-        makeBall(CAROM_BALLS[other(breaker)], table.balls.cue, spotOf(table, 'head')!),
+        makeBall(CAROM_BALLS[seat(breaker)], table.balls.cue, side),
+        makeBall(CAROM_BALLS[other(seat(breaker))], table.balls.cue, spotOf(table, 'head')!),
         makeBall('red', table.balls.object, spotOf(table, 'foot')!),
       ];
       const state: CaromState = {
         phase: 'play',
-        shooter: breaker,
+        shooter: seat(breaker),
         scores: [0, 0],
         break: 0,
         best: [0, 0],
         inArea: null,
         opening: true,
       };
-      return { balls, state, turn: turnFor(breaker, true) };
+      return { balls, state, turn: turnFor(seat(breaker), true) };
     },
 
     judge(s, _decl: ShotDeclaration, before, result: ShotResult, opts) {

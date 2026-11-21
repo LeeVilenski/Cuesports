@@ -66,6 +66,9 @@ export type LayoutId =
   | 'snooker'
   | 'billiards'
   | 'carom'
+  | 'pyramid'
+  | 'cowboy'
+  | 'slosh'
   | 'eight-ball'
   | 'nine-ball'
   | 'ten-ball'
@@ -113,6 +116,23 @@ export function layout(table: TableSpec, id: LayoutId, seed = 1): BallState[] {
       balls.push(makeBall('pcue', table.balls.cue, { x: head.x - 0.05, y: 0 }));
       return balls;
     }
+    case 'slosh': {
+      // Slosh: the six colours on their spots, the cue ball in the D.
+      const balls = ['yellow', 'green', 'brown', 'blue', 'pink', 'black'].map((c) =>
+        makeBall(c, obj, spot(table, c, { x: 0, y: 0 })),
+      );
+      const brown = spot(table, 'brown', { x: -hl / 2, y: 0 });
+      balls.push(cueBall({ x: brown.x - 0.05, y: 0.12 }));
+      return balls;
+    }
+    case 'cowboy':
+      // Cowboy pool: the 1 on the head spot, the 3 on the foot spot, the 5 on the centre spot.
+      return [
+        makeBall('1', obj, spot(table, 'head', { x: -hl / 2, y: 0 })),
+        makeBall('3', obj, foot),
+        makeBall('5', obj, spot(table, 'centre', { x: 0, y: 0 })),
+        cueBall({ x: -hl / 2 - 0.15, y: 0.3 }),
+      ];
     case 'carom': {
       // Carom opening: red on the foot spot, yellow on the head spot, white beside it.
       const head = spot(table, 'head', { x: -hl / 2, y: 0 });

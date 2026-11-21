@@ -29,7 +29,7 @@ export interface BilliardsOptions {
 
 export interface BilliardsState {
   phase: 'play' | 'over';
-  shooter: number;
+  shooter: Seat;
   scores: [number, number];
   break: number;
   hazards: number;
@@ -48,7 +48,9 @@ export const CANNON_LIMIT = 75;
 export const FOUL_POINTS = 2;
 
 const table = SNOOKER_12FT;
-const other = (p: number) => 1 - p;
+type Seat = 0 | 1;
+const other = (p: Seat): Seat => (p === 0 ? 1 : 0);
+const seat = (p: number): Seat => (p === 1 ? 1 : 0);
 const name = (p: number) => `{p${p}}`;
 
 export function billiardSpot(): Vec2 {
@@ -69,7 +71,7 @@ function spotRed(balls: BallState[], centreFirst: boolean): boolean {
   return false;
 }
 
-function turnFor(player: number, balls: readonly BallState[]): Turn {
+function turnFor(player: Seat, balls: readonly BallState[]): Turn {
   const mine = balls.find((b) => b.id === BALL_OF[player])!;
   return {
     player,
@@ -177,7 +179,7 @@ export const ENGLISH_BILLIARDS: Ruleset<BilliardsState, BilliardsOptions> = {
     const balls = [cue, spot, red];
     const state: BilliardsState = {
       phase: 'play',
-      shooter: breaker,
+      shooter: seat(breaker),
       scores: [0, 0],
       break: 0,
       hazards: 0,
@@ -186,7 +188,7 @@ export const ENGLISH_BILLIARDS: Ruleset<BilliardsState, BilliardsOptions> = {
       redOnSpot: true,
       inHand: true,
     };
-    return { balls, state, turn: turnFor(breaker, balls) };
+    return { balls, state, turn: turnFor(seat(breaker), balls) };
   },
 
   judge(
@@ -304,7 +306,7 @@ export const ENGLISH_BILLIARDS: Ruleset<BilliardsState, BilliardsOptions> = {
 
 function finish(
   state: BilliardsState,
-  next: number,
+  next: Seat,
   balls: BallState[],
   fouls: Foul[],
   potted: string[],

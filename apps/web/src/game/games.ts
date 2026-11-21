@@ -34,6 +34,7 @@ export const GAMES: GameDef[] = [
     maxSpeed: 9,
   },
   { id: 'snooker', label: 'Snooker', table: SNOOKER_12FT, layout: 'snooker', maxSpeed: 7.5 },
+  { id: 'slosh', label: 'Slosh', table: SNOOKER_12FT, layout: 'slosh', maxSpeed: 7.5 },
   { id: 'billiards', label: 'English Billiards', table: SNOOKER_12FT, layout: 'billiards', maxSpeed: 7.5 },
   { id: 'three-cushion', label: '3-Cushion', table: CAROM_10FT, layout: 'carom', maxSpeed: 9 },
   { id: 'balkline-47-2', label: 'Balkline 47/2', table: BALKLINE_47, layout: 'carom', maxSpeed: 9 },
@@ -96,6 +97,6 @@ export function withClothSpeed(table: TableSpec, speed: ClothSpeed): TableSpec {
 export type VisitWord = 'break' | 'run';
 
 /** Games played under American terms. New American games (straight pool, one-pocket) go here. */
-const AMERICAN = new Set(['nine-ball', 'ten-ball', 'eight-ball', 'straight-pool', 'one-pocket']);
+const AMERICAN = new Set(['nine-ball', 'ten-ball', 'eight-ball', 'straight-pool', 'one-pocket', 'cowboy']);
 
 export const visitWord = (game: string): VisitWord => (AMERICAN.has(game) ? 'run' : 'break');
