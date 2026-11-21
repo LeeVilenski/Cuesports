@@ -1577,6 +1577,8 @@ app.append(replayBar.root);
 function quitToHome(): void {
   playCamera = 'aim';
   setGame(GAMES[0]!);
+  // A new version that waited for the match to finish goes in now.
+  maybeUpdate();
 }
 // The scoreboard lives in the top bar, next to the menu button.
 hud.placeInTop(matchHud.board);
@@ -2127,26 +2129,45 @@ menu.open('home');
 resize();
 requestAnimationFrame(frame);
 
-// Updates wait for the player (an automatic reload could land mid-frame); once everything is
-// cached the home screen says the game works offline.
+// Updates: a new version is put in straight away when nothing is in progress (at launch, or back
+// on the home screen), so closing and reopening the app always brings it up to date. During a
+// match, challenge or replay it waits, with a "Restart to update" button, and goes in as soon as
+// the player is back home.
 let offlineReady = false;
+let updateWaiting = false;
+const showStatus = (): void =>
+  menu.setStatus(updateWaiting ? { offline: offlineReady, update: applyUpdate } : { offline: offlineReady });
+const busy = (): boolean => match !== null || challenge !== null || tutorial !== null || viewer !== null;
+function applyUpdate(): void {
+  void updateSW(true);
+}
+function maybeUpdate(): void {
+  if (updateWaiting && !busy()) applyUpdate();
+}
 const updateSW = registerSW({
   immediate: true,
   onOfflineReady() {
     offlineReady = true;
-    menu.setStatus({ offline: true });
+    showStatus();
   },
   onNeedRefresh() {
-    menu.setStatus({ offline: offlineReady, update: () => void updateSW(true) });
+    updateWaiting = true;
+    showStatus();
+    maybeUpdate();
   },
   onRegisteredSW(_url, reg) {
     // An installed copy that already works offline reports nothing new: say so from the cache.
-    if (reg?.active && navigator.serviceWorker.controller) {
-      offlineReady = true;
-      menu.setStatus({ offline: true });
-    }
-    // Check for a new version now and then while the game stays open.
-    if (reg) setInterval(() => void reg.update().catch(() => {}), 60 * 60 * 1000);
+    if (reg?.active && navigator.serviceWorker.controller) offlineReady = true;
+    showStatus();
+    if (!reg) return;
+    // Look for a new version whenever the app comes back to the front, and hourly while open.
+    const check = () => void reg.update().catch(() => {});
+    // Browsers don't reliably check on launch (an installed app may not even navigate), so ask now.
+    check();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') check();
+    });
+    setInterval(check, 60 * 60 * 1000);
   },
 });
 // Ask the browser not to clear saved matches, replays and career progress under storage pressure.
