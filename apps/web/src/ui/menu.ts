@@ -529,7 +529,7 @@ export class Menu {
       String(c.billiards?.target ?? 100),
       (v) => (c.billiards = { target: Number(v) }),
     );
-    const billiardsRules = this.field('Points to win a game', target.el);
+    const billiardsField = this.field('Points to win', target.el);
     const caromTarget = segmented(
       'Points to win',
       [
@@ -567,7 +567,6 @@ export class Menu {
       poolRules,
       snookerRules,
       englishRules,
-      billiardsRules,
       caromRules,
     );
 
@@ -590,17 +589,21 @@ export class Menu {
       if (id === 'pyramid' || id === 'one-pocket' || id === 'cowboy' || id === 'slosh')
         raceLabel.textContent = 'Games to win';
       caromRules.hidden = !carom;
-      raceField.hidden = straight;
+      raceField.hidden = straight || id === 'billiards';
       straightField.hidden = !straight;
-      rules.hidden = straight;
+      billiardsField.hidden = id !== 'billiards';
+      rules.hidden = straight || id === 'billiards';
       snookerRules.hidden = !snooker;
       englishRules.hidden = id !== 'english';
-      billiardsRules.hidden = id !== 'billiards';
     };
     setGame(c.game);
     showOpponent();
 
     const start = () => {
+      if (c.game === 'billiards') {
+        c.raceTo = 1;
+        c.billiards ??= { target: 100 };
+      }
       if (c.game === 'straight-pool') {
         c.raceTo = 1;
         c.straightTarget ??= STRAIGHT_POOL.defaults.target;
@@ -626,6 +629,7 @@ export class Menu {
         name2Field,
         raceField,
         straightField,
+        billiardsField,
         rules,
       ),
       h('button', { className: 'tile blue cta', onclick: start }, icon('play'), h('strong', {}, 'Start')),
