@@ -51,6 +51,7 @@ export class Hud {
   private elevInput = h('input', { type: 'range', min: '0', max: '60', step: '0.5', value: '0' });
   private elevOut = h('output', {}, '0°');
   private placeBtn = iconButton('hand', 'Move cue ball', () => undefined);
+  private replayBtn: HTMLButtonElement;
   private tip = { a: 0, b: 0 };
   private elevation = 0;
   /** Elevation the cue is forced up to by a cushion or ball in the way (degrees, 0 if none). */
@@ -228,12 +229,14 @@ export class Hud {
       this.placeBtn.setAttribute('aria-pressed', String(this.placing));
       cb.onPlaceToggle(this.placing);
     });
+    this.replayBtn = iconButton('replay', 'Replay', () => cb.onReplay());
+    this.replayBtn.classList.add('replay-btn');
     const actions = h(
       'div',
       { className: 'actions' },
       this.placeBtn,
       iconButton('undo', 'Undo', () => cb.onUndo()),
-      iconButton('replay', 'Replay', () => cb.onReplay()),
+      this.replayBtn,
     );
 
     this.root.append(top, power, fine, this.spinMini, actions, this.spinPanel);
@@ -285,6 +288,11 @@ export class Hud {
   /** Enables or disables the Move cue ball button (in a match, only with ball in hand). */
   setPlacingAllowed(allowed: boolean): void {
     this.placeBtn.disabled = !allowed;
+  }
+
+  /** Lets Replay be pressed while the rest of the controls are busy (the computer's turn). */
+  setReplayWhileBusy(on: boolean): void {
+    this.root.classList.toggle('can-replay', on);
   }
 
   setBusy(busy: boolean): void {

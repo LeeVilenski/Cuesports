@@ -65,9 +65,15 @@ input {
 
 .hud.busy .power,
 .hud.busy .fine,
-.hud.busy .actions {
+.hud.busy .actions > * {
   opacity: 0.35;
   pointer-events: none;
+}
+
+/* During the computer's turn the player can still watch their last shot again. */
+.hud.busy.can-replay .actions > .replay-btn {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Top bar */

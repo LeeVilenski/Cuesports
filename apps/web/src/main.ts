@@ -217,7 +217,12 @@ let strikeT = 0;
 let pending: { result: ShotResult; ms: number } | null = null;
 let playing: ShotResult | null = null;
 let playT = 0;
-let last: { before: BallState[]; shot: ShotInput; result: ShotResult; shooter: number } | null = null;
+type SavedShot = { before: BallState[]; shot: ShotInput; result: ShotResult; shooter: number };
+let last: SavedShot | null = null;
+/** The human player's most recent shot in a match, to watch again during the computer's turn. */
+let lastMine: SavedShot | null = null;
+/** The computer has lined up its shot (from then on the table is its own: no replays). */
+let aiLinedUp = false;
 /** During a replay, the player who played the shot (they take it again at the table). */
 let replayShooter: number | null = null;
 /** A replay shows the player down on the shot for this long before the stroke. */
@@ -273,6 +278,8 @@ const cueBall = (): BallState | undefined => balls.find((b) => b.id === cueId);
 function resetTurnState(): void {
   aiTurnId++;
   aiBusy = false;
+  aiLinedUp = false;
+  lastMine = null;
   replaying = false;
   replayShooter = null;
   pending = null;
@@ -564,6 +571,7 @@ function strike(input: ShotInput, declaration: ShotDeclaration, pullVisual: numb
   void sim.run(simTable, before, s).then((r) => {
     pending = r;
     last = { before, shot: s, result: r.result, shooter };
+    if (match && !match.isAi(shooter)) lastMine = last;
   });
   dirty = true;
 }
@@ -629,7 +637,8 @@ function endPlayback(): void {
     rig.shotView = null;
     shotCam = null;
     cueView.group.visible = true;
-    hud.setBusy(false);
+    hud.setBusy(aiBusy);
+    syncCanReplay();
     if (match) syncTurn();
     if (viewer) afterViewedShot();
     // A challenge's result sheet comes back after watching the shot again.
@@ -678,7 +687,9 @@ function maybeAiTurn(): void {
   // The table was reset (new match, practice, home) since this turn began.
   const stale = () => id !== aiTurnId || match !== m;
   aiBusy = true;
+  aiLinedUp = false;
   hud.setBusy(true);
+  syncCanReplay();
   placing = false;
   hud.setPlacing(false);
   const input = {
@@ -707,31 +718,46 @@ function maybeAiTurn(): void {
     });
     const label = t.decision.choices.find((c) => c.id === choice)?.label ?? choice;
     matchHud.say(`${m.config.players[t.player]}: ${m.names(label)}`);
-    window.setTimeout(() => {
+    const decide = () => {
       if (stale()) return;
+      // Wait for the player to finish watching their shot again.
+      if (replaying) {
+        window.setTimeout(decide, 200);
+        return;
+      }
       aiBusy = false;
+      syncCanReplay();
       m.decide(choice);
       balls = m.balls.map(cloneBall);
       if (m.reracked) ballsView.setBalls(balls);
       else ballsView.showState(balls);
       hud.setBusy(false);
       syncTurn();
-    }, 1100);
+    };
+    window.setTimeout(decide, 1100);
     return;
   }
   status(`${m.config.players[t.player]} is thinking…`);
   const started = performance.now();
   void aiClient.choose(input).then(({ ai }) => {
     if (stale()) return;
-    if (phase !== 'aim') {
+    if (phase !== 'aim' && !replaying) {
       aiBusy = false;
       hud.setBusy(false);
+      syncCanReplay();
       return;
     }
     // Show the decision for a moment: place the cue ball, line up, then strike.
     const wait = Math.max(0, 700 - (performance.now() - started));
-    window.setTimeout(() => {
+    const lineUp = () => {
       if (stale()) return;
+      // Wait for the player to finish watching their shot again.
+      if (replaying || phase !== 'aim') {
+        window.setTimeout(lineUp, 200);
+        return;
+      }
+      aiLinedUp = true;
+      syncCanReplay();
       if (ai.place) placeCue(ai.place, true);
       shot = { ...ai.shot };
       hud.showSpin(ai.shot.tip, (ai.shot.elevation * 180) / Math.PI);
@@ -748,10 +774,13 @@ function maybeAiTurn(): void {
           return;
         }
         aiBusy = false;
+        aiLinedUp = false;
+        syncCanReplay();
         strike(ai.shot, ai.decl, 0.5);
       };
       window.setTimeout(go, 900);
-    }, wait);
+    };
+    window.setTimeout(lineUp, wait);
   });
 }
 
@@ -788,21 +817,31 @@ function replay(): void {
     viewShot(viewer.i, true);
     return;
   }
-  if (!last || phase !== 'aim') return;
-  balls = last.before.map(cloneBall);
+  // During the computer's turn (while it thinks) the player can watch their own last shot.
+  const duringAi = aiBusy && aiTurn();
+  if (duringAi && (aiLinedUp || replaying)) return;
+  const src = duringAi ? lastMine : last;
+  if (!src || phase !== 'aim') return;
+  balls = src.before.map(cloneBall);
   ballsView.showState(balls);
-  shot = structuredClone(last.shot);
-  pending = { result: last.result, ms: 0 };
+  shot = structuredClone(src.shot);
+  pending = { result: src.result, ms: 0 };
   replaying = true;
+  syncCanReplay();
   hud.setBusy(true);
   // The shooter takes the shot again: down on it for a moment, then the stroke.
-  replayShooter = last.shooter;
+  replayShooter = src.shooter;
   phase = 'striking';
   strikeT = -REPLAY_PREROLL;
   pull = 0.5;
   cueView.group.visible = true;
   placePlayers();
   dirty = true;
+}
+
+/** Keeps Replay usable while the computer thinks, when there is a shot of the player's to watch. */
+function syncCanReplay(): void {
+  hud.setReplayWhileBusy(aiBusy && !aiLinedUp && !replaying && lastMine !== null && aiTurn());
 }
 
 function undo(): void {
