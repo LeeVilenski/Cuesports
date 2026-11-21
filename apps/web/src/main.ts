@@ -2013,7 +2013,30 @@ menu.open('home');
 resize();
 requestAnimationFrame(frame);
 
-registerSW({ immediate: true });
+// Updates wait for the player (an automatic reload could land mid-frame); once everything is
+// cached the home screen says the game works offline.
+let offlineReady = false;
+const updateSW = registerSW({
+  immediate: true,
+  onOfflineReady() {
+    offlineReady = true;
+    menu.setStatus({ offline: true });
+  },
+  onNeedRefresh() {
+    menu.setStatus({ offline: offlineReady, update: () => void updateSW(true) });
+  },
+  onRegisteredSW(_url, reg) {
+    // An installed copy that already works offline reports nothing new: say so from the cache.
+    if (reg?.active && navigator.serviceWorker.controller) {
+      offlineReady = true;
+      menu.setStatus({ offline: true });
+    }
+    // Check for a new version now and then while the game stays open.
+    if (reg) setInterval(() => void reg.update().catch(() => {}), 60 * 60 * 1000);
+  },
+});
+// Ask the browser not to clear saved matches, replays and career progress under storage pressure.
+void navigator.storage?.persist?.().catch(() => false);
 
 // Exposed for automated smoke tests.
 (window as unknown as { __cuesports: unknown }).__cuesports = {

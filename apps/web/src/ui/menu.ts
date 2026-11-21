@@ -347,7 +347,23 @@ export class Menu {
         h('button', { className: 'ubtn', onclick: () => this.go('help') }, icon('help'), 'How to play'),
         h('button', { className: 'ubtn', onclick: () => this.go('settings') }, icon('settings'), 'Settings'),
       ),
+      this.status,
     );
+  }
+
+  /** The line under the home screen: offline readiness, or a waiting update. */
+  private status = h('div', { className: 'app-status', role: 'status' });
+
+  setStatus(s: { offline?: boolean; update?: () => void }): void {
+    this.status.replaceChildren();
+    if (s.update) {
+      this.status.append(
+        h('span', {}, 'A new version is ready.'),
+        h('button', { className: 'link-btn', onclick: s.update }, 'Restart to update'),
+      );
+    } else if (s.offline) {
+      this.status.append(h('span', { className: 'dot' }), h('span', {}, 'Available offline'));
+    }
   }
 
   private play(): HTMLElement {
