@@ -26,13 +26,16 @@ export class Sound {
   private loop: AudioBufferSourceNode | null = null;
   private loopKind: AmbienceKind | null = null;
   private wanted: AmbienceKind | null = null;
+  /** The app is in the background: everything stays silent until it comes back. */
+  private hidden = false;
 
   constructor(private settings: SoundSettings = DEFAULT_SOUND) {}
 
   /** Call from a user gesture. Creates the context and the sounds on the first call. */
   unlock(): void {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') void this.ctx.resume();
+      // 'interrupted' is iOS's own state after a call or a trip to the background.
+      if (this.ctx.state !== 'running' && !this.hidden) void this.ctx.resume().catch(() => {});
       return;
     }
     const Ctx =
@@ -57,6 +60,24 @@ export class Sound {
     }
     this.apply();
     if (this.wanted) this.setAmbience(this.wanted);
+  }
+
+  /**
+   * The app went to the background or came back. Suspending the context stops everything
+   * (the room loop included) where it is; coming back picks up from there. Where a browser
+   * won't resume without a gesture, the next touch does it through unlock().
+   */
+  setHidden(hidden: boolean): void {
+    if (hidden === this.hidden) return;
+    this.hidden = hidden;
+    const ctx = this.ctx;
+    if (!ctx || ctx.state === 'closed') return;
+    if (hidden) {
+      // Cut the shot's sounds rather than leave them to finish on return.
+      for (const v of this.voices) v.src.stop();
+      this.voices = [];
+      void ctx.suspend().catch(() => {});
+    } else void ctx.resume().catch(() => {});
   }
 
   get ready(): boolean {
