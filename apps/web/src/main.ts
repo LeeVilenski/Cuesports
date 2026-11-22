@@ -1229,6 +1229,11 @@ function loadSound(): SoundSettings {
 // Browsers only start audio from a gesture: the first touch, click or key.
 for (const type of ['pointerdown', 'keydown'] as const)
   window.addEventListener(type, () => sound.unlock(), { capture: true, passive: true });
+// Go quiet when the app is minimised, the screen locks or another tab takes over; mobile
+// browsers otherwise keep the room sound playing in the background.
+document.addEventListener('visibilitychange', () => sound.setHidden(document.hidden));
+window.addEventListener('pagehide', () => sound.setHidden(true));
+window.addEventListener('pageshow', () => sound.setHidden(document.hidden));
 
 /** The room tone: the career venue's, or a quiet club. */
 function roomFor(config: MatchConfig | null): AmbienceKind {
