@@ -252,6 +252,8 @@ let cueStart = { x: 0, y: 0 };
 let phase: Phase = 'aim';
 let shot: ShotInput = { ball: 'cue', aim: 0, elevation: 0, tip: { a: 0, b: 0 }, speed: 3 };
 let pull = 0;
+/** True while the power bar is held: the table ignores aim input so the line can't drift. */
+let stroking = false;
 let strikeT = 0;
 let pending: { result: ShotResult; ms: number } | null = null;
 let playing: ShotResult | null = null;
@@ -914,9 +916,18 @@ const hud = new Hud({
   },
   onPull: (p) => {
     pull = p ?? 0;
+    stroking = p !== null;
+    // Whatever the table was doing (a drag, a pending tap) stops when the stroke starts.
+    if (stroking) {
+      topGesture = null;
+      for (const id of pointers.keys()) ignored.add(id);
+    }
     dirty = true;
   },
-  onShoot: shoot,
+  onShoot: (p) => {
+    stroking = false;
+    shoot(p);
+  },
   onFineAim: (dx) => {
     shot.aim -= dx * 0.00012;
     teach({ type: 'aim', amount: dx * 0.00012 });
@@ -1787,6 +1798,25 @@ hud.setCamera('aim');
 
 const pointers = new Map<number, { x: number; y: number; t: number }>();
 let pinch: { d: number; y: number } | null = null;
+/** Fingers that no longer steer anything (left over from a pinch, or down when a stroke began). */
+const ignored = new Set<number>();
+/**
+ * Top-down aim gesture. A quick tap sets the aim at the tapped point (on release, so a finger
+ * that turns into a pinch or a drag never snaps the line); a drag turns the aim relative to
+ * where it already was, by how far the finger swings around the cue ball.
+ */
+let topGesture: {
+  id: number;
+  x: number;
+  y: number;
+  t: number;
+  /** Set once the finger has moved far enough to count as a drag. */
+  dragging: boolean;
+  /** Angle of the finger around the cue ball at the last move (radians). */
+  angle: number | null;
+} | null = null;
+const TAP_SLOP_PX = 10;
+const TAP_MAX_MS = 350;
 const raycaster = new Raycaster();
 const ndc = new Vector2();
 
@@ -1799,6 +1829,13 @@ function tablePoint(clientX: number, clientY: number): { x: number; y: number } 
   if (!hit) return null;
   const p = toPhysics(hit);
   return { x: p.x, y: p.y };
+}
+
+/** Angle of table point p around the cue ball, or null when p is on the ball itself. */
+function angleFromCue(p: { x: number; y: number }): number | null {
+  const cue = cueBall();
+  if (!cue || Math.hypot(p.x - cue.pos.x, p.y - cue.pos.y) < cue.radius * 1.2) return null;
+  return Math.atan2(p.y - cue.pos.y, p.x - cue.pos.x);
 }
 
 function aimAtPoint(p: { x: number; y: number }): void {
@@ -1815,16 +1852,30 @@ canvas.addEventListener('pointerdown', (e) => {
   if (rig.mode === 'free' || aiTurn()) return;
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: e.timeStamp });
-  if (pointers.size === 2) {
+  if (stroking) {
+    // A palm or second finger on the table while pulling power must not touch the aim.
+    ignored.add(e.pointerId);
+  } else if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
     pinch = { d: Math.hypot(a!.x - b!.x, a!.y - b!.y), y: (a!.y + b!.y) / 2 };
+    topGesture = null;
+  } else if (pointers.size > 2) {
+    topGesture = null;
   } else if (phase === 'aim') {
     const p = tablePoint(e.clientX, e.clientY);
     if (picking) {
       if (p) pickAt(p);
     } else if (p && placing && !match) arrangeAt(p);
     else if (p && placing) placeCue(p);
-    else if (p && rig.mode === 'top') aimAtPoint(p);
+    else if (p && rig.mode === 'top')
+      topGesture = {
+        id: e.pointerId,
+        x: e.clientX,
+        y: e.clientY,
+        t: e.timeStamp,
+        dragging: false,
+        angle: null,
+      };
   }
   dirty = true;
 });
@@ -1848,14 +1899,31 @@ canvas.addEventListener('pointermove', (e) => {
     dirty = true;
     return;
   }
-  if (phase !== 'aim' || picking) return;
+  if (phase !== 'aim' || picking || stroking || ignored.has(e.pointerId)) return;
   if (placing) {
     const p = tablePoint(e.clientX, e.clientY);
     if (p && grabbed) moveBall(grabbed, p);
     else if (p && !removing) placeCue(p);
   } else if (rig.mode === 'top') {
+    const g = topGesture;
+    if (!g || g.id !== e.pointerId) return;
+    if (!g.dragging) {
+      if (Math.hypot(cur.x - g.x, cur.y - g.y) < TAP_SLOP_PX) return;
+      g.dragging = true;
+    }
     const p = tablePoint(e.clientX, e.clientY);
-    if (p) aimAtPoint(p);
+    const angle = p ? angleFromCue(p) : null;
+    if (angle === null) return void (g.angle = null);
+    if (g.angle !== null) {
+      // Turn by the finger's swing around the cue ball: the farther out, the finer. Slow drags
+      // are finer still, as in the aim cam.
+      const swing = Math.atan2(Math.sin(angle - g.angle), Math.cos(angle - g.angle));
+      const speed = Math.hypot(cur.x - prev.x, cur.y - prev.y) / Math.max(1, cur.t - prev.t);
+      const gain = Math.min(1, Math.max(0.25, speed / 1.2));
+      shot.aim += swing * gain;
+      teach({ type: 'aim', amount: swing * gain });
+    }
+    g.angle = angle;
   } else {
     // Aim cam: sideways drag turns the aim. Slow drags are much finer than fast ones.
     const dx = cur.x - prev.x;
@@ -1869,13 +1937,37 @@ canvas.addEventListener('pointermove', (e) => {
   dirty = true;
 });
 
-const endPointer = (e: PointerEvent): void => {
+const endPointer = (e: PointerEvent, tap: boolean): void => {
+  const g = topGesture;
+  if (g && g.id === e.pointerId) {
+    topGesture = null;
+    // A clean tap (short, barely moved, nothing else going on) sets the aim at that point.
+    const still = Math.hypot(e.clientX - g.x, e.clientY - g.y) < TAP_SLOP_PX;
+    if (
+      tap &&
+      !g.dragging &&
+      still &&
+      e.timeStamp - g.t < TAP_MAX_MS &&
+      !stroking &&
+      phase === 'aim' &&
+      rig.mode === 'top'
+    ) {
+      const p = tablePoint(e.clientX, e.clientY);
+      if (p) aimAtPoint(p);
+      dirty = true;
+    }
+  }
   pointers.delete(e.pointerId);
+  ignored.delete(e.pointerId);
   grabbed = null;
-  if (pointers.size < 2) pinch = null;
+  if (pointers.size < 2 && pinch) {
+    pinch = null;
+    // The finger still down after a pinch would otherwise jump straight into aiming.
+    for (const id of pointers.keys()) ignored.add(id);
+  }
 };
-canvas.addEventListener('pointerup', endPointer);
-canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('pointerup', (e) => endPointer(e, true));
+canvas.addEventListener('pointercancel', (e) => endPointer(e, false));
 canvas.addEventListener(
   'wheel',
   (e) => {
