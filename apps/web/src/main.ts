@@ -72,7 +72,6 @@ import {
 import { openStore } from './game/store';
 import { cuesFor, due, type SoundCue } from './audio/cues';
 import { DEFAULT_SOUND, Sound, type SoundSettings } from './audio/sound';
-import type { AmbienceKind } from './audio/synth';
 import { addMatch, emptyStats, percent } from './game/stats';
 import {
   careerEvent,
@@ -84,7 +83,6 @@ import {
   REWARDS,
   roundName,
   saveCareer,
-  VENUES,
   type CareerState,
 } from './game/career';
 import { loadProfile, profilePreset, saveProfile, type Profile } from './game/profile';
@@ -348,7 +346,6 @@ function setGame(def: GameDef): void {
   setTable(def);
   pocketGlow.visible = false;
   rerack();
-  sound.setAmbience(roomFor(null));
 }
 
 function setTable(def: GameDef): void {
@@ -444,7 +441,6 @@ function startMatch(config: MatchConfig): void {
   replayBar.show(null);
   app.classList.remove('viewing');
   match = new Match(config, (Math.random() * 1e9) | 0, clothSpeed);
-  sound.setAmbience(roomFor(config));
   // Each player gets their own look, chosen from their name.
   buildPlayers();
   matchHud.showResult(null);
@@ -1230,17 +1226,10 @@ function loadSound(): SoundSettings {
 for (const type of ['pointerdown', 'keydown'] as const)
   window.addEventListener(type, () => sound.unlock(), { capture: true, passive: true });
 // Go quiet when the app is minimised, the screen locks or another tab takes over; mobile
-// browsers otherwise keep the room sound playing in the background.
+// browsers otherwise keep the music playing in the background.
 document.addEventListener('visibilitychange', () => sound.setHidden(document.hidden));
 window.addEventListener('pagehide', () => sound.setHidden(true));
 window.addEventListener('pageshow', () => sound.setHidden(document.hidden));
-
-/** The room tone: the career venue's, or a quiet club. */
-function roomFor(config: MatchConfig | null): AmbienceKind {
-  const e = config?.career && careerEvent(config.career.event);
-  const kind = e && VENUES.find((v) => v.id === e.venue)?.kind;
-  return kind ? (kind.toLowerCase() as AmbienceKind) : 'club';
-}
 
 // ---------------------------------------------------------------------------------------------
 // Career

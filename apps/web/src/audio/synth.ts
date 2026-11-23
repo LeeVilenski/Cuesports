@@ -3,10 +3,9 @@ import type { SoundKind } from './cues';
 /**
  * The sounds, made from scratch rather than recorded: decaying tones for the ring of the balls,
  * filtered noise for contact, low thumps for cushions and pockets. Each returns mono samples at
- * the given rate, peak at most 1. Seeded, so every click sounds the same.
+ * the given rate, peak at most 1. Seeded, so every click sounds the same. The recordings in
+ * public/sounds replace the click, strike and drop once loaded; these stand in until then.
  */
-
-export type AmbienceKind = 'pub' | 'club' | 'hall' | 'arena';
 
 function noise(seed: number): () => number {
   let s = seed;
@@ -103,37 +102,4 @@ export function synth(kind: SoundKind, rate: number): Float32Array {
       return normalise(x, 0.8);
     }
   }
-}
-
-/**
- * A few seconds of room tone to loop: low brown noise for a quiet room, with a murmur of voices
- * (noise that swells and fades) for the pub and a crowd for the arena.
- */
-export function ambience(kind: AmbienceKind, rate: number): Float32Array {
-  const seconds = 6;
-  const x = new Float32Array(seconds * rate);
-  const r = noise(11);
-  let brown = 0;
-  const crowd = kind === 'arena' ? 1 : kind === 'pub' ? 0.6 : kind === 'club' ? 0.25 : 0.1;
-  let band = 0;
-  let band2 = 0;
-  for (let i = 0; i < x.length; i++) {
-    const t = i / rate;
-    brown = (brown + 0.02 * r()) * 0.995;
-    // Voices: noise band-passed around speech frequencies, swelling slowly.
-    band += 0.25 * (r() - band);
-    band2 += 0.25 * (band - band2);
-    const swell =
-      0.6 + 0.4 * Math.sin((2 * Math.PI * t) / seconds) * Math.sin((2 * Math.PI * 3 * t) / seconds + 1);
-    x[i] = brown * 3 + crowd * (band - band2) * 2.5 * swell;
-  }
-  // Fade the ends together so the loop doesn't click.
-  const fade = Math.floor(0.05 * rate);
-  for (let i = 0; i < fade; i++) {
-    const k = i / fade;
-    const a = x[i]!;
-    const b = x[x.length - fade + i]!;
-    x[i] = a * k + b * (1 - k);
-  }
-  return normalise(x.subarray(0, x.length - fade).slice(), 0.5);
 }

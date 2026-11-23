@@ -41,7 +41,7 @@ describe('sound cues', () => {
 
 describe('synthesised sounds', () => {
   it('are short, clean and loud enough', async () => {
-    const { synth, ambience } = await import('./synth');
+    const { synth } = await import('./synth');
     for (const kind of ['click', 'strike', 'miscue', 'cushion', 'jaw', 'drop'] as const) {
       const x = synth(kind, 44100);
       expect(x.length).toBeGreaterThan(1000);
@@ -55,11 +55,6 @@ describe('synthesised sounds', () => {
       expect(peak).toBeLessThanOrEqual(1);
       // Each sound dies away by its end.
       expect(Math.abs(x[x.length - 1]!)).toBeLessThan(0.05);
-    }
-    for (const kind of ['pub', 'club', 'hall', 'arena'] as const) {
-      const a = ambience(kind, 22050);
-      expect(a.length).toBeGreaterThan(22050 * 5);
-      expect(a.every((v) => Math.abs(v) <= 0.5 + 1e-6)).toBe(true);
     }
   });
 });

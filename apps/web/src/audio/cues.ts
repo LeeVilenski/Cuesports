@@ -37,8 +37,8 @@ export function cueFor(e: PhysicsEvent): SoundCue | null {
       };
     case 'ball': {
       const gain = loudness(e.speed, 6);
-      // Harder hits ring a little higher.
-      return gain ? { kind: 'click', t: e.t, gain, pitch: 0.9 + Math.min(0.3, e.speed * 0.05) } : null;
+      // Harder hits ring a touch higher (real balls barely change pitch; this is subtle).
+      return gain ? { kind: 'click', t: e.t, gain, pitch: 0.96 + Math.min(0.08, e.speed * 0.02) } : null;
     }
     case 'cushion': {
       if (e.kind === 'pocket') return null;
