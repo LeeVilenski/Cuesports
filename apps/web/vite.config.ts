@@ -27,7 +27,20 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,woff2}'],
+        // The sound effects are small and precached; the music (megabytes) is cached as each
+        // track is first played, so it works offline from then on.
+        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,woff2,wav}'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.includes('/music/') && url.pathname.endsWith('.mp3'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'music',
+              expiration: { maxEntries: 12 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+        ],
         navigateFallback: '/index.html',
         // The physics lab is a separate app under /lab/; the game's service worker must not
         // answer its navigations with the game's index.html.

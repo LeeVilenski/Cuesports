@@ -1062,7 +1062,7 @@ export class Menu {
     );
   }
 
-  /** Effects and room-tone levels, saved as they change. */
+  /** Effects and music levels, saved as they change. */
   private soundFields(): HTMLElement[] {
     const s = this.cb.sound();
     const levels = [
@@ -1074,14 +1074,14 @@ export class Menu {
     // The nearest level to a saved value.
     const near = (v: number) =>
       levels.reduce((a, b) => (Math.abs(Number(b.value) - v) < Math.abs(Number(a.value) - v) ? b : a)).value;
-    const set = (k: 'effects' | 'ambience') => (v: string) => {
+    const set = (k: 'effects' | 'music') => (v: string) => {
       s[k] = Number(v);
       s.muted = false;
       this.cb.onSound({ ...s });
     };
     return [
       this.field('Effects', segmented('Sound effects', levels, near(s.effects), set('effects')).el),
-      this.field('Room', segmented('Room sound', levels, near(s.ambience), set('ambience')).el),
+      this.field('Music', segmented('Music', levels, near(s.music), set('music')).el),
     ];
   }
 
