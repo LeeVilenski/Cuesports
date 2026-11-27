@@ -267,6 +267,30 @@ export interface CareerRun {
   /** Your current round (0 = first), or the round you went out in. */
   round: number;
   status: 'playing' | 'won' | 'out';
+  /** Old Joe's target: matches he expects you to win in this event (see agent.ts). */
+  target?: number;
+  /** Old Joe's talk before the event, and after the last match you played in it. */
+  talk?: string[];
+  /** His verdict once the event is over for you. */
+  debrief?: string[];
+}
+
+/** A message in the career inbox. */
+export interface CareerMessage {
+  id: string;
+  from: string;
+  subject: string;
+  body: string;
+  read: boolean;
+}
+
+/** One finished event, for the timeline and Old Joe's memory. */
+export interface CareerLogEntry {
+  event: string;
+  /** Matches won. */
+  reached: number;
+  target: number;
+  champion: boolean;
 }
 
 export interface CareerState {
@@ -276,11 +300,28 @@ export interface CareerState {
   /** Your record against each player: [won, lost]. */
   h2h: Record<string, [number, number]>;
   run: CareerRun | null;
+  /** Old Joe's introduction has been seen. */
+  introSeen: boolean;
+  /** Old Joe's confidence in you, 0–100. */
+  confidence: number;
+  /** Newest first. */
+  inbox: CareerMessage[];
+  /** Finished events, oldest first. */
+  log: CareerLogEntry[];
 }
 
 export const YOU = 'you';
 
-export const newCareer = (): CareerState => ({ best: {}, unlocked: [], h2h: {}, run: null });
+export const newCareer = (): CareerState => ({
+  best: {},
+  unlocked: [],
+  h2h: {},
+  run: null,
+  introSeen: false,
+  confidence: 50,
+  inbox: [],
+  log: [],
+});
 
 export const rounds = (e: CareerEvent): number => e.raceTo.length;
 
@@ -371,7 +412,7 @@ export function recordMatch(state: CareerState, won: boolean, seed: number): Car
   };
   const unlocked =
     champion && !state.unlocked.includes(e.reward) ? [...state.unlocked, e.reward] : state.unlocked;
-  return { best, unlocked, h2h, run: next };
+  return { ...state, best, unlocked, h2h, run: next };
 }
 
 /** "Final", "Semi-final", "Quarter-final", "Round 1" for round r of an event. */
@@ -396,8 +437,16 @@ const KEY = 'cuesports.career';
 
 export function loadCareer(): CareerState {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return newCareer();
+    return parseCareer(localStorage.getItem(KEY));
+  } catch {
+    return newCareer();
+  }
+}
+
+/** A saved career, with anything an older save lacks (Old Joe, the inbox) at its start. */
+export function parseCareer(raw: string | null): CareerState {
+  if (!raw) return newCareer();
+  try {
     return { ...newCareer(), ...(JSON.parse(raw) as Partial<CareerState>) };
   } catch {
     return newCareer();

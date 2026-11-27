@@ -1,6 +1,6 @@
 # Career mode v2: plan
 
-Status: planned. Nothing here is built yet. The current career (`apps/web/src/game/career.ts`) is the v1
+Status: phase 1 (Old Joe and the hub) is built; phases 2–6 are planned. The current career (`apps/web/src/game/career.ts`) is the v1
 this replaces.
 
 ## Where we are
@@ -29,8 +29,8 @@ winning one opens the next tier and unlocks a cosmetic. It works, but:
 
 ## Decisions (agreed)
 
-- **Agent:** a single recurring character, the agent, who also explains the career and training. There is
-  no separate coach.
+- **Agent:** a single recurring character, **Old Joe**, who also explains the career and training. There
+  is no separate coach. He's an old-school fixer who has seen it all, with a soft spot for you.
 - **Starting guide:** the cue line to the contact point (the ghost ball) only. There's no object-ball line
   and no cue-ball line after contact. Vision grows the object-ball line first, then the cue-ball line.
 - **Specialising:** you can be on up to two tours. At the end of every season you can keep them, drop one or
@@ -287,8 +287,11 @@ apps/web/src/game/career/
 
 Each phase ships on its own and leaves the game playable.
 
-1. **The agent and the hub.** The tabbed hub on top of the v1 events: the intro, pre- and post-event talks,
-   the inbox, the walk-on card and the post-match strip.
+1. **The agent and the hub.** _Built._ The tabbed hub (Home, Events, Inbox, Profile) on top of the v1
+   events: Old Joe's intro, his booking each time you're free, a target and talk before each event, a line
+   after each match (also in the result sheet), his verdict at the end, confidence that moves with results
+   against his targets (and keeps you a tier lower when it's low), inbox news (first title, new venues,
+   rivals beaten, form talks), the walk-on card and a career timeline. Code: `game/agent.ts`.
 2. **Attributes and the guide.** Ratings, XP, levels, skill points, familiarity, the career shot tuning
    (Vision lines, Cueing, Spin, Cushion craft, Touch), training drills.
 3. **Pressure.** Pressure balls per ruleset, the shrinking guide and wobble, Nerve and the HUD cue.
@@ -299,7 +302,3 @@ Each phase ships on its own and leaves the game playable.
 6. **Flavour.** The shop and cues with stats, coaching, sponsors, rivals per tour, nicknames, venues (pub,
    club, hall, TV arena).
 
-## Open questions
-
-- The agent's name and personality (proposal: a fictional, slightly old-school fixer with a soft spot for
-  you).
