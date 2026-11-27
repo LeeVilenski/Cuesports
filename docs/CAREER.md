@@ -45,6 +45,10 @@ winning one opens the next tier and unlocks a cosmetic. It works, but:
 - **Pressure:** guide lines shrink (by up to about 60% at low Nerve) and you get a small aim wobble, both
   scaled by the stakes.
 - **Pace:** 4–6 seasons of about 12 weeks from your first pub event to the top of a tour.
+- **Guide setting:** in career matches the guide comes from Vision and pressure, and the "Aiming guide"
+  setting is ignored. The setting still applies everywhere else.
+- **Players cross tours:** a shared roster where top names also play other tours at a lower level (see
+  [Crossover players](#crossover-players)).
 
 ## The path (player's view)
 
@@ -123,6 +127,31 @@ Example season 1:
   away, or start on its feeder circuit. You keep your card on a tour you stay on.
 - Brackets are seeded with byes where needed, in fields of 16–64. AI-only matches use a fast statistical
   sim.
+
+### Crossover players
+
+There is one shared roster of fictional players, not a separate field per tour. Each player has a **home
+tour** with their full level, and can also play some events on other tours, where they're weaker. How much
+weaker comes from a crossover table (home tour → other tour, as a level offset):
+
+| Home tour ↓ / plays on → | Pool | Snooker | Blackball | Billiards & Carom | Pyramid |
+| --- | --- | --- | --- | --- | --- |
+| **Snooker** | −1.0 (mid-ranked) | — | −0.8 | −1.0 | −1.2 |
+| **Pool** | — | −1.8 (low-ranked) | −0.6 | −1.5 | −1.0 |
+| **Blackball** | −0.8 | −1.6 | — | −1.6 | −1.2 |
+| **Billiards & Carom** | −1.2 | −0.8 | −1.0 | — | −1.0 |
+| **Pyramid** | −0.8 | −1.0 | −1.0 | −1.2 | — |
+
+- So the snooker world number 1 turns up on the Pool Tour as a solid mid-table player, a top pool player
+  scrapes around the bottom of the Snooker Tour, and the best billiards players are dangerous anywhere,
+  above all on the Snooker Tour.
+- Each player has one or two **side tours** (seeded from their style), plays a few of those tours' events a
+  season, and earns ranking money there like anyone else. Their rank on a side tour is a real one, earned
+  from their results.
+- This gives you familiar faces, and rivals, on every tour you join, and a "you vs the snooker champion"
+  moment in a pool major.
+- The crossover numbers are starting points, tuned with `quickSim` so the side-tour rankings come out
+  roughly where the table says.
 
 ### 4. Player attributes
 
@@ -274,6 +303,3 @@ Each phase ships on its own and leaves the game playable.
 
 - The agent's name and personality (proposal: a fictional, slightly old-school fixer with a soft spot for
   you).
-- Whether the career overrides the "Aiming guide" setting (proposal: yes, in career matches the guide comes
-  from Vision, and the setting applies everywhere else).
-- Whether AI players can move between tours over the seasons (proposal: later).
