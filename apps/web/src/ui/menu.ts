@@ -1667,7 +1667,7 @@ export class Menu {
         h('h3', {}, 'Aiming'),
         opt('guide', 'Aiming guide'),
         opt('squirt', 'Guide allows for squirt'),
-        opt('cushionLine', '3-cushion: show the cue ball round the cushions'),
+        opt('cushionLine', '3-cushion: longer guide, to the first cushion and off it'),
         this.field('Stroke', stroke.el),
         h('h3', {}, 'Camera'),
         this.field('During shots', shotCam.el),

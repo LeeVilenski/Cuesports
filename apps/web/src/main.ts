@@ -288,7 +288,7 @@ const REPLAY_PREROLL = 0.9;
 let showGuide = true;
 /** The guide follows the cue ball's real launch direction, including squirt from side. */
 let guideSquirt = true;
-/** 3-cushion: the guide follows the cue ball round the cushions. */
+/** 3-cushion: the guide runs on to the first cushion and shows the rebound off it. */
 let cushionLine = true;
 let shotCamMode: ShotCameraMode = 'cinematic';
 let shotCam: ShotCamera | null = null;
@@ -2410,8 +2410,8 @@ function frame(now: number): void {
       : null;
   hud.setLimits(tuning);
   const speed = powerToSpeed(hud.power, game.maxSpeed);
-  // 3-cushion is hard to read without seeing the cue ball round the table: a line for it, in the
-  // career too (whatever your Vision), unless it is switched off.
+  // 3-cushion is hard to read without a longer line: on to the first cushion and a stub of the
+  // rebound, in the career too (whatever your Vision), unless it is switched off.
   const caromPath =
     guide && cushionLine && game.id === 'three-cushion' && !(match && aiTurn())
       ? cushionPath(game.table, balls, guide, cueId, shot.tip.b, speed)

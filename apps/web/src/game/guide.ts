@@ -212,10 +212,11 @@ export function careerShape(
 }
 
 /**
- * The cue ball's path round the cushions, for 3-cushion: from the first object ball (leaving as
- * screw, stun or follow allows) or from the first cushion, mirrored off up to `cushions` more
- * cushions, until it reaches another ball or `len` metres. Mirroring ignores side and the
- * cushion's grip, so it is a guide, not a promise.
+ * A longer guide for 3-cushion: the cue ball's path to the first cushion, and a short stub of the
+ * rebound off it (`tail` metres). After a hit on the first ball it leaves as screw, stun or follow
+ * allows and runs to the cushion; on a cushion-first shot the guide already reaches the cushion, so
+ * only the stub is added. The second and third cushions are yours to judge. Mirroring ignores side
+ * and the cushion's grip, so it's a guide, not a promise. A ball in the way ends it.
  */
 export function cushionPath(
   table: TableSpec,
@@ -224,8 +225,7 @@ export function cushionPath(
   cueId: string,
   tipB: number,
   speed: number,
-  cushions = 3,
-  len = 6,
+  tail = 0.3,
 ): Vec2[] {
   const r = g.radius;
   let from: Vec2;
@@ -259,8 +259,10 @@ export function cushionPath(
   const hl = table.playfield.length / 2 - r;
   const hw = table.playfield.width / 2 - r;
   const pts: Vec2[] = [from];
-  let left = len;
-  for (let k = 0; k <= cushions && left > 1e-4; k++) {
+  // After a ball: on to the first cushion, then the stub. Cushion-first: just the stub.
+  const cushionFirst = skip === null;
+  let left = cushionFirst ? tail : 10;
+  for (let k = 0; k <= (cushionFirst ? 0 : 1) && left > 1e-4; k++) {
     const tx = dir.x > 1e-9 ? (hl - from.x) / dir.x : dir.x < -1e-9 ? (-hl - from.x) / dir.x : Infinity;
     const ty = dir.y > 1e-9 ? (hw - from.y) / dir.y : dir.y < -1e-9 ? (-hw - from.y) / dir.y : Infinity;
     const wall = Math.max(0, Math.min(tx, ty, left));
@@ -282,7 +284,7 @@ export function cushionPath(
     }
     from = { x: from.x + dir.x * wall, y: from.y + dir.y * wall };
     pts.push(from);
-    left -= wall;
+    left = k === 0 && !cushionFirst ? tail : left - wall;
     dir = tx < ty ? { x: -dir.x, y: dir.y } : { x: dir.x, y: -dir.y };
   }
   return pts;

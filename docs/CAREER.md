@@ -47,9 +47,9 @@ winning one opens the next tier and unlocks a cosmetic. It works, but:
 - **Pace:** 4–6 seasons of about 12 weeks from your first pub event to the top of a tour.
 - **Guide setting:** in career matches the guide comes from Vision and pressure, and the "Aiming guide"
   setting is ignored. The setting still applies everywhere else.
-- **3-cushion guide:** a line for the cue ball round the cushions, on by default and switchable in
-  Settings. It's shown in career 3-cushion too, whatever your Vision, because the game is close to
-  unplayable without it.
+- **3-cushion guide:** a longer line for the cue ball, to the first cushion and a short stub of the
+  rebound off it (the second and third cushions are yours to judge). On by default and switchable in
+  Settings. It's shown in career 3-cushion too, whatever your Vision.
 - **Players cross tours:** a shared roster where top names also play other tours at a lower level (see
   [Crossover players](#crossover-players)).
 
