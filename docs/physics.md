@@ -72,6 +72,12 @@ These are for tuning in the lab and for playtests in M2:
   off (`backRestitution: 0.15`) instead of dropping on contact. Measured straight-in tolerance on a snooker
   corner (sideways offset that still drops, from 0.9 m): ±25 mm slow, ±23 medium, ±8 firm, ±5 very hard,
   against ±33 at all paces for a 9-ball corner. Still to judge in playtesting.
+- **Snooker corners reject cushion-first balls (playtest).** With parallel (135°) facings a ball that hit the
+  cushion up to 20 cm before a corner dropped at any pace, just like a 9-ball table. The snooker corner
+  facings now close in towards the back (`jawAngle: 142`): a ball rolled into the cushion at 5° within
+  20 cm of the jaw drops at a slow pace but rattles out from about 2 m/s, and at 8° it rattles out at
+  anything above slow unless it meets the cushion right at the jaw. Straight-in tolerance: ±22 mm slow,
+  ±20 medium, ±4 firm, ±2 very hard. English pool corners are unchanged (135°).
 - **Pocket pace sensitivity is weak.** Off-line balls correctly rattle out of tight pockets, but a ball rolled
   down the rail into a corner drops at almost any pace. Real tight pockets reject fast rail shots more often.
   The drop depth (`DROP_DEPTH` in `simulate.ts`), shelf depth and facing angles are the levers.

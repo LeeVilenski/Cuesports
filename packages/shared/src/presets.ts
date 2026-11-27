@@ -99,9 +99,12 @@ export const SNOOKER_12FT: TableSpec = {
     SNOOKER_W,
     // Tight, lively snooker pockets: a smaller knuckle that throws back balls clipping the jaw, and a
     // soft pocket back, so firm pots that catch a jaw rattle out (playtest: they were far too easy).
+    // The corner facings close in towards the back (142°, not parallel at 135°): a ball that hits
+    // the cushion just before the pocket meets the far facing square-on and is thrown back out
+    // unless it is going slowly (playtest: cushion-first pots dropped at any pace, like pool).
     {
       mouthWidth: 0.086,
-      jawAngle: 135,
+      jawAngle: 142,
       jawRadius: 0.015,
       shelfDepth: 0.02,
       dropSag: 0.01,

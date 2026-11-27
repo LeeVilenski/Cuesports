@@ -207,6 +207,37 @@ describe('pockets', () => {
   });
 });
 
+describe('snooker corners reject balls that hit the cushion first', () => {
+  const t = SNOOKER_12FT;
+  /** Rolls a ball into the top cushion at `deg`°, meeting it `d` before the near jaw of the corner. */
+  const railFirst = (table: TableSpec, deg: number, d: number, speed: number) => {
+    const R = table.balls.cue.radius;
+    const hw = table.playfield.width / 2;
+    const p = table.pockets.find((x) => x.id === 'top-right')!;
+    const tipX = table.playfield.length / 2 - p.mouthWidth / Math.SQRT2;
+    const th = (deg * Math.PI) / 180;
+    const start = { x: tipX - d - 0.9 * Math.cos(th), y: hw - R - 0.9 * Math.sin(th) };
+    const r = simulate(table, [cueAt(table, start.x, start.y)], shot({ aim: th, speed, tip: { a: 0, b: 0.3 } }), {
+      sampleRate: 0,
+    });
+    return pocketEvents(r).length > 0;
+  };
+
+  it('takes a slow ball that catches the cushion just before the pocket', () => {
+    for (const d of [0.05, 0.1]) expect(railFirst(t, 5, d, 1), `${d} m`).toBe(true);
+  });
+
+  it('rattles out a firmer ball that hits the cushion first, where a 9-ball corner takes it', () => {
+    for (const d of [0.05, 0.1]) {
+      for (const speed of [2, 3.5]) {
+        expect(railFirst(t, 8, d, speed), `snooker ${d} m ${speed} m/s`).toBe(false);
+        expect(railFirst(AMERICAN_POOL_9FT, 8, d, speed), `9-ball ${d} m ${speed} m/s`).toBe(true);
+      }
+      expect(railFirst(t, 5, d, 3.5), `snooker 5° ${d} m`).toBe(false);
+    }
+  });
+});
+
 describe('9-ball pockets (WPA spec) take balls cut down the rail', () => {
   const t = AMERICAN_POOL_9FT;
   const R = t.balls.object.radius;
