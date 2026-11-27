@@ -46,6 +46,8 @@ export interface CareerEvent {
   reds?: 15 | 10 | 6;
   /** Billiards and carom: points to win a game (shorter than the standard for the career). */
   target?: number;
+  /** Russian Pyramid: which rules (Free when unset). */
+  pyramid?: 'free' | 'neva';
 }
 
 export const VENUES: Venue[] = [
@@ -218,6 +220,7 @@ EVENTS.push(
     venue: 'neva',
     tier: 2,
     game: 'pyramid',
+    pyramid: 'neva',
     raceTo: [2, 2, 3],
     levels: [3, 4],
     rival: 'viktor',

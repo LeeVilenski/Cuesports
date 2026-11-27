@@ -309,6 +309,26 @@ const rig = new CameraRig(canvas, game.table);
 
 /** The ball the player at the table strikes ('cue', or in billiards 'spot' for player 2). */
 let cueId = 'cue';
+/** With ball in hand, where the ball now being placed stood, to put it back if another is chosen. */
+let handHome: { id: string; pos: { x: number; y: number } } | null = null;
+
+/** How the HUD names a ball the player may strike (Free pyramid). */
+const cueLabel = (id: string): string => (id === 'pcue' ? 'coloured' : id.replace(/^p/, ''));
+
+/** Makes `id` the ball the player strikes (Free pyramid). With ball in hand, it is the one placed. */
+function chooseCueBall(id: string): void {
+  if (id === cueId) return;
+  if (placing && handHome) {
+    const moved = balls.find((b) => b.id === handHome!.id);
+    if (moved) moved.pos = { ...handHome.pos };
+  }
+  cueId = id;
+  shot.ball = id;
+  const b = cueBall();
+  handHome = b && b.state !== 'pocketed' ? { id, pos: { ...b.pos } } : null;
+  ballsView.showState(balls);
+  dirty = true;
+}
 const cueBall = (): BallState | undefined => balls.find((b) => b.id === cueId);
 
 /**
@@ -467,6 +487,8 @@ function syncTurn(): void {
   const t = match.turn;
   cueId = t.cueBall ?? 'cue';
   shot.ball = cueId;
+  const home = cueBall();
+  handHome = home && home.state !== 'pocketed' ? { id: home.id, pos: { ...home.pos } } : null;
   manualCall = null;
   manualNominate = null;
   endPick();
@@ -799,6 +821,7 @@ function maybeAiTurn(): void {
       }
       aiLinedUp = true;
       syncCanReplay();
+      chooseCueBall(ai.shot.ball);
       if (ai.place) placeCue(ai.place, true);
       shot = { ...ai.shot };
       hud.showSpin(ai.shot.tip, (ai.shot.elevation * 180) / Math.PI);
@@ -1263,6 +1286,7 @@ function startCareerMatch(): void {
     breaks: 'alternate',
     snooker: { ...DEFAULT_MATCH.snooker, reds: e.reds ?? 15 },
     ...(e.target ? { billiards: { target: e.target }, caromTarget: e.target } : {}),
+    ...(e.pyramid ? { pyramid: e.pyramid } : {}),
     ai: opp.level,
     aiAttack: o.attack,
     aiLook: o.look,
@@ -1673,7 +1697,7 @@ hud.placeInTop(matchHud.board);
 // Calling a shot / nominating a ball by tapping the table in the top-down view
 
 interface Pick {
-  kind: 'call' | 'nominate';
+  kind: 'call' | 'nominate' | 'cue';
   /** Balls that may be picked. */
   candidates: string[];
   ball: string | null;
@@ -1715,6 +1739,10 @@ function updatePickBar(): void {
     matchHud.showPickBar('Tap the ball you are nominating.', [auto, cancel]);
     return;
   }
+  if (picking.kind === 'cue') {
+    matchHud.showPickBar('Tap the ball you want to strike.', [cancel]);
+    return;
+  }
   const text = picking.ball ? `Ball ${picking.ball}: now tap the pocket.` : 'Tap the ball you are calling.';
   const actions = [{ label: 'Safety', run: () => ((manualCall = 'safety'), endPick()) }, auto, cancel];
   if (picking.ball && picking.candidates.length > 1)
@@ -1728,18 +1756,23 @@ function updatePickBar(): void {
 function startPick(): void {
   if (!match || phase !== 'aim' || aiTurn()) return;
   const nominate = !!match.turn.mustNominate;
-  const candidates = nominate ? match.turn.targets : numberedOnTable(balls);
+  const chooseCue = !!match.turn.cueBallChoices;
+  const candidates = chooseCue
+    ? match.turn.cueBallChoices!
+    : nominate
+      ? match.turn.targets
+      : numberedOnTable(balls);
   if (candidates.length === 0) return;
   picking = {
-    kind: nominate ? 'nominate' : 'call',
+    kind: chooseCue ? 'cue' : nominate ? 'nominate' : 'call',
     candidates,
     // With only one ball left the choice of ball is irrelevant: go straight to the pocket.
-    ball: !nominate && candidates.length === 1 ? candidates[0]! : null,
+    ball: !nominate && !chooseCue && candidates.length === 1 ? candidates[0]! : null,
     back: picking?.back ?? rig.mode,
   };
   rig.setMode('top');
   hud.setCamera('top');
-  markBall(picking.ball);
+  markBall(chooseCue ? cueId : picking.ball);
   updatePickBar();
 }
 
@@ -1768,6 +1801,12 @@ function pickAt(p: { x: number; y: number }): void {
   if (picking.kind === 'nominate') {
     if (!best) return;
     manualNominate = best;
+    endPick();
+    return;
+  }
+  if (picking.kind === 'cue') {
+    if (!best) return;
+    chooseCueBall(best);
     endPick();
     return;
   }
@@ -2224,7 +2263,9 @@ function frame(now: number): void {
     const pocket = guide?.object ? pocketAhead(game.table, guide.object.from, guide.object.dir) : null;
     autoCall = guide?.object && pocket ? { ball: guide.object.id, pocket } : null;
     const free = !match.turn.decision && !match.rackResult && !aiTurn() && !picking;
-    if (match.turn.mustNominate) {
+    if (match.turn.cueBallChoices) {
+      matchHud.showCueBall(cueLabel(cueId), free);
+    } else if (match.turn.mustNominate) {
       const aimed = guide?.object?.id ?? null;
       autoNominate = aimed && match.turn.targets.includes(aimed) ? aimed : null;
       matchHud.showNomination(manualNominate ?? autoNominate, manualNominate !== null, free);

@@ -622,6 +622,39 @@ function refineSpin(
 
 /** Picks and returns the shot to play, with the player's errors already applied. */
 export function chooseShot(input: AiInput): AiShot {
+  const choices = input.turn.cueBallChoices ?? [];
+  if (choices.length < 2 || input.turn.ballInHand !== 'none') return chooseShotWith(input);
+  // Any ball may be the cue ball (Free pyramid): think properly about the few that look best.
+  const table = input.ruleset.table;
+  const up = input.balls.filter((b) => b.state !== 'pocketed').map((b) => b.id);
+  const ranked = choices
+    .map((id) => ({
+      id,
+      ease: bestPotEase(
+        table,
+        input.balls,
+        up.filter((x) => x !== id),
+        id,
+      ),
+    }))
+    .sort((a, b) => b.ease - a.ease);
+  const picks = ranked.slice(0, 3).map((r) => r.id);
+  const budget = (input.budgetMs ?? 1500) / picks.length;
+  let best: AiShot | null = null;
+  for (const [k, id] of picks.entries()) {
+    const shot = chooseShotWith({
+      ...input,
+      seed: input.seed + k,
+      budgetMs: budget,
+      turn: { ...input.turn, cueBall: id },
+    });
+    if (!best || shot.score > best.score)
+      best = { ...shot, considered: shot.considered + (best?.considered ?? 0) };
+  }
+  return best!;
+}
+
+function chooseShotWith(input: AiInput): AiShot {
   const sk = skillFor(input.level);
   const rng = new Rng(input.seed);
   const now = input.now ?? (() => Date.now());

@@ -99,9 +99,12 @@ export const SNOOKER_12FT: TableSpec = {
     SNOOKER_W,
     // Tight, lively snooker pockets: a smaller knuckle that throws back balls clipping the jaw, and a
     // soft pocket back, so firm pots that catch a jaw rattle out (playtest: they were far too easy).
+    // The corner facings close in towards the back (142°, not parallel at 135°): a ball that hits
+    // the cushion just before the pocket meets the far facing square-on and is thrown back out
+    // unless it is going slowly (playtest: cushion-first pots dropped at any pace, like pool).
     {
       mouthWidth: 0.086,
-      jawAngle: 135,
+      jawAngle: 142,
       jawRadius: 0.015,
       shelfDepth: 0.02,
       dropSag: 0.01,
@@ -151,10 +154,10 @@ export const ENGLISH_POOL_7FT: TableSpec = {
   pockets: sixPockets(
     EP_L,
     EP_W,
-    // Tight English pockets, built like the snooker ones.
+    // Tight English pockets, built like the snooker ones, corner facings closing in included.
     {
       mouthWidth: 0.088,
-      jawAngle: 135,
+      jawAngle: 142,
       jawRadius: 0.015,
       shelfDepth: 0.015,
       dropSag: 0.01,
@@ -335,14 +338,17 @@ export const PYRAMID_12FT: TableSpec = {
     RP_L,
     RP_W,
     {
-      mouthWidth: 0.073,
-      jawAngle: 138,
+      // 3 mm wider than the 73 mm of a match table, with parallel facings (playtest: too tight,
+      // ±5 mm straight in). A ball that reaches the back of the pocket drops: pyramid pots are hit
+      // hard, and a firm, accurate pot should stay down.
+      mouthWidth: 0.076,
+      jawAngle: 135,
       jawRadius: 0.012,
       shelfDepth: 0.02,
       dropSag: 0.01,
       fallRadius: 0.05,
       dropFacingRestitution: null,
-      backRestitution: 0.15,
+      backRestitution: null,
     },
     {
       mouthWidth: 0.083,
@@ -352,7 +358,7 @@ export const PYRAMID_12FT: TableSpec = {
       dropSag: 0.008,
       fallRadius: 0.055,
       dropFacingRestitution: null,
-      backRestitution: 0.15,
+      backRestitution: null,
     },
   ),
   markings: [

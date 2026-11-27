@@ -85,6 +85,8 @@ export interface MatchConfig {
   caromTarget?: number | undefined;
   /** Straight pool: points to win (25, 50 or 100). Older saves lack it. */
   straightTarget?: number | undefined;
+  /** Russian Pyramid: Free (any ball as cue ball) or Neva rules. Older saves lack it: Free. */
+  pyramid?: 'free' | 'neva' | undefined;
   /** English pool rulebook preset. */
   english: EnglishPreset;
   /** Skill level (1–5) of the computer playing as player 2, or null for a second human. */
@@ -183,7 +185,10 @@ export class Match {
         BALKLINE_47_2 as AnyRuleset,
         { target: config.caromTarget || BALKLINE_47_2.defaults.target },
       ],
-      pyramid: [RUSSIAN_PYRAMID as AnyRuleset, RUSSIAN_PYRAMID.defaults],
+      pyramid: [
+        RUSSIAN_PYRAMID as AnyRuleset,
+        { ...RUSSIAN_PYRAMID.defaults, free: config.pyramid !== 'neva' },
+      ],
       'chinese-8ball': [CHINESE_8BALL as AnyRuleset, CHINESE_8BALL.defaults],
       'one-pocket': [ONE_POCKET as AnyRuleset, ONE_POCKET.defaults],
       cowboy: [COWBOY_POOL as AnyRuleset, COWBOY_POOL.defaults],

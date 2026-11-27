@@ -72,6 +72,19 @@ These are for tuning in the lab and for playtests in M2:
   off (`backRestitution: 0.15`) instead of dropping on contact. Measured straight-in tolerance on a snooker
   corner (sideways offset that still drops, from 0.9 m): ±25 mm slow, ±23 medium, ±8 firm, ±5 very hard,
   against ±33 at all paces for a 9-ball corner. Still to judge in playtesting.
+- **Snooker corners reject cushion-first balls (playtest).** With parallel (135°) facings a ball that hit the
+  cushion up to 20 cm before a corner dropped at any pace, just like a 9-ball table. The snooker corner
+  facings now close in towards the back (`jawAngle: 142`): a ball rolled into the cushion at 5° within
+  20 cm of the jaw drops at a slow pace but rattles out from about 2 m/s, and at 8° it rattles out at
+  anything above slow unless it meets the cushion right at the jaw. Straight-in tolerance: ±22 mm slow,
+  ±20 medium, ±4 firm, ±2 very hard. English pool corners got the same change (142°).
+- **Russian pyramid pockets (playtest: too tight).** The corners took only ±5 mm straight in, a firm pot into
+  a middle pocket bounced off the soft pocket back unless dead centre, and the corner facings closed in on a
+  ball only 5 mm narrower than the mouth. Now: corner mouth 76 mm (73 on a match table) with parallel facings,
+  and reaching the back of either pocket drops the ball (`backRestitution: null`), as pyramid pots are
+  hit hard. Straight in: corner ±8 mm slow, ±7 firm and very hard; middle ±11 to ±10 at any pace. A ball
+  running along the cushion still can't go in a corner: in this model the 68 mm ball is wider than the gap
+  between the far jaw and the cushion, so it always meets the jaw tip. To judge in playtesting.
 - **Pocket pace sensitivity is weak.** Off-line balls correctly rattle out of tight pockets, but a ball rolled
   down the rail into a corner drops at almost any pace. Real tight pockets reject fast rail shots more often.
   The drop depth (`DROP_DEPTH` in `simulate.ts`), shelf depth and facing angles are the levers.
