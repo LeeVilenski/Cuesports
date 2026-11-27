@@ -80,6 +80,7 @@ import { openStore } from './game/store';
 import { cuesFor, due, type SoundCue } from './audio/cues';
 import { DEFAULT_SOUND, Sound, type SoundSettings } from './audio/sound';
 import { addMatch, emptyStats, percent } from './game/stats';
+import { pressureLabel, situation, stakes, sway } from './game/pressure';
 import { AGENT, enterEvent, gainsText, playMatch, train } from './game/agent';
 import {
   applyTuning,
@@ -631,7 +632,9 @@ function shoot(p: number): void {
   };
   // In the career the shot comes off your cue as well as your ratings allow.
   const t = careerTuning();
+  strikeFelt = t?.felt ?? 0;
   if (t) {
+    input = { ...input, aim: input.aim + aimSway };
     const g = computeGuide(game.table, balls, cueId, input.aim);
     input = applyTuning(input, t, new Rng((Math.random() * 1e9) | 0), !g?.object);
   }
@@ -649,8 +652,34 @@ function defaultObject(g: NonNullable<ReturnType<typeof computeGuide>>): { x: nu
 function careerTuning(): ShotTuning | null {
   if (challenge?.training) return shotTuning(career.player, challenge.spec.table);
   if (!match?.config.career || aiTurn()) return null;
-  return shotTuning(career.player, match.config.game);
+  return shotTuning(career.player, match.config.game, careerPressure());
 }
+
+/** The pressure on your shot in a career match: the ball and the score, times the event's stakes. */
+function careerPressure(): number {
+  const m = match;
+  const c = m?.config.career;
+  const e = c && careerEvent(c.event);
+  if (!m || !c || !e || m.rackResult || m.winner !== null) return 0;
+  const fp = m.framePoints;
+  const target = (m.ruleOptions as { target?: number } | null)?.target;
+  const p = situation({
+    game: m.config.game,
+    targets: m.turn.targets,
+    onTable: balls.filter((b) => b.state !== 'pocketed' && b.id !== 'cue').map((b) => b.id),
+    score: m.score,
+    raceTo: m.config.raceTo,
+    points: fp?.points,
+    remaining: fp?.remaining,
+    target,
+  });
+  return p * stakes(e.tier, e.raceTo.length - c.round);
+}
+
+/** The aim's sway under pressure, this frame (radians). */
+let aimSway = 0;
+/** Pressure (as felt) on the shot just played, for Nerve XP. */
+let strikeFelt = 0;
 
 /** Takes a shot exactly as given (used by the player's stroke and by the AI). */
 function strike(input: ShotInput, declaration: ShotDeclaration, pullVisual: number): void {
@@ -724,7 +753,12 @@ function endPlayback(): void {
       match.judge(decl, last.before, result, last.shot);
       if (match.config.career && last.shooter === 0) {
         const rec = match.record.racks.flatMap((r) => r.shots).at(-1);
-        if (rec && rec.player === 0) careerXp = sumXp(careerXp, shotXp(rec, result.events));
+        if (rec && rec.player === 0) {
+          careerXp = sumXp(careerXp, shotXp(rec, result.events));
+          // A pressure ball potted, cleanly: that's what Nerve is made of.
+          if (strikeFelt > 0.1 && rec.potted.length && !rec.fouls.length)
+            careerXp = sumXp(careerXp, { nerve: Math.round(6 + 20 * strikeFelt) });
+        }
       }
       saveMatch();
     }
@@ -2354,16 +2388,26 @@ function frame(now: number): void {
       const back = 0.015 + pull * 0.22;
       const gap = phase === 'striking' ? Math.max(0, back * (1 - (Math.max(0, strikeT) / 0.09) ** 2)) : back;
       const live = phase === 'aim' ? withClearance(shot) : shot;
-      cueView.pose(cue.pos.x, cue.pos.y, cue.radius, live, gap);
+      cueView.pose(
+        cue.pos.x,
+        cue.pos.y,
+        cue.radius,
+        phase === 'aim' ? { ...live, aim: live.aim + aimSway } : live,
+        gap,
+      );
       if (phase === 'aim') hud.setForcedElevation((live.elevation * 180) / Math.PI);
     }
   }
   updatePlayers(dt, cue);
+  const tuning = phase === 'aim' ? careerTuning() : null;
+  aimSway = tuning && tuning.felt > 0.02 && !calm ? sway(performance.now() / 1000, tuning.felt) : 0;
+  if (tuning && tuning.felt > 0.02) dirty = true;
+  matchHud.setPressure(tuning ? pressureLabel(tuning.felt) : null, tuning?.felt ?? 0);
+  const swayed = { ...shot, aim: shot.aim + aimSway };
   const guide =
     phase === 'aim' && cue
-      ? computeGuide(game.table, balls, cueId, guideSquirt ? launchDirection(cue, shot) : shot.aim)
+      ? computeGuide(game.table, balls, cueId, guideSquirt ? launchDirection(cue, swayed) : swayed.aim)
       : null;
-  const tuning = phase === 'aim' ? careerTuning() : null;
   hud.setLimits(tuning);
   const speed = powerToSpeed(hud.power, game.maxSpeed);
   // 3-cushion is hard to read without seeing the cue ball round the table: a line for it, in the

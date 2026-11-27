@@ -2,6 +2,7 @@ import { Rng } from '@cuesports/shared';
 import type { PhysicsEvent, ShotInput } from '@cuesports/physics';
 import type { MatchGame } from './match';
 import type { ShotRecord } from './record';
+import { felt } from './pressure';
 
 /**
  * Your career player: six attributes rated 1–99, the XP behind each one, a player level with skill
@@ -186,6 +187,8 @@ export interface ShotTuning {
   tipSigma: number;
   /** Highest cue elevation you can play, in degrees. */
   maxElevation: number;
+  /** The pressure you feel on this shot (0–1), after your Nerve. */
+  felt: number;
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * Math.max(0, Math.min(1, t));
@@ -228,9 +231,12 @@ export const FULL_ELEVATION = 60;
 export function shotTuning(p: CareerPlayer, game: MatchGame, pressure = 0): ShotTuning {
   const r = effective(p, game);
   const x = (a: Attr) => (r[a] - 1) / 98;
+  const f = felt(pressure, r.nerve);
   return {
-    vision: visionTuning(r.vision, pressure),
-    aimSigma: 0.45 * (1 - x('cueing')) ** 1.5,
+    felt: f,
+    vision: visionTuning(r.vision, f),
+    // Pressure adds a tremor of its own, on top of your cueing.
+    aimSigma: 0.45 * (1 - x('cueing')) ** 1.5 + 0.3 * f,
     cushionSigma: 0.35 * (1 - x('cushion')),
     powerSigma: 0.07 * (1 - x('touch')),
     maxTip: lerp(0.22, FULL_TIP, x('spin')),

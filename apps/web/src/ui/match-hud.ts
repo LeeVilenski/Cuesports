@@ -37,6 +37,7 @@ export class MatchHud {
   private picker = h('div', { className: 'pick-bar', hidden: true });
   private decision = h('div', { className: 'sheet decision-sheet', hidden: true });
   private result = h('div', { className: 'sheet result-sheet', hidden: true });
+  private pressure = h('div', { className: 'pressure-badge', hidden: true, ariaLive: 'polite' });
   private toastTimer = 0;
   private pushOn = false;
 
@@ -47,7 +48,23 @@ export class MatchHud {
       cb.onPushOut(this.pushOn);
     });
     this.toast.addEventListener('click', () => (this.toast.hidden = true));
-    this.root.append(this.toast, this.pushBtn, this.callBtn, this.decision, this.result, this.picker);
+    this.root.append(
+      this.pressure,
+      this.toast,
+      this.pushBtn,
+      this.callBtn,
+      this.decision,
+      this.result,
+      this.picker,
+    );
+  }
+
+  /** Career: a badge when the ball you're on is a pressure ball (null hides it). */
+  setPressure(label: string | null, level = 0): void {
+    this.pressure.hidden = !label;
+    if (!label) return;
+    if (this.pressure.textContent !== label) this.pressure.textContent = label;
+    this.pressure.style.setProperty('--beat', `${Math.max(0.45, 1.1 - level * 0.6)}s`);
   }
 
   /** Shows the scoreboard for the current turn, or hides it (practice). */

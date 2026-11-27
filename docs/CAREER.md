@@ -1,6 +1,6 @@
 # Career mode v2: plan
 
-Status: phases 1 (Old Joe and the hub) and 2 (attributes and the guide) are built; phases 3–6 are planned. The current career (`apps/web/src/game/career.ts`) is the v1
+Status: phases 1–3 (Old Joe and the hub, attributes and the guide, pressure) are built; phases 4–6 are planned. The current career (`apps/web/src/game/career.ts`) is the v1
 this replaces.
 
 ## Where we are
@@ -47,6 +47,9 @@ winning one opens the next tier and unlocks a cosmetic. It works, but:
 - **Pace:** 4–6 seasons of about 12 weeks from your first pub event to the top of a tour.
 - **Guide setting:** in career matches the guide comes from Vision and pressure, and the "Aiming guide"
   setting is ignored. The setting still applies everywhere else.
+- **3-cushion guide:** a line for the cue ball round the cushions, on by default and switchable in
+  Settings. It's shown in career 3-cushion too, whatever your Vision, because the game is close to
+  unplayable without it.
 - **Players cross tours:** a shared roster where top names also play other tours at a lower level (see
   [Crossover players](#crossover-players)).
 
@@ -303,7 +306,13 @@ Each phase ships on its own and leaves the game playable.
    limited by Spin and Cushion craft. At 99 everything is exactly as in quick play. Training: one
    session between events, on eight of the challenges, XP by stars. Old careers start with ratings for
    the tier they reached. Not yet: a ratings line on the pre-match card beyond familiarity.
-3. **Pressure.** Pressure balls per ruleset, the shrinking guide and wobble, Nerve and the HUD cue.
+3. **Pressure.** _Built._ `game/pressure.ts` reads the ball and the score: the money ball in 9-ball,
+   10-ball and eight-ball (and a little for the last two or three balls before it), the snooker pot that
+   puts the frame out of reach, and the last points of a points game. It's worth more on the hill, and a
+   hill-hill decider adds a touch on every ball. The event's stakes scale it (by tier, more in the semis
+   and most in the final), and Nerve takes up to 85% of it away. What you feel shrinks the Vision lines
+   (by up to 60%), adds an aim tremor and a slow sway of the aim (off with reduced motion), and shows a
+   heartbeat badge ("Nervy", "Pressure", "Big pressure"). Potting a pressure ball cleanly earns Nerve XP.
 4. **Calendar and money.** Weeks, agent bookings, entry rules, fees, travel, confidence and the cut,
    brackets, quick simulation, v1 → v2 migration.
 5. **Specialising and tours.** The specialise scene, the five tours, rankings, cards, Q-School, majors and
