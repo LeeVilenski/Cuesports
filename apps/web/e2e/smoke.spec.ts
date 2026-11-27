@@ -383,3 +383,38 @@ test('career: enters an event and shows the bracket', async ({ page }) => {
   await expect(page.getByRole('button', { name: /^Maple/ })).toBeDisabled();
   expect(errors).toEqual([]);
 });
+
+test('Free pyramid: after the break the player taps any ball to make it the cue ball', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await setup(page, 'Pyramid');
+  await page.getByRole('button', { name: 'Start' }).click();
+  expect(await page.evaluate(() => window.__cuesports.state().match!.turn.cueBall)).toBe('pcue');
+  await page.evaluate(() => window.__cuesports.shoot(0.9));
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'playing', null, { timeout: 30_000 });
+  await page.evaluate(() => window.__cuesports.fastForward());
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'aim', null, { timeout: 30_000 });
+  const turn = await page.evaluate(() => window.__cuesports.state().match!.turn);
+  expect(turn.cueBallChoices?.length).toBeGreaterThan(1);
+  const chip = page.locator('.chip.call');
+  await expect(chip).toHaveText(/^Cue ball: /);
+  await chip.click();
+  await expect(page.locator('.pick-bar')).toContainText('Tap the ball you want to strike');
+  // Tap a white ball (well clear of the others where possible).
+  const target = await page.evaluate(() => {
+    const s = window.__cuesports.state();
+    const up = s.balls.filter((b) => b.state !== 'pocketed' && b.id !== s.shot.ball);
+    const gap = (b: (typeof up)[number]) =>
+      Math.min(
+        ...s.balls
+          .filter((o) => o !== b && o.state !== 'pocketed')
+          .map((o) => Math.hypot(o.pos.x - b.pos.x, o.pos.y - b.pos.y)),
+      );
+    const b = up.sort((a, c) => gap(c) - gap(a))[0]!;
+    return { id: b.id, ...window.__cuesports.screenOf(b.pos.x, b.pos.y) };
+  });
+  await page.mouse.click(target.x, target.y);
+  await expect(chip).toHaveText(`Cue ball: ${target.id === 'pcue' ? 'coloured' : target.id.slice(1)}`);
+  expect(await page.evaluate(() => window.__cuesports.state().shot.ball)).toBe(target.id);
+  expect(errors).toEqual([]);
+});

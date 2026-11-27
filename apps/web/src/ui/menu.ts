@@ -554,6 +554,27 @@ export class Menu {
     );
     const straightField = this.field('Points to win', straightTarget.el);
     const raceField = h('div', { className: 'field' }, raceLabel, race.el);
+    const pyramidRules = h(
+      'div',
+      {},
+      this.field(
+        'Rules',
+        segmented(
+          'Rules',
+          [
+            { value: 'free', label: 'Free' },
+            { value: 'neva', label: 'Neva' },
+          ],
+          c.pyramid ?? 'free',
+          (v) => (c.pyramid = v === 'neva' ? 'neva' : 'free'),
+        ).el,
+      ),
+      h(
+        'p',
+        { className: 'fine-print' },
+        'Free: after the break any ball may be the cue ball. Neva: only the coloured ball, and a foul costs a point.',
+      ),
+    );
     const caromRules = h(
       'div',
       {},
@@ -568,6 +589,7 @@ export class Menu {
       snookerRules,
       englishRules,
       caromRules,
+      pyramidRules,
     );
 
     const setGame = (id: MatchConfig['game']) => {
@@ -589,6 +611,7 @@ export class Menu {
       if (id === 'pyramid' || id === 'one-pocket' || id === 'cowboy' || id === 'slosh')
         raceLabel.textContent = 'Games to win';
       caromRules.hidden = !carom;
+      pyramidRules.hidden = id !== 'pyramid';
       raceField.hidden = straight || id === 'billiards';
       straightField.hidden = !straight;
       billiardsField.hidden = id !== 'billiards';

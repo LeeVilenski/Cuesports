@@ -28,6 +28,12 @@ export interface Turn {
   player: number;
   /** The ball the player strikes, when it isn't 'cue' (billiards: each player has their own). */
   cueBall?: string;
+  /**
+   * Balls the player may strike instead of `cueBall`, which is then only the suggested one
+   * (Russian Pyramid, Free rules: any ball on the table). With ball in hand, the chosen ball is
+   * the one picked up and placed.
+   */
+  cueBallChoices?: string[];
   ballInHand: BallInHand;
   /** Balls the cue ball must hit first. Empty means any ball. */
   targets: string[];
@@ -69,6 +75,7 @@ export interface Foul {
     | 'illegal-break'
     | 'three-fouls'
     | 'wrong-ball-potted'
+    | 'wrong-cue-ball'
     | 'no-nomination'
     | 'three-misses';
   message: string;

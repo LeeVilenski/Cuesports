@@ -104,7 +104,8 @@ export class MatchHud {
                       string,
                       string
                     >
-                  )[turn.cueBall ?? ''] ?? (turn.mustCall ? 'call your shots' : ''))
+                  )[turn.cueBallChoices ? 'pcue' : (turn.cueBall ?? '')] ??
+                  (turn.mustCall ? 'call your shots' : ''))
                 : turn.freeBall
                   ? 'free ball'
                   : `on: ${onLabel(turn)}`,
@@ -148,6 +149,14 @@ export class MatchHud {
     if (!visible) return;
     this.callBtn.textContent = ball ? `Nominate: ${ball}${manual ? '' : ' (auto)'}` : 'Nominate a ball';
     this.callBtn.classList.toggle('on', manual);
+  }
+
+  /** Shows the ball the player will strike (Free pyramid: any ball may be chosen). */
+  showCueBall(label: string, visible: boolean): void {
+    this.callBtn.hidden = !visible;
+    if (!visible) return;
+    this.callBtn.textContent = `Cue ball: ${label}`;
+    this.callBtn.classList.remove('on');
   }
 
   /**

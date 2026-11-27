@@ -1,6 +1,7 @@
 import {
   AMERICAN_POOL_9FT,
   ENGLISH_POOL_7FT,
+  PYRAMID_12FT,
   Rng,
   SNOOKER_12FT,
   TABLE_PRESETS,
@@ -217,9 +218,14 @@ describe('snooker corners reject balls that hit the cushion first', () => {
     const tipX = table.playfield.length / 2 - p.mouthWidth / Math.SQRT2;
     const th = (deg * Math.PI) / 180;
     const start = { x: tipX - d - 0.9 * Math.cos(th), y: hw - R - 0.9 * Math.sin(th) };
-    const r = simulate(table, [cueAt(table, start.x, start.y)], shot({ aim: th, speed, tip: { a: 0, b: 0.3 } }), {
-      sampleRate: 0,
-    });
+    const r = simulate(
+      table,
+      [cueAt(table, start.x, start.y)],
+      shot({ aim: th, speed, tip: { a: 0, b: 0.3 } }),
+      {
+        sampleRate: 0,
+      },
+    );
     return pocketEvents(r).length > 0;
   };
 
@@ -235,6 +241,33 @@ describe('snooker corners reject balls that hit the cushion first', () => {
       }
       expect(railFirst(t, 5, d, 3.5), `snooker 5° ${d} m`).toBe(false);
     }
+  });
+});
+
+describe('Russian pyramid pockets', () => {
+  const t = PYRAMID_12FT;
+  const straightIn = (id: string, offset: number, speed: number) => {
+    const p = t.pockets.find((x) => x.id === id)!;
+    const perp = { x: -p.axis.y, y: p.axis.x };
+    const s = {
+      x: p.position.x - p.axis.x * 0.9 + perp.x * offset,
+      y: p.position.y - p.axis.y * 0.9 + perp.y * offset,
+    };
+    const r = simulate(t, [cueAt(t, s.x, s.y)], shot({ aim: Math.atan2(p.axis.y, p.axis.x), speed }), {
+      sampleRate: 0,
+    });
+    return pocketEvents(r).length > 0;
+  };
+
+  it('keep a hard, accurate pot down in the middle and the corner', () => {
+    for (const speed of [3.5, 6]) {
+      expect(straightIn('top-side', 0.005, speed), `middle ${speed} m/s`).toBe(true);
+      expect(straightIn('top-right', 0.004, speed), `corner ${speed} m/s`).toBe(true);
+    }
+  });
+
+  it('still reject a ball a centimetre off line in the corner', () => {
+    for (const speed of [1, 3.5]) expect(straightIn('top-right', 0.01, speed)).toBe(false);
   });
 });
 

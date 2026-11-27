@@ -4,6 +4,7 @@ import {
   ENGLISH_POOL,
   INTERNATIONAL_RULES,
   NINE_BALL,
+  RUSSIAN_PYRAMID,
   shotFacts,
   SNOOKER,
   TEN_BALL,
@@ -366,5 +367,42 @@ describe('AI at English Billiards', () => {
     const result = simulate(R.table, before, ai.shot, { sampleRate: 0, maxTime: 40 });
     const j = R.judge(f.state, ai.decl, before, result, R.defaults);
     expect(j.points![0]).toBeGreaterThan(0);
+  });
+});
+
+describe('AI in Free pyramid', () => {
+  it('strikes whichever ball gives the pot, not just the coloured one', () => {
+    const t = RUSSIAN_PYRAMID.table;
+    const R = t.balls.object.radius;
+    const hl = t.playfield.length / 2;
+    const hw = t.playfield.width / 2;
+    // The coloured ball is tucked away on the bottom cushion; a white ball sits straight behind
+    // another, lined up on the top-right corner.
+    const pk = t.pockets.find((p) => p.id === 'top-right')!;
+    const along = (d: number) => ({ x: pk.position.x - pk.axis.x * d, y: pk.position.y - pk.axis.y * d });
+    const balls = [
+      makeBall('pcue', t.balls.cue, { x: -hl + 0.3, y: -hw + R + 0.001 }),
+      makeBall('p1', t.balls.object, along(0.5)),
+      makeBall('p2', t.balls.object, along(0.9)),
+    ];
+    const f = RUSSIAN_PYRAMID.newFrame(RUSSIAN_PYRAMID.defaults, new Rng(1), 1);
+    const state = { ...f.state, opening: false, inHand: false };
+    const turn = RUSSIAN_PYRAMID.decide(state, '', balls, RUSSIAN_PYRAMID.defaults).turn;
+    expect(turn.cueBallChoices).toHaveLength(3);
+    const ai = chooseShot({
+      ruleset: RUSSIAN_PYRAMID as Ruleset<unknown, unknown>,
+      options: RUSSIAN_PYRAMID.defaults,
+      state,
+      turn,
+      balls,
+      me: 1,
+      level: 5,
+      seed: 3,
+      budgetMs: 600,
+      perfect: true,
+    });
+    expect(ai.shot.ball).not.toBe('pcue');
+    const r = simulate(t, balls, ai.shot, { sampleRate: 0 });
+    expect(r.events.some((e) => e.type === 'pocket')).toBe(true);
   });
 });
