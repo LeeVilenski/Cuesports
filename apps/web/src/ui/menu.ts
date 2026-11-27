@@ -1,5 +1,19 @@
 import { CHALLENGES, loadStars, starText } from '../game/challenges';
 import {
+  AGENT,
+  booking,
+  bookingPitch,
+  careerRecord,
+  confidenceBand,
+  finishIntro,
+  gameName,
+  INTRO,
+  markRead,
+  nextGoal,
+  targetText,
+  unread,
+} from '../game/agent';
+import {
   bestText,
   careerEvent,
   EVENTS,
@@ -109,6 +123,8 @@ export interface MenuCallbacks {
   onSound(s: SoundSettings): void;
   /** Enter a career event (abandoning any other in progress). */
   onCareerEnter(event: string): void;
+  /** A change to the career from the hub (the intro seen, a message read). */
+  onCareerUpdate(s: CareerState): void;
   /** Play your next match in the career event. */
   onCareerPlay(): void;
 }
@@ -125,6 +141,7 @@ type Screen =
   | 'challenges'
   | 'player'
   | 'career'
+  | 'intro'
   | 'event';
 
 const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: string }[] = [
@@ -188,6 +205,9 @@ export class Menu {
   private inMatch = false;
   private canSave = false;
   private statsPlayer: string | null = null;
+  private careerTab: 'home' | 'events' | 'inbox' | 'profile' = 'home';
+  private introPage = 0;
+  private openMessage: string | null = null;
   private statsGame: MatchConfig['game'] | 'all' = 'all';
   private quickSub = h('small', {});
   private graphicsNote = Object.assign(h('p', { className: 'fine-print' }, 'Restart the game to apply.'), {
@@ -276,7 +296,8 @@ export class Menu {
       replays: () => this.replays(),
       challenges: () => this.challenges(),
       player: () => this.player(),
-      career: () => this.careerScreen(),
+      career: () => (this.cb.career().introSeen ? this.careerScreen() : this.introScreen()),
+      intro: () => this.introScreen(),
       event: () => this.eventScreen(),
     };
     this.cb.onPreview(screen === 'player');
@@ -349,7 +370,7 @@ export class Menu {
         this.tile('blue', 'play', 'Quick match', this.quickSub, () => this.start(), 'wide'),
         this.tile('orange', 'cue', 'Play', 'Game, opponent, format', () => this.go('play')),
         this.tile('green', 'target', 'Practice', 'Free table', () => this.go('practice')),
-        this.tile('yellow', 'trophy', 'Career', 'Pub to arena', () => this.go('career')),
+        this.tile('yellow', 'trophy', 'Career', this.careerSub(), () => this.go('career')),
         this.tile('purple', 'globe', 'Online', 'Coming soon', null),
         this.tile('red', 'chart', 'Stats', 'Pots, breaks, wins', () => this.go('stats')),
         this.tile('teal', 'replay', 'Replays', 'Frames and highlights', () => this.go('replays')),
@@ -928,14 +949,114 @@ export class Menu {
     return h('div', { className: 'sub player' }, this.header('Player'), body);
   }
 
+  /** The Career tile's line: unread messages, or the event in progress. */
+  private careerSub(): string {
+    const s = this.cb.career();
+    if (!s.introSeen) return 'Meet your agent';
+    const n = unread(s);
+    if (n) return `${n} new message${n > 1 ? 's' : ''} from ${AGENT.name}`;
+    const e = s.run?.status === 'playing' && careerEvent(s.run.event);
+    return e ? `${e.title} · ${roundName(e, s.run!.round)}` : 'Pub to arena';
+  }
+
+  /** Old Joe's card: his face, how he rates you, and what he has to say. */
+  private joeCard(lines: string[], ...extra: (Node | string)[]): HTMLElement {
+    const s = this.cb.career();
+    return h(
+      'div',
+      { className: 'joe' },
+      h(
+        'div',
+        { className: 'joe-head' },
+        h('span', { className: 'joe-face', ariaHidden: 'true' }, AGENT.initials),
+        h(
+          'span',
+          {},
+          h('strong', {}, AGENT.name),
+          h('small', {}, s.introSeen ? `Your agent · ${confidenceBand(s.confidence)}` : 'Agent'),
+        ),
+      ),
+      ...lines.map((l) => h('p', {}, l)),
+      ...extra,
+    );
+  }
+
+  /** The first visit: Joe introduces himself over a few cards. */
+  private introScreen(): HTMLElement {
+    const page = Math.min(this.introPage, INTRO.length - 1);
+    const card = INTRO[page]!;
+    const last = page === INTRO.length - 1;
+    const dots = h(
+      'div',
+      { className: 'coach-dots', ariaHidden: 'true' },
+      ...INTRO.map((_, i) => h('span', { className: i < page ? 'on' : i === page ? 'now' : '' })),
+    );
+    const next = h(
+      'button',
+      {
+        className: 'tile yellow cta',
+        onclick: () => {
+          if (!last) {
+            this.introPage++;
+            this.show('intro');
+            return;
+          }
+          this.introPage = 0;
+          const s = this.cb.career();
+          if (!s.introSeen) this.cb.onCareerUpdate(finishIntro(s));
+          this.careerTab = 'home';
+          this.stack = [];
+          this.show('career');
+        },
+      },
+      h('strong', {}, last ? "Let's go" : 'Next'),
+    );
+    return h(
+      'div',
+      { className: 'sub career intro' },
+      this.header('Career'),
+      h('div', { className: 'scroll' }, h('h3', {}, card.title), this.joeCard([card.text]), dots),
+      next,
+    );
+  }
+
   private careerScreen(): HTMLElement {
     const s = this.cb.career();
-    const colours = ['blue', 'orange', 'green', 'red', 'purple', 'teal'];
-    const run = s.run?.status === 'playing' ? s.run : null;
+    const n = unread(s);
+    const tabs = segmented(
+      'Career',
+      [
+        { value: 'home', label: 'Home' },
+        { value: 'events', label: 'Events' },
+        { value: 'inbox', label: n ? `Inbox (${n})` : 'Inbox' },
+        { value: 'profile', label: 'Profile' },
+      ],
+      this.careerTab,
+      (v) => {
+        this.careerTab = v;
+        this.show('career');
+      },
+    );
+    tabs.el.classList.add('career-tabs');
+    const body =
+      this.careerTab === 'events'
+        ? this.careerEvents()
+        : this.careerTab === 'inbox'
+          ? this.careerInbox()
+          : this.careerTab === 'profile'
+            ? this.careerProfile()
+            : this.careerHome();
+    return h('div', { className: 'sub career' }, this.header('Career'), tabs.el, body);
+  }
+
+  private careerHome(): HTMLElement {
+    const s = this.cb.career();
     const body = h('div', { className: 'scroll' });
+    const run = s.run?.status === 'playing' ? s.run : null;
     if (run) {
       const e = careerEvent(run.event)!;
       body.append(
+        this.joeCard(run.talk ?? []),
         h(
           'div',
           { className: 'tiles' },
@@ -949,7 +1070,100 @@ export class Menu {
           ),
         ),
       );
+    } else {
+      const e = booking(s, 1);
+      if (e) {
+        body.append(
+          this.joeCard(
+            [bookingPitch(s, e, 1)],
+            h(
+              'div',
+              { className: 'joe-actions' },
+              h(
+                'button',
+                {
+                  className: 'coach-btn primary',
+                  onclick: () => {
+                    this.cb.onCareerEnter(e.id);
+                    this.go('event');
+                  },
+                },
+                'Take it',
+              ),
+              h(
+                'button',
+                {
+                  className: 'coach-btn',
+                  onclick: () => {
+                    this.careerTab = 'events';
+                    this.show('career');
+                  },
+                },
+                'Something else',
+              ),
+            ),
+          ),
+        );
+      }
     }
+    // How Joe rates you, and what's next.
+    const meter = h('div', { className: 'meter', role: 'meter', ariaLabel: 'Confidence' });
+    meter.setAttribute('aria-valuenow', String(s.confidence));
+    meter.append(h('span', {}));
+    (meter.firstElementChild as HTMLElement).style.width = `${s.confidence}%`;
+    body.append(
+      h('h3', {}, "Joe's confidence"),
+      h('div', { className: 'stat-line' }, meter, h('small', {}, confidenceBand(s.confidence))),
+      h('h3', {}, 'Next goal'),
+      h('p', { className: 'event-status' }, nextGoal(s)),
+    );
+    const latest = s.inbox.find((m) => !m.read);
+    if (latest)
+      body.append(
+        h('h3', {}, 'New message'),
+        h(
+          'button',
+          {
+            className: 'message unread',
+            onclick: () => {
+              this.careerTab = 'inbox';
+              this.openMessage = latest.id;
+              this.cb.onCareerUpdate(markRead(s, latest.id));
+              this.show('career');
+            },
+          },
+          h('strong', {}, latest.subject),
+          h('small', {}, latest.from),
+        ),
+      );
+    const form = s.log.slice(-5).map((l) => (l.champion ? 'W' : l.reached >= l.target ? '✓' : '✗'));
+    if (form.length)
+      body.append(
+        h('h3', {}, 'Recent events'),
+        h(
+          'div',
+          { className: 'form-strip' },
+          ...s.log.slice(-5).map((l, i) =>
+            h(
+              'span',
+              {
+                className: l.champion ? 'title' : l.reached >= l.target ? 'met' : 'missed',
+                title: `${careerEvent(l.event)?.title ?? ''}: ${bestText(careerEvent(l.event)!, l.reached)}`,
+              },
+              form[i]!,
+            ),
+          ),
+        ),
+        h('p', { className: 'fine-print' }, 'Title · target met · target missed, oldest first.'),
+      );
+    return body;
+  }
+
+  private careerEvents(): HTMLElement {
+    const s = this.cb.career();
+    const colours = ['blue', 'orange', 'green', 'red', 'purple', 'teal'];
+    const run = s.run?.status === 'playing' ? s.run : null;
+    const body = h('div', { className: 'scroll' });
     let colour = 0;
     for (const v of VENUES) {
       const open = tierOpen(s, v.tier);
@@ -958,7 +1172,8 @@ export class Menu {
       for (const e of EVENTS.filter((x) => x.venue === v.id)) {
         const game = MATCH_GAMES.find((g) => g.id === e.game)?.label ?? e.game;
         const prize = REWARDS[e.reward];
-        const sub = `${game} · ${2 ** rounds(e)} players · ${bestText(e, s.best[e.id])}${prize ? ` · Prize: ${prize}` : ''}`;
+        const now = run?.event === e.id ? ' · In progress' : '';
+        const sub = `${game} · ${2 ** rounds(e)} players · ${bestText(e, s.best[e.id])}${now}${prize ? ` · Prize: ${prize}` : ''}`;
         tiles.append(
           this.tile(
             colours[colour++ % colours.length]!,
@@ -976,16 +1191,83 @@ export class Menu {
         );
       }
       if (!open) {
-        const below = VENUES.find((x) => x.tier === v.tier - 1);
+        const below = VENUES.filter((x) => x.tier === v.tier - 1).map((x) => x.name);
         tiles.append(
-          h(
-            'p',
-            { className: 'fine-print' },
-            `Win an event at ${below?.name ?? 'the venue below'} to play here.`,
-          ),
+          h('p', { className: 'fine-print' }, `Win an event at ${below.join(' or ')} to play here.`),
         );
       }
       body.append(tiles);
+    }
+    return body;
+  }
+
+  private careerInbox(): HTMLElement {
+    const s = this.cb.career();
+    const body = h('div', { className: 'scroll' });
+    if (!s.inbox.length) body.append(h('p', { className: 'fine-print' }, 'No messages yet.'));
+    for (const m of s.inbox) {
+      const open = this.openMessage === m.id;
+      body.append(
+        h(
+          'button',
+          {
+            className: `message${m.read ? '' : ' unread'}${open ? ' open' : ''}`,
+            ariaExpanded: String(open),
+            onclick: () => {
+              this.openMessage = open ? null : m.id;
+              if (!m.read) this.cb.onCareerUpdate(markRead(this.cb.career(), m.id));
+              this.show('career');
+            },
+          },
+          h('strong', {}, m.subject),
+          h('small', {}, m.from),
+          open ? h('p', {}, m.body) : '',
+        ),
+      );
+    }
+    return body;
+  }
+
+  private careerProfile(): HTMLElement {
+    const s = this.cb.career();
+    const r = careerRecord(s);
+    const body = h('div', { className: 'scroll' });
+    const cell = (label: string, value: string) =>
+      h('div', { className: 'stat' }, h('strong', {}, value), h('small', {}, label));
+    body.append(
+      h('h3', {}, this.cb.profile().name),
+      h(
+        'div',
+        { className: 'stat-grid' },
+        cell('Events', String(r.events)),
+        cell('Titles', String(r.titles)),
+        cell('Matches won', String(r.won)),
+        cell('Matches lost', String(r.lost)),
+      ),
+    );
+    const titles = EVENTS.filter((e) => (s.best[e.id] ?? 0) >= rounds(e));
+    body.append(h('h3', {}, 'Trophies'));
+    body.append(
+      titles.length
+        ? h('div', { className: 'trophies' }, ...titles.map((e) => h('span', {}, icon('trophy'), e.title)))
+        : h('p', { className: 'fine-print' }, 'None yet. Old Joe is working on it.'),
+    );
+    if (s.log.length) {
+      body.append(h('h3', {}, 'Career so far'));
+      const list = h('ol', { className: 'timeline' });
+      s.log.forEach((l) => {
+        const e = careerEvent(l.event);
+        if (!e) return;
+        list.append(
+          h(
+            'li',
+            { className: l.champion ? 'title' : l.reached >= l.target ? 'met' : 'missed' },
+            h('strong', {}, e.title),
+            h('small', {}, `${bestText(e, l.reached)} · Joe wanted you to ${targetText(e, l.target)}`),
+          ),
+        );
+      });
+      body.append(list);
     }
     // Rivals: one per tier, waiting in the finals.
     body.append(h('h3', {}, 'Rivals'));
@@ -1006,10 +1288,20 @@ export class Menu {
         ),
       );
     }
-    return h('div', { className: 'sub career' }, this.header('Career'), body);
+    body.append(
+      h(
+        'div',
+        { className: 'tiles' },
+        this.tile('purple', 'replay', `Hear ${AGENT.name} again`, 'His introduction', () => {
+          this.introPage = 0;
+          this.go('intro');
+        }),
+      ),
+    );
+    return body;
   }
 
-  /** The event you're in: the bracket so far and your next match. */
+  /** The event you're in: Joe's talk, the walk-on card for your next match, and the bracket. */
   private eventScreen(): HTMLElement {
     const s = this.cb.career();
     const run = s.run;
@@ -1024,7 +1316,7 @@ export class Menu {
         'div',
         { className: 'round' },
         h('h4', {}, roundName(e, r)),
-        h('small', {}, `Race to ${e.raceTo[r]}`),
+        h('small', {}, e.game === 'snooker' ? `Best of ${e.raceTo[r]! * 2 - 1}` : `Race to ${e.raceTo[r]}`),
       );
       for (let i = 0; i < 2 ** (rounds(e) - r); i += 2) {
         const row = (id: string | undefined) =>
@@ -1056,9 +1348,22 @@ export class Menu {
           )
         : h(
             'button',
-            { className: 'tile cta', onclick: () => this.open('career') },
-            h('strong', {}, 'Back to the circuit'),
+            {
+              className: 'tile cta',
+              onclick: () => {
+                this.careerTab = 'home';
+                this.open('career');
+              },
+            },
+            h('strong', {}, 'Back to Old Joe'),
           );
+    const target = run.target;
+    const joe = this.joeCard(
+      run.status === 'playing' ? (run.talk ?? []) : (run.debrief ?? []),
+      target !== undefined && run.status === 'playing'
+        ? h('small', { className: 'joe-target' }, `Target: ${targetText(e, target)}`)
+        : '',
+    );
     const status =
       run.status === 'won'
         ? h('p', { className: 'event-status won' }, `Champion! Unlocked: ${REWARDS[e.reward] ?? ''}.`)
@@ -1066,22 +1371,47 @@ export class Menu {
           ? h(
               'p',
               { className: 'event-status' },
-              `Out in the ${roundName(e, run.round).toLowerCase()}. Enter again from the circuit.`,
+              `Out in the ${roundName(e, run.round).toLowerCase()}. Enter again from the Events tab.`,
             )
-          : opp
-            ? h(
-                'p',
-                { className: 'event-status' },
-                h('strong', {}, `Next: ${opponent(opp.id).name}`),
-                ` · ${opponent(opp.id).style}${opp.id === e.rival ? ' · your rival' : ''}`,
-              )
-            : '';
+          : '';
     return h(
       'div',
       { className: 'sub event' },
       this.header(e.title),
-      h('div', { className: 'scroll' }, status, bracket),
+      h(
+        'div',
+        { className: 'scroll' },
+        joe,
+        status,
+        opp && run.status === 'playing' ? this.walkOn(e, opp) : '',
+        bracket,
+      ),
       action,
+    );
+  }
+
+  /** Before each match: who you're playing, how you've done against them, and what's at stake. */
+  private walkOn(
+    e: NonNullable<ReturnType<typeof careerEvent>>,
+    opp: { id: string; level: number },
+  ): HTMLElement {
+    const s = this.cb.career();
+    const run = s.run!;
+    const o = opponent(opp.id);
+    const [w, l] = s.h2h[o.id] ?? [0, 0];
+    const last = run.round === rounds(e) - 1;
+    const stake = last
+      ? 'Win for the title'
+      : `Win to reach the ${roundName(e, run.round + 1).toLowerCase()}`;
+    const level = LEVELS[Math.max(0, Math.min(LEVELS.length - 1, Math.round(opp.level) - 1))]!;
+    return h(
+      'div',
+      { className: `walk-on${opp.id === e.rival ? ' rival-card' : ''}` },
+      h('small', {}, `${roundName(e, run.round)} · ${gameName(e)}`),
+      h('strong', {}, `You vs ${o.name}`),
+      h('span', {}, `${o.style} · ${level}${opp.id === e.rival ? ' · your rival' : ''}`),
+      h('span', {}, w + l ? `Head to head: you ${w}–${l}` : 'First meeting'),
+      h('em', {}, stake),
     );
   }
 

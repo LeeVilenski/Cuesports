@@ -364,16 +364,27 @@ test('customises the player and keeps it', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('career: enters an event and shows the bracket', async ({ page }) => {
+test('career: meets Old Joe, enters an event and shows the bracket', async ({ page }) => {
   test.setTimeout(300_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
   await page.getByRole('button', { name: /^Career/ }).click();
+  // Old Joe introduces himself the first time.
+  await expect(page.getByRole('heading', { name: 'So you want to play' })).toBeVisible();
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: "Let's go" }).click();
+  // He has a booking for you and a message waiting.
+  await expect(page.getByRole('button', { name: 'Take it' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Inbox (1)' })).toBeVisible();
+  await page.getByRole('button', { name: 'Events', exact: true }).click();
   // Only the pub is open at first.
   await expect(page.getByRole('button', { name: /^Corner Pocket 9-Ball Open/ })).toBeDisabled();
   await page.getByRole('button', { name: /^Red Lion 9-Ball Night/ }).click();
   await expect(page.locator('.bracket .slot')).toHaveCount(6);
+  // His talk, the target and the walk-on card.
+  await expect(page.locator('.joe-target')).toHaveText('Target: make the final');
+  await expect(page.locator('.walk-on')).toContainText('You vs');
   await page.getByRole('button', { name: /^Play the semi-final/ }).click();
   await page.waitForFunction(() => window.__cuesports?.state().match?.score.length === 2);
   // Locked items in the customiser until won.
@@ -402,7 +413,8 @@ test('Free pyramid: after the break the player taps any ball to make it the cue 
   // No panel covers the table: the chip itself asks for the ball.
   await expect(page.locator('.pick-bar')).toBeHidden();
   await expect(chip).toHaveText('Cue ball: tap a ball');
-  if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/${test.info().project.name}.png` });
+  if (process.env.SHOT_DIR)
+    await page.screenshot({ path: `${process.env.SHOT_DIR}/${test.info().project.name}.png` });
   // Tap a white ball (well clear of the others where possible).
   const target = await page.evaluate(() => {
     const s = window.__cuesports.state();

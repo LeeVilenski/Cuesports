@@ -73,13 +73,12 @@ import { openStore } from './game/store';
 import { cuesFor, due, type SoundCue } from './audio/cues';
 import { DEFAULT_SOUND, Sound, type SoundSettings } from './audio/sound';
 import { addMatch, emptyStats, percent } from './game/stats';
+import { AGENT, enterEvent, playMatch } from './game/agent';
 import {
   careerEvent,
-  enter,
   loadCareer,
   nextOpponent,
   opponent,
-  recordMatch,
   REWARDS,
   roundName,
   saveCareer,
@@ -1094,7 +1093,11 @@ const menu: Menu = new Menu(
     onCareerEnter: (id) => {
       const e = careerEvent(id);
       if (!e) return;
-      career = { ...career, run: enter(e, (Math.random() * 1e9) | 0) };
+      career = enterEvent(career, e, (Math.random() * 1e9) | 0);
+      saveCareer(career);
+    },
+    onCareerUpdate: (s) => {
+      career = s;
       saveCareer(career);
     },
     onCareerPlay: () => startCareerMatch(),
@@ -1313,9 +1316,19 @@ function careerResult(m: Match, winner: string, score: string): void {
   const won = m.winner === 0;
   if (!careerRecorded.has(m) && career.run?.event === c.event && career.run.round === c.round) {
     careerRecorded.add(m);
-    career = recordMatch(career, won, (Math.random() * 1e9) | 0);
+    const st = emptyStats();
+    addMatch(st, m.record, 0);
+    const figures = {
+      potPct: st.potAttempts ? Math.round((100 * st.pots) / st.potAttempts) : 0,
+      best: st.highestBreak,
+      word: visitWord(m.config.game),
+      fouls: st.fouls,
+    };
+    career = playMatch(career, won, (Math.random() * 1e9) | 0, figures);
     saveCareer(career);
   }
+  // Joe's first word on it, in the result sheet.
+  const joe = (career.run?.status === 'playing' ? career.run.talk : career.run?.debrief)?.[0];
   const champion = won && career.run?.status === 'won';
   const title = champion
     ? `Champion of the ${e.title}!`
@@ -1323,7 +1336,8 @@ function careerResult(m: Match, winner: string, score: string): void {
       ? `Through to the ${roundName(e, c.round + 1).toLowerCase()}`
       : `${winner} wins the ${roundName(e, c.round).toLowerCase()}`;
   const prize = champion ? ` Unlocked: ${REWARDS[e.reward] ?? ''}.` : '';
-  matchHud.showResult(title, `${score}.${prize} ${matchSummary(m)}`, true, 'Continue');
+  const said = joe ? ` ${AGENT.name}: “${joe}”` : '';
+  matchHud.showResult(title, `${score}.${prize}${said} ${matchSummary(m)}`, true, 'Continue');
 }
 
 // ---------------------------------------------------------------------------------------------
