@@ -87,3 +87,43 @@ describe('launch direction (guide with squirt)', () => {
     expect(Math.atan2(b.vel.y, b.vel.x)).toBeCloseTo(launchDirection(cue, shotWith(0.3)), 12);
   });
 });
+
+describe('3-cushion path', () => {
+  it('follows the cue ball off the first ball round three cushions', async () => {
+    const { CAROM_10FT: C } = await import('@cuesports/shared');
+    const { cushionPath } = await import('./guide');
+    const balls = [
+      makeBall('cue', C.balls.cue, { x: -0.6, y: -0.2 }),
+      makeBall('white', C.balls.object, { x: 0, y: 0 }),
+      makeBall('red', C.balls.object, { x: 1.2, y: 0.6 }),
+    ];
+    // A half-ball hit on the white, with a little follow.
+    const aim = Math.atan2(0.2 + C.balls.object.radius, 0.6);
+    const g = computeGuide(C, balls, 'cue', aim)!;
+    expect(g.object?.id).toBe('white');
+    const pts = cushionPath(C, balls, g, 'cue', 0.2, 3);
+    expect(pts.length).toBeGreaterThanOrEqual(3);
+    const hl = C.playfield.length / 2 - g.radius;
+    const hw = C.playfield.width / 2 - g.radius;
+    // Every point between the ends is on a cushion line.
+    for (const p of pts.slice(1, -1))
+      expect(Math.abs(Math.abs(p.x) - hl) < 1e-6 || Math.abs(Math.abs(p.y) - hw) < 1e-6).toBe(true);
+  });
+
+  it('starts at the first cushion on a cushion-first shot, and stops at a ball', async () => {
+    const { CAROM_10FT: C } = await import('@cuesports/shared');
+    const { cushionPath } = await import('./guide');
+    const hw = C.playfield.width / 2 - C.balls.cue.radius;
+    const balls = [
+      makeBall('cue', C.balls.cue, { x: -0.5, y: 0 }),
+      // Straight up to the cushion and back down onto this ball.
+      makeBall('red', C.balls.object, { x: -0.5 + 2 * hw * 0.5, y: 0 }),
+    ];
+    const g = computeGuide(C, balls, 'cue', Math.atan2(hw, hw * 0.5))!;
+    expect(g.object).toBeNull();
+    const pts = cushionPath(C, balls, g, 'cue', 0, 3);
+    expect(pts[0]).toEqual(g.end);
+    const last = pts.at(-1)!;
+    expect(Math.hypot(last.x - balls[1]!.pos.x, last.y)).toBeCloseTo(2 * C.balls.cue.radius, 2);
+  });
+});

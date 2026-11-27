@@ -41,7 +41,14 @@ import {
   type ClothSpeed,
   type GameDef,
 } from './game/games';
-import { careerShape, computeGuide, launchDirection, pocketAhead } from './game/guide';
+import {
+  careerShape,
+  computeGuide,
+  cushionPath,
+  launchDirection,
+  pocketAhead,
+  type GuideShape,
+} from './game/guide';
 import { SimClient } from './game/sim-client';
 import { BallsView } from './render/balls-view';
 import { CameraRig, type CameraMode } from './render/cameras';
@@ -280,6 +287,8 @@ const REPLAY_PREROLL = 0.9;
 let showGuide = true;
 /** The guide follows the cue ball's real launch direction, including squirt from side. */
 let guideSquirt = true;
+/** 3-cushion: the guide follows the cue ball round the cushions. */
+let cushionLine = true;
 let shotCamMode: ShotCameraMode = 'cinematic';
 let shotCam: ShotCamera | null = null;
 let showPlayer = true;
@@ -627,6 +636,13 @@ function shoot(p: number): void {
     input = applyTuning(input, t, new Rng((Math.random() * 1e9) | 0), !g?.object);
   }
   strike(input, decl, p);
+}
+
+/** The quick-play object-ball line (a fixed 35 cm), for a guide drawn as a shape. */
+function defaultObject(g: NonNullable<ReturnType<typeof computeGuide>>): { x: number; y: number }[] {
+  if (!g.object) return [];
+  const { from, dir } = g.object;
+  return [from, { x: from.x + dir.x * 0.35, y: from.y + dir.y * 0.35 }];
 }
 
 /** Your career ratings for this shot: in a career match on your turn, or a training session. */
@@ -1100,6 +1116,7 @@ const menu: Menu = new Menu(
     onOption: (name, on) => {
       if (name === 'guide') showGuide = on;
       else if (name === 'squirt') guideSquirt = on;
+      else if (name === 'cushionLine') cushionLine = on;
       else if (name === 'labels') ballsView.setLabels(on);
       else if (name === 'haptics') haptics = on;
       else if (name === 'calm') calm = on;
@@ -1177,6 +1194,7 @@ const menu: Menu = new Menu(
 );
 showGuide = menu.settings.guide;
 guideSquirt = menu.settings.squirt;
+cushionLine = menu.settings.cushionLine;
 shotCamMode = menu.settings.shotCam;
 showPlayer = menu.settings.player;
 ballsView.setLabels(menu.settings.labels);
@@ -2347,12 +2365,25 @@ function frame(now: number): void {
       : null;
   const tuning = phase === 'aim' ? careerTuning() : null;
   hud.setLimits(tuning);
+  const speed = powerToSpeed(hud.power, game.maxSpeed);
+  // 3-cushion is hard to read without seeing the cue ball round the table: a line for it, in the
+  // career too (whatever your Vision), unless it is switched off.
+  const caromPath =
+    guide && cushionLine && game.id === 'three-cushion' && !(match && aiTurn())
+      ? cushionPath(game.table, balls, guide, cueId, shot.tip.b, speed)
+      : null;
+  const withCarom = (s: GuideShape | undefined): GuideShape | undefined =>
+    caromPath ? { object: s?.object ?? defaultObject(guide!), cue: caromPath } : s;
   if (tuning && guide)
     guideView.update(
       placing ? null : guide,
-      careerShape(game.table, guide, tuning.vision, shot.tip.b, powerToSpeed(hud.power, game.maxSpeed)),
+      withCarom(careerShape(game.table, guide, tuning.vision, shot.tip.b, speed)),
     );
-  else guideView.update(showGuide && !placing && !(match?.config.career && aiTurn()) ? guide : null);
+  else
+    guideView.update(
+      showGuide && !placing && !(match?.config.career && aiTurn()) ? guide : null,
+      withCarom(undefined),
+    );
   if (match && phase === 'aim') {
     const pocket = guide?.object ? pocketAhead(game.table, guide.object.from, guide.object.dir) : null;
     autoCall = guide?.object && pocket ? { ball: guide.object.id, pocket } : null;

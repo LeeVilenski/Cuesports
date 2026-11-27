@@ -78,7 +78,7 @@ import type { TierChoice } from '../render/quality';
 import { markTutorialSeen, tutorialSeen } from '../game/tutorial';
 
 export type ClothSpeedId = 'fast' | 'medium' | 'slow';
-export type OptionName = 'guide' | 'squirt' | 'player' | 'labels' | 'haptics' | 'calm';
+export type OptionName = 'guide' | 'squirt' | 'cushionLine' | 'player' | 'labels' | 'haptics' | 'calm';
 export type TextSize = 'normal' | 'large' | 'larger';
 export type ShotCamId = 'overview' | 'follow' | 'cinematic' | 'stay';
 export type StrokeId = 'bar' | 'pull';
@@ -229,6 +229,7 @@ export class Menu {
     this.settings = {
       guide: true,
       squirt: true,
+      cushionLine: true,
       player: true,
       labels: false,
       haptics: true,
@@ -1666,6 +1667,7 @@ export class Menu {
         h('h3', {}, 'Aiming'),
         opt('guide', 'Aiming guide'),
         opt('squirt', 'Guide allows for squirt'),
+        opt('cushionLine', '3-cushion: show the cue ball round the cushions'),
         this.field('Stroke', stroke.el),
         h('h3', {}, 'Camera'),
         this.field('During shots', shotCam.el),
