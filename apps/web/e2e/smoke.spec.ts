@@ -399,7 +399,10 @@ test('Free pyramid: after the break the player taps any ball to make it the cue 
   const chip = page.locator('.chip.call');
   await expect(chip).toHaveText(/^Cue ball: /);
   await chip.click();
-  await expect(page.locator('.pick-bar')).toContainText('Tap the ball you want to strike');
+  // No panel covers the table: the chip itself asks for the ball.
+  await expect(page.locator('.pick-bar')).toBeHidden();
+  await expect(chip).toHaveText('Cue ball: tap a ball');
+  if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/${test.info().project.name}.png` });
   // Tap a white ball (well clear of the others where possible).
   const target = await page.evaluate(() => {
     const s = window.__cuesports.state();

@@ -1739,10 +1739,8 @@ function updatePickBar(): void {
     matchHud.showPickBar('Tap the ball you are nominating.', [auto, cancel]);
     return;
   }
-  if (picking.kind === 'cue') {
-    matchHud.showPickBar('Tap the ball you want to strike.', [cancel]);
-    return;
-  }
+  // Choosing the cue ball needs no panel over the table: the chip says what to do.
+  if (picking.kind === 'cue') return matchHud.showPickBar(null);
   const text = picking.ball ? `Ball ${picking.ball}: now tap the pocket.` : 'Tap the ball you are calling.';
   const actions = [{ label: 'Safety', run: () => ((manualCall = 'safety'), endPick()) }, auto, cancel];
   if (picking.ball && picking.candidates.length > 1)
@@ -1805,8 +1803,8 @@ function pickAt(p: { x: number; y: number }): void {
     return;
   }
   if (picking.kind === 'cue') {
-    if (!best) return;
-    chooseCueBall(best);
+    // A tap on a ball strikes with it; a tap on the cloth keeps the ball already chosen.
+    if (best) chooseCueBall(best);
     endPick();
     return;
   }
@@ -2264,7 +2262,8 @@ function frame(now: number): void {
     autoCall = guide?.object && pocket ? { ball: guide.object.id, pocket } : null;
     const free = !match.turn.decision && !match.rackResult && !aiTurn() && !picking;
     if (match.turn.cueBallChoices) {
-      matchHud.showCueBall(cueLabel(cueId), free);
+      const choosing = picking?.kind === 'cue';
+      matchHud.showCueBall(choosing ? 'tap a ball' : cueLabel(cueId), free || choosing);
     } else if (match.turn.mustNominate) {
       const aimed = guide?.object?.id ?? null;
       autoNominate = aimed && match.turn.targets.includes(aimed) ? aimed : null;
