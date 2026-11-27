@@ -1,6 +1,7 @@
 import { AMERICAN_POOL_9FT as T, ENGLISH_POOL_7FT as E } from '@cuesports/shared';
 import { describe, expect, it } from 'vitest';
-import { collideBalls } from './ball-collision';
+import { collideBalls, collideCluster } from './ball-collision';
+import { layout } from './layouts';
 import { classify } from './motion';
 import { simulate } from './simulate';
 import { byId, cueAt, deg, kinetic, objAt, shot, speed } from './test-utils';
@@ -115,5 +116,62 @@ describe('ball–ball collisions', () => {
     // A lighter cue ball bounces back slightly after a full stun hit.
     expect(byId(res.final, 'cue').vel.x).toBeLessThan(0.05);
     expect(byId(res.final, '1').vel.x).toBeGreaterThan(0);
+  });
+});
+
+describe('rack breaks', () => {
+  // A rack is solved as one compliant contact: separate hard-sphere impacts sent the impulse down
+  // the two edge chains only, so a full-ball break knocked out the back corners and little else.
+  it('a full-power blackball break spreads the pack and is legal', () => {
+    const table = E;
+    for (let seed = 1; seed <= 6; seed++) {
+      const balls = layout(table, 'blackball', seed);
+      const cue = balls.find((b) => b.id === 'cue')!;
+      const apex = balls[0]!;
+      const aim = Math.atan2(apex.pos.y - cue.pos.y, apex.pos.x - cue.pos.x);
+      const r = simulate(
+        table,
+        balls,
+        { ball: 'cue', aim, elevation: 0.05, tip: { a: 0, b: 0 }, speed: 8 },
+        { sampleRate: 0 },
+      );
+      const obj = r.final.filter((b) => b.id !== 'cue');
+      const potted = obj.filter((b) => b.state === 'pocketed').length;
+      const passed = obj.filter((b) => b.state !== 'pocketed' && b.pos.x + b.radius < 0).length;
+      const railed = new Set(
+        r.events
+          .filter((e) => e.type === 'cushion' && e.ball !== 'cue')
+          .map((e) => (e.type === 'cushion' ? e.ball : '')),
+      ).size;
+      expect(potted + passed, `seed ${seed}`).toBeGreaterThanOrEqual(3);
+      expect(railed, `seed ${seed}`).toBeGreaterThanOrEqual(8);
+    }
+  });
+
+  it('a cluster contact conserves momentum and reports the struck pair first', () => {
+    const table = E;
+    const balls = layout(table, 'blackball', 1);
+    const cue = balls.find((b) => b.id === 'cue')!;
+    const apex = balls[0]!;
+    cue.pos = { x: apex.pos.x - apex.radius - cue.radius, y: apex.pos.y };
+    cue.vel = { x: 5, y: 0 };
+    cue.state = 'sliding';
+    const p0 = { x: 0, y: 0 };
+    for (const b of balls) {
+      p0.x += b.mass * b.vel.x;
+      p0.y += b.mass * b.vel.y;
+    }
+    const out = collideCluster(balls, balls.indexOf(apex), balls.indexOf(cue), table.balls)!;
+    expect(out.length).toBeGreaterThan(10);
+    expect(new Set([balls[out[0]!.a]!.id, balls[out[0]!.b]!.id])).toEqual(new Set(['cue', apex.id]));
+    const p1 = { x: 0, y: 0 };
+    for (const b of balls) {
+      p1.x += b.mass * b.vel.x;
+      p1.y += b.mass * b.vel.y;
+    }
+    expect(p1.x).toBeCloseTo(p0.x, 6);
+    expect(p1.y).toBeCloseTo(p0.y, 6);
+    const moving = balls.filter((b) => b.id !== 'cue' && Math.hypot(b.vel.x, b.vel.y) > 0.05).length;
+    expect(moving).toBeGreaterThanOrEqual(12);
   });
 });
