@@ -56,6 +56,9 @@ export class Hud {
   private elevation = 0;
   /** Elevation the cue is forced up to by a cushion or ball in the way (degrees, 0 if none). */
   private forced = 0;
+  /** Career limits: how far from centre you can strike, and how high you can raise the cue. */
+  private reach = MAX_TIP;
+  private maxElevation = 60;
   private placing = false;
   private lastPower = 0.4;
   private powerEl!: HTMLElement;
@@ -175,11 +178,11 @@ export class Hud {
       const r = this.spinBig.getBoundingClientRect();
       let a = ((e.clientX - r.left) / r.width) * 2 - 1;
       let b = -(((e.clientY - r.top) / r.height) * 2 - 1);
-      // Keep the tip just inside the miscue limit (the dashed ring).
+      // Keep the tip just inside the miscue limit (the dashed ring), or your reach in the career.
       const l = Math.hypot(a, b);
-      if (l > MAX_TIP) {
-        a = (a / l) * MAX_TIP;
-        b = (b / l) * MAX_TIP;
+      if (l > this.reach) {
+        a = (a / l) * this.reach;
+        b = (b / l) * this.reach;
       }
       this.tip = { a: Math.round(a * 50) / 50, b: Math.round(b * 50) / 50 };
       cb.onTip(this.tip.a, this.tip.b);
@@ -320,6 +323,31 @@ export class Hud {
     this.drawSpin();
   }
 
+  /**
+   * Career limits on the spin and elevation you can play (null for the full range). A tip or
+   * elevation already beyond them is brought back inside.
+   */
+  setLimits(l: { maxTip: number; maxElevation: number } | null): void {
+    const reach = l ? Math.min(MAX_TIP, l.maxTip) : MAX_TIP;
+    const elev = l ? Math.min(60, l.maxElevation) : 60;
+    if (reach === this.reach && elev === this.maxElevation) return;
+    this.reach = reach;
+    this.maxElevation = elev;
+    this.elevInput.max = String(elev);
+    const len = Math.hypot(this.tip.a, this.tip.b);
+    if (len > reach) {
+      this.tip = { a: (this.tip.a / len) * reach, b: (this.tip.b / len) * reach };
+      this.cb.onTip(this.tip.a, this.tip.b);
+    }
+    if (this.elevation > elev) {
+      this.elevation = elev;
+      this.elevInput.value = String(elev);
+      this.elevOut.textContent = `${elev}°`;
+      this.cb.onElevation(elev);
+    }
+    this.drawSpin();
+  }
+
   /** Shows the elevation the cue is raised to when the rail or a ball is in the way. */
   setForcedElevation(deg: number): void {
     const f = deg > this.elevation + 0.25 ? Math.round(deg * 2) / 2 : 0;
@@ -353,6 +381,18 @@ export class Hud {
       g.beginPath();
       g.arc(s / 2, s / 2, r * MISCUE_RING, 0, Math.PI * 2);
       g.stroke();
+      // Your reach in the career: outside the ring is off limits for now.
+      if (this.reach < MAX_TIP - 1e-6) {
+        g.fillStyle = 'rgba(0,0,0,0.22)';
+        g.beginPath();
+        g.arc(s / 2, s / 2, r, 0, Math.PI * 2);
+        g.arc(s / 2, s / 2, r * this.reach, 0, Math.PI * 2, true);
+        g.fill();
+        g.strokeStyle = 'rgba(36,89,201,0.7)';
+        g.beginPath();
+        g.arc(s / 2, s / 2, r * this.reach, 0, Math.PI * 2);
+        g.stroke();
+      }
       g.setLineDash([]);
       g.fillStyle = '#2459c9';
       g.beginPath();

@@ -1,6 +1,6 @@
 # Career mode v2: plan
 
-Status: phase 1 (Old Joe and the hub) is built; phases 2–6 are planned. The current career (`apps/web/src/game/career.ts`) is the v1
+Status: phases 1 (Old Joe and the hub) and 2 (attributes and the guide) are built; phases 3–6 are planned. The current career (`apps/web/src/game/career.ts`) is the v1
 this replaces.
 
 ## Where we are
@@ -292,8 +292,17 @@ Each phase ships on its own and leaves the game playable.
    after each match (also in the result sheet), his verdict at the end, confidence that moves with results
    against his targets (and keeps you a tier lower when it's low), inbox news (first title, new venues,
    rivals beaten, form talks), the walk-on card and a career timeline. Code: `game/agent.ts`.
-2. **Attributes and the guide.** Ratings, XP, levels, skill points, familiarity, the career shot tuning
-   (Vision lines, Cueing, Spin, Cushion craft, Touch), training drills.
+2. **Attributes and the guide.** _Built._ Six ratings with XP (`game/attributes.ts`): from your shots in
+   career matches (pots, long pots, spin pots, banks and kicks, safeties and soft pots), from deciders and
+   wins (Nerve), and from training. Player levels give skill points to spend on the Profile tab. Ceilings
+   of 40/60/80/99 by the highest tier open, and Joe tells you when one rises. Familiarity per game scales
+   your ratings (×0.8 to ×1). In career matches and training on your turn: the guide comes from Vision
+   (contact only below 10, then the object-ball line, the stun line, a spin-aware cue-ball path from 60,
+   one cushion rebound from 80), the strike gets aim, pace and tip error from Cueing, Touch and Spin
+   (extra on cushion-first shots from Cushion craft), and the spin widget and elevation slider are
+   limited by Spin and Cushion craft. At 99 everything is exactly as in quick play. Training: one
+   session between events, on eight of the challenges, XP by stars. Old careers start with ratings for
+   the tier they reached. Not yet: a ratings line on the pre-match card beyond familiarity.
 3. **Pressure.** Pressure balls per ruleset, the shrinking guide and wobble, Nerve and the HUD cue.
 4. **Calendar and money.** Weeks, agent bookings, entry rules, fees, travel, confidence and the cut,
    brackets, quick simulation, v1 → v2 migration.

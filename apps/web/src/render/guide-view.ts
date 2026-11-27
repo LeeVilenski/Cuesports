@@ -1,5 +1,5 @@
 import { BufferGeometry, Float32BufferAttribute, Group, Line, LineBasicMaterial, LineLoop } from 'three';
-import type { Guide } from '../game/guide';
+import type { Guide, GuideShape } from '../game/guide';
 
 const Z = 0.0015;
 
@@ -34,7 +34,11 @@ export class GuideView {
     l.visible = pts.length > 0;
   }
 
-  update(g: Guide | null): void {
+  /**
+   * Draws a guide. With a shape (career matches) the object-ball and cue-ball lines are the ones
+   * your Vision allows, and may be missing or carry on past a cushion.
+   */
+  update(g: Guide | null, shape?: GuideShape): void {
     this.group.visible = g !== null;
     if (!g) return;
     this.set(this.path, [g.from.x, g.from.y, Z, g.end.x, g.end.y, Z]);
@@ -47,6 +51,12 @@ export class GuideView {
       this.ghost.geometry.setAttribute('position', new Float32BufferAttribute(pts, 3));
       this.ghost.visible = true;
     } else this.ghost.visible = false;
+    if (shape) {
+      const flat = (pts: { x: number; y: number }[]) => pts.flatMap((p) => [p.x, p.y, Z]);
+      this.set(this.object, flat(shape.object));
+      this.set(this.tangent, flat(shape.cue));
+      return;
+    }
     if (g.object) {
       const { from, dir } = g.object;
       this.set(this.object, [from.x, from.y, Z, from.x + dir.x * 0.35, from.y + dir.y * 0.35, Z]);
