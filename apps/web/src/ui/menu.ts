@@ -3,6 +3,8 @@ import {
   AGENT,
   booking,
   bookingPitch,
+  ceiling,
+  spend,
   careerRecord,
   confidenceBand,
   finishIntro,
@@ -13,6 +15,7 @@ import {
   targetText,
   unread,
 } from '../game/agent';
+import { ATTRS, levelCost, pointCost, shotTuning, TRAINING } from '../game/attributes';
 import {
   bestText,
   careerEvent,
@@ -123,6 +126,8 @@ export interface MenuCallbacks {
   onSound(s: SoundSettings): void;
   /** Enter a career event (abandoning any other in progress). */
   onCareerEnter(event: string): void;
+  /** Start a career training session (a challenge id from TRAINING). */
+  onCareerTrain(id: string): void;
   /** A change to the career from the hub (the intro seen, a message read). */
   onCareerUpdate(s: CareerState): void;
   /** Play your next match in the career event. */
@@ -142,6 +147,7 @@ type Screen =
   | 'player'
   | 'career'
   | 'intro'
+  | 'training'
   | 'event';
 
 const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: string }[] = [
@@ -298,6 +304,7 @@ export class Menu {
       player: () => this.player(),
       career: () => (this.cb.career().introSeen ? this.careerScreen() : this.introScreen()),
       intro: () => this.introScreen(),
+      training: () => this.trainingScreen(),
       event: () => this.eventScreen(),
     };
     this.cb.onPreview(screen === 'player');
@@ -1111,6 +1118,29 @@ export class Menu {
     meter.setAttribute('aria-valuenow', String(s.confidence));
     meter.append(h('span', {}));
     (meter.firstElementChild as HTMLElement).style.width = `${s.confidence}%`;
+    if (s.trainingReady)
+      body.append(
+        h(
+          'div',
+          { className: 'tiles' },
+          this.tile(
+            'green',
+            'target',
+            'Training',
+            'One session before your next event',
+            () => this.go('training'),
+            'wide',
+          ),
+        ),
+      );
+    if (s.player.points > 0)
+      body.append(
+        h(
+          'p',
+          { className: 'event-status won' },
+          `${s.player.points} skill point${s.player.points > 1 ? 's' : ''} to spend on the Profile tab.`,
+        ),
+      );
     body.append(
       h('h3', {}, "Joe's confidence"),
       h('div', { className: 'stat-line' }, meter, h('small', {}, confidenceBand(s.confidence))),
@@ -1245,6 +1275,7 @@ export class Menu {
         cell('Matches lost', String(r.lost)),
       ),
     );
+    body.append(this.skills());
     const titles = EVENTS.filter((e) => (s.best[e.id] ?? 0) >= rounds(e));
     body.append(h('h3', {}, 'Trophies'));
     body.append(
@@ -1299,6 +1330,147 @@ export class Menu {
       ),
     );
     return body;
+  }
+
+  /** Your ratings with their XP, skill points to spend, and how well you know each game. */
+  private skills(): HTMLElement {
+    const s = this.cb.career();
+    const p = s.player;
+    const cap = ceiling(s);
+    const wrap = h('div', { className: 'skills' });
+    wrap.append(
+      h('h3', {}, `Level ${p.level}`),
+      h(
+        'div',
+        { className: 'stat-line' },
+        this.bar(p.levelXp / levelCost(p.level)),
+        h('small', {}, `${p.levelXp} / ${levelCost(p.level)} XP`),
+      ),
+      h(
+        'p',
+        { className: 'fine-print' },
+        `Your ceiling is ${cap}: no skill goes higher until you move up.${p.points ? ` Skill points: ${p.points}.` : ''}`,
+      ),
+    );
+    for (const a of ATTRS) {
+      const r = p.ratings[a.id];
+      const plus =
+        p.points > 0 && r < cap
+          ? h(
+              'button',
+              {
+                className: 'coach-btn primary skill-plus',
+                ariaLabel: `Spend a point on ${a.label}`,
+                onclick: () => {
+                  this.cb.onCareerUpdate(spend(this.cb.career(), a.id));
+                  this.show('career');
+                },
+              },
+              '+1',
+            )
+          : '';
+      wrap.append(
+        h(
+          'div',
+          { className: 'skill' },
+          h(
+            'div',
+            { className: 'skill-head' },
+            h('strong', {}, a.label),
+            h('span', { className: 'skill-num' }, String(r)),
+            plus,
+          ),
+          h(
+            'div',
+            { className: 'stat-line' },
+            this.bar(r / 99, cap / 99),
+            h('small', {}, r >= cap ? 'At ceiling' : `${p.xp[a.id]} / ${pointCost(r)} XP`),
+          ),
+          h('small', {}, `${a.low}. Trained by: ${a.trained.toLowerCase()}.`),
+        ),
+      );
+    }
+    const games = Object.entries(p.familiarity).filter(([, f]) => (f ?? 0) > 0);
+    if (games.length) {
+      wrap.append(h('h3', {}, 'Familiarity'));
+      for (const [g, f] of games.sort((x, y) => (y[1] ?? 0) - (x[1] ?? 0))) {
+        const label = MATCH_GAMES.find((x) => x.id === g)?.label ?? g;
+        wrap.append(
+          h(
+            'div',
+            { className: 'stat-line fam' },
+            h('span', {}, label),
+            this.bar((f ?? 0) / 100),
+            h('small', {}, `${f}`),
+          ),
+        );
+      }
+      wrap.append(
+        h(
+          'p',
+          { className: 'fine-print' },
+          'You play below your ratings in a game you know less well. It grows by playing it.',
+        ),
+      );
+    }
+    return wrap;
+  }
+
+  /** A thin progress bar, with an optional mark (the ceiling). */
+  private bar(f: number, mark?: number): HTMLElement {
+    const m = h('div', { className: 'meter', ariaHidden: 'true' }, h('span', {}));
+    (m.firstElementChild as HTMLElement).style.width = `${Math.max(0, Math.min(1, f)) * 100}%`;
+    if (mark !== undefined && mark < 1) {
+      const c = h('i', { className: 'cap' });
+      c.style.left = `${mark * 100}%`;
+      m.append(c);
+    }
+    return m;
+  }
+
+  /** Pick a training session: each is a challenge that works on one or two skills. */
+  private trainingScreen(): HTMLElement {
+    const s = this.cb.career();
+    const body = h('div', { className: 'scroll' });
+    body.append(
+      this.joeCard([
+        s.trainingReady
+          ? 'One session before your next event. Pick what needs work. The better you do, the more you get out of it.'
+          : "You've trained already. Play your next event and we'll go again after it.",
+      ]),
+    );
+    const t = shotTuning(s.player, 'nine-ball');
+    body.append(
+      h(
+        'p',
+        { className: 'fine-print' },
+        `You train as you play: with your own guide (Vision ${Math.round(s.player.ratings.vision)}), spin reach and elevation (up to ${t.maxElevation}°).`,
+      ),
+    );
+    const tiles = h('div', { className: 'tiles' });
+    const colours = ['blue', 'orange', 'green', 'red', 'purple', 'teal'];
+    TRAINING.forEach((tr, i) => {
+      const c = CHALLENGES.find((x) => x.id === tr.id);
+      if (!c) return;
+      const skills = tr.attrs.map((a) => ATTRS.find((x) => x.id === a)!.label).join(' + ');
+      tiles.append(
+        this.tile(
+          colours[i % colours.length]!,
+          'target',
+          `${skills}: ${c.title}`,
+          c.goal,
+          s.trainingReady
+            ? () => {
+                this.close();
+                this.cb.onCareerTrain(tr.id);
+              }
+            : null,
+          'wide',
+        ),
+      );
+    });
+    body.append(tiles);
+    return h('div', { className: 'sub career' }, this.header('Training'), body);
   }
 
   /** The event you're in: Joe's talk, the walk-on card for your next match, and the bracket. */
@@ -1411,6 +1583,7 @@ export class Menu {
       h('strong', {}, `You vs ${o.name}`),
       h('span', {}, `${o.style} · ${level}${opp.id === e.rival ? ' · your rival' : ''}`),
       h('span', {}, w + l ? `Head to head: you ${w}–${l}` : 'First meeting'),
+      h('span', {}, `Your ${gameName(e)}: familiarity ${s.player.familiarity[e.game] ?? 0}`),
       h('em', {}, stake),
     );
   }

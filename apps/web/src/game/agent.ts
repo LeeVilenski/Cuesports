@@ -9,12 +9,28 @@ import {
   rounds,
   roundName,
   tierOpen,
+  topTier,
   VENUES,
   type CareerEvent,
   type CareerMessage,
   type CareerState,
 } from './career';
 import type { MatchGame } from './match';
+import {
+  addLevelXp,
+  addXp,
+  ATTRS,
+  ceilingFor,
+  matchXp,
+  playedGame,
+  rust,
+  spendPoint,
+  sumXp,
+  trainingXp,
+  type Attr,
+  type Ratings,
+  type Training,
+} from './attributes';
 
 /**
  * Old Joe, your agent. He books your events, sets you a target for each one and talks you through
@@ -378,6 +394,7 @@ export function playMatch(
   won: boolean,
   seed: number,
   figures?: MatchFigures,
+  play?: MatchPlay,
 ): CareerState {
   const before = state;
   const run0 = state.run;
@@ -386,10 +403,12 @@ export function playMatch(
   const opp = nextOpponent(run0)!;
   let s = recordMatch(state, won, seed);
   const run = s.run!;
+  const champion = run.status === 'won';
+  s = develop(s, e.game, won, champion, play ?? { xp: {}, deciders: 0 });
   const stat = figures ? statLine(won, figures.potPct, figures.best, figures.word, figures.fouls) : '';
   if (run.status === 'playing') return { ...s, run: { ...run, talk: betweenRounds(s, seed, stat) } };
 
-  const champion = run.status === 'won';
+  s = { ...s, player: rust(s.player, e.game), trainingReady: true };
   const reached = champion ? rounds(e) : run.round;
   const target = run0.target ?? targetFor(before, e);
   const confidence = Math.max(0, Math.min(100, s.confidence + confidenceDelta(reached, target, champion)));
@@ -400,6 +419,16 @@ export function playMatch(
     run: { ...run, debrief: debrief(e, reached, target, champion, seed, stat) },
   };
 
+  if (topTier(s) > topTier(before))
+    s = send(
+      s,
+      message(
+        `ceiling-${topTier(s)}`,
+        'Better players, better practice',
+        `Moving up means playing better players, and you learn faster against them. Your ceiling has risen to ` +
+          `${ceilingFor(topTier(s))}: every skill can go that high now.`,
+      ),
+    );
   if (champion && !before.log.some((l) => l.champion))
     s = send(
       s,
@@ -454,6 +483,52 @@ export function playMatch(
       ),
     );
   return s;
+}
+
+/** What you did in a match, for XP: per-shot XP summed, and deciding racks won. */
+export interface MatchPlay {
+  xp: Partial<Ratings>;
+  deciders: number;
+}
+
+export const ceiling = (s: CareerState): number => ceilingFor(topTier(s));
+
+/** XP into your ratings and level, and familiarity with the game, after a career match. */
+function develop(
+  s: CareerState,
+  game: MatchGame,
+  won: boolean,
+  champion: boolean,
+  play: MatchPlay,
+): CareerState {
+  const m = matchXp(won, play.deciders, champion);
+  const xp = sumXp(play.xp, { nerve: m.nerve });
+  const a = addXp(playedGame(s.player, game), xp, ceiling(s));
+  const l = addLevelXp(a.player, m.level);
+  return { ...s, player: l.player, lastGains: { xp, ups: a.ups, levels: l.levels } };
+}
+
+/** A training session: XP by stars, and it uses up the session until after the next event. */
+export function train(s: CareerState, t: Training, stars: number): CareerState {
+  const xp = trainingXp(t, stars);
+  const a = addXp(s.player, xp, ceiling(s));
+  return { ...s, player: a.player, trainingReady: false, lastGains: { xp, ups: a.ups, levels: 0 } };
+}
+
+/** Spends a skill point. */
+export function spend(s: CareerState, attr: Attr): CareerState {
+  return { ...s, player: spendPoint(s.player, attr, ceiling(s)) };
+}
+
+/** XP gains and rating rises, in words: "Vision +12, Cueing 15 → 16". */
+export function gainsText(g: CareerState['lastGains']): string {
+  if (!g) return '';
+  const parts = ATTRS.filter((a) => (g.xp[a.id] ?? 0) > 0).map((a) => {
+    const up = g.ups.find((u) => u.attr === a.id);
+    return up ? `${a.label} ${up.from} → ${up.to}` : `${a.label} +${g.xp[a.id]} XP`;
+  });
+  if (g.levels) parts.push(g.levels > 1 ? `${g.levels} levels up` : 'Level up: a skill point to spend');
+  return parts.join(' · ');
 }
 
 /** Your career in numbers, for the profile. */

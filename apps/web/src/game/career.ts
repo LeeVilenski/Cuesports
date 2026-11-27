@@ -1,5 +1,6 @@
 import { Rng } from '@cuesports/shared';
 import type { MatchGame } from './match';
+import { migratedPlayer, newPlayer, type Attr, type CareerPlayer, type Ratings } from './attributes';
 
 /**
  * Career: a fictional circuit from the pub to the arena. Each venue holds events for one or two
@@ -308,6 +309,18 @@ export interface CareerState {
   inbox: CareerMessage[];
   /** Finished events, oldest first. */
   log: CareerLogEntry[];
+  /** Your ratings, XP, level and familiarity. */
+  player: CareerPlayer;
+  /** A training session is available (one between events). */
+  trainingReady: boolean;
+  /** What your last career match or session earned, for the result sheet and the hub. */
+  lastGains: CareerGains | null;
+}
+
+export interface CareerGains {
+  xp: Partial<Ratings>;
+  ups: { attr: Attr; from: number; to: number }[];
+  levels: number;
 }
 
 export const YOU = 'you';
@@ -321,6 +334,9 @@ export const newCareer = (): CareerState => ({
   confidence: 50,
   inbox: [],
   log: [],
+  player: newPlayer(),
+  trainingReady: true,
+  lastGains: null,
 });
 
 export const rounds = (e: CareerEvent): number => e.raceTo.length;
@@ -330,6 +346,10 @@ export function tierOpen(state: CareerState, tier: number): boolean {
   if (tier === 0) return true;
   return EVENTS.some((e) => e.tier === tier - 1 && (state.best[e.id] ?? 0) >= rounds(e));
 }
+
+/** The highest tier open to you. */
+export const topTier = (state: CareerState): number =>
+  Math.max(...VENUES.filter((v) => tierOpen(state, v.tier)).map((v) => v.tier));
 
 export const isLocked = (state: CareerState, key: string): boolean =>
   key in REWARDS && !state.unlocked.includes(key);
@@ -447,7 +467,11 @@ export function loadCareer(): CareerState {
 export function parseCareer(raw: string | null): CareerState {
   if (!raw) return newCareer();
   try {
-    return { ...newCareer(), ...(JSON.parse(raw) as Partial<CareerState>) };
+    const saved = JSON.parse(raw) as Partial<CareerState>;
+    const s = { ...newCareer(), ...saved };
+    // A career from before ratings: start them at the level of the tiers it reached.
+    if (!saved.player) s.player = migratedPlayer(topTier(s));
+    return s;
   } catch {
     return newCareer();
   }

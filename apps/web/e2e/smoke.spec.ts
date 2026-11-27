@@ -395,6 +395,25 @@ test('career: meets Old Joe, enters an event and shows the bracket', async ({ pa
   expect(errors).toEqual([]);
 });
 
+test('career: training plays with your own reach', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  // Past Old Joe's introduction.
+  await page.evaluate(() =>
+    localStorage.setItem('cuesports.career', JSON.stringify({ introSeen: true, inbox: [], log: [] })),
+  );
+  await page.reload();
+  await page.getByRole('button', { name: /^Career/ }).click();
+  await page.getByRole('button', { name: /^Training/ }).click();
+  await page.getByRole('button', { name: /^Cueing: Straight in/ }).click();
+  // A starting player can't raise the cue far.
+  const max = await page.locator('.spin-sheet input[type=range]').getAttribute('max');
+  expect(Number(max)).toBeLessThan(20);
+  await page.waitForFunction(() => window.__cuesports?.state().phase === 'aim');
+  expect(errors).toEqual([]);
+});
+
 test('Free pyramid: after the break the player taps any ball to make it the cue ball', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));

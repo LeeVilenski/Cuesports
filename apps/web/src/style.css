@@ -2071,6 +2071,57 @@ body {
   color: var(--muted);
   font-size: 13px;
 }
+/* Career skills */
+.menu .skills {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.menu .skill {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.menu .skill > small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.menu .skill-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.menu .skill-head strong {
+  flex: 1;
+}
+.menu .skill-num {
+  font: 700 20px var(--font-display);
+  color: var(--yellow);
+}
+.menu .skill-plus {
+  flex: none;
+  width: auto;
+  min-width: 0;
+  padding: 4px 12px;
+}
+.menu .meter {
+  position: relative;
+}
+.menu .meter .cap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.6);
+}
+.menu .stat-line.fam > span {
+  min-width: 8em;
+  font-size: 14px;
+}
+
 /* Old Joe, the agent */
 .menu .joe {
   display: flex;

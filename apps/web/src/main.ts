@@ -29,7 +29,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import { DEFAULT_CUE, type TableSpec } from '@cuesports/shared';
+import { DEFAULT_CUE, Rng, type TableSpec } from '@cuesports/shared';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { registerSW } from 'virtual:pwa-register';
 import {
@@ -41,7 +41,7 @@ import {
   type ClothSpeed,
   type GameDef,
 } from './game/games';
-import { computeGuide, launchDirection, pocketAhead } from './game/guide';
+import { careerShape, computeGuide, launchDirection, pocketAhead } from './game/guide';
 import { SimClient } from './game/sim-client';
 import { BallsView } from './render/balls-view';
 import { CameraRig, type CameraMode } from './render/cameras';
@@ -73,7 +73,17 @@ import { openStore } from './game/store';
 import { cuesFor, due, type SoundCue } from './audio/cues';
 import { DEFAULT_SOUND, Sound, type SoundSettings } from './audio/sound';
 import { addMatch, emptyStats, percent } from './game/stats';
-import { AGENT, enterEvent, playMatch } from './game/agent';
+import { AGENT, enterEvent, gainsText, playMatch, train } from './game/agent';
+import {
+  applyTuning,
+  shotTuning,
+  shotXp,
+  sumXp,
+  TRAINING,
+  type Ratings,
+  type ShotTuning,
+  type Training,
+} from './game/attributes';
 import {
   careerEvent,
   loadCareer,
@@ -606,11 +616,24 @@ function shoot(p: number): void {
       else if (call) decl = { call };
     }
   }
-  strike(
-    { ...shot, speed: strokeSpeed(powerToSpeed(p, game.maxSpeed), shot.tip, cue.mass, DEFAULT_CUE.mass) },
-    decl,
-    p,
-  );
+  let input = {
+    ...shot,
+    speed: strokeSpeed(powerToSpeed(p, game.maxSpeed), shot.tip, cue.mass, DEFAULT_CUE.mass),
+  };
+  // In the career the shot comes off your cue as well as your ratings allow.
+  const t = careerTuning();
+  if (t) {
+    const g = computeGuide(game.table, balls, cueId, input.aim);
+    input = applyTuning(input, t, new Rng((Math.random() * 1e9) | 0), !g?.object);
+  }
+  strike(input, decl, p);
+}
+
+/** Your career ratings for this shot: in a career match on your turn, or a training session. */
+function careerTuning(): ShotTuning | null {
+  if (challenge?.training) return shotTuning(career.player, challenge.spec.table);
+  if (!match?.config.career || aiTurn()) return null;
+  return shotTuning(career.player, match.config.game);
 }
 
 /** Takes a shot exactly as given (used by the player's stroke and by the AI). */
@@ -683,6 +706,10 @@ function endPlayback(): void {
   if (replaying || match) {
     if (match && !replaying && last) {
       match.judge(decl, last.before, result, last.shot);
+      if (match.config.career && last.shooter === 0) {
+        const rec = match.record.racks.flatMap((r) => r.shots).at(-1);
+        if (rec && rec.player === 0) careerXp = sumXp(careerXp, shotXp(rec, result.events));
+      }
       saveMatch();
     }
     replaying = false;
@@ -1014,7 +1041,11 @@ const matchHud: MatchHud = new MatchHud({
   },
   onNewMatch: () => {
     if (match?.config.career) menu.open('event');
-    else if (challenge) startChallenge(challenge.next ?? challenge.spec);
+    else if (challenge?.training) {
+      endChallenge();
+      quitToHome();
+      menu.open('career');
+    } else if (challenge) startChallenge(challenge.next ?? challenge.spec);
     else if (match?.config.drill) startMatch(match.config);
     else menu.open('play');
   },
@@ -1102,6 +1133,11 @@ const menu: Menu = new Menu(
     },
     onCareerPlay: () => startCareerMatch(),
     onTutorial: () => startTutorial(),
+    onCareerTrain: (id) => {
+      const t = TRAINING.find((x) => x.id === id);
+      const spec = t && CHALLENGES.find((c) => c.id === t.id);
+      if (t && spec && career.trainingReady) startChallenge(spec, t);
+    },
     onChallenge: (id) => {
       const spec = CHALLENGES.find((c) => c.id === id);
       if (spec) startChallenge(spec);
@@ -1275,7 +1311,24 @@ let career: CareerState = loadCareer();
 /** Matches whose result has gone into the career already (a result sheet can be shown twice). */
 const careerRecorded = new WeakSet<Match>();
 
+/** XP your shots have earned in the career match being played. */
+let careerXp: Partial<Ratings> = {};
+
+/** Racks you won from hill-hill: the deciders. */
+function decidersWon(m: Match): number {
+  const score = [0, 0];
+  let n = 0;
+  const need = m.config.raceTo;
+  for (const r of m.record.racks) {
+    if (r.winner === null) continue;
+    if (r.winner === 0 && score[0] === need - 1 && score[1] === need - 1) n++;
+    score[r.winner]!++;
+  }
+  return n;
+}
+
 function startCareerMatch(): void {
+  careerXp = {};
   const run = career.run;
   const e = run && careerEvent(run.event);
   const opp = run && nextOpponent(run);
@@ -1324,7 +1377,10 @@ function careerResult(m: Match, winner: string, score: string): void {
       word: visitWord(m.config.game),
       fouls: st.fouls,
     };
-    career = playMatch(career, won, (Math.random() * 1e9) | 0, figures);
+    career = playMatch(career, won, (Math.random() * 1e9) | 0, figures, {
+      xp: careerXp,
+      deciders: decidersWon(m),
+    });
     saveCareer(career);
   }
   // Joe's first word on it, in the result sheet.
@@ -1336,7 +1392,8 @@ function careerResult(m: Match, winner: string, score: string): void {
       ? `Through to the ${roundName(e, c.round + 1).toLowerCase()}`
       : `${winner} wins the ${roundName(e, c.round).toLowerCase()}`;
   const prize = champion ? ` Unlocked: ${REWARDS[e.reward] ?? ''}.` : '';
-  const said = joe ? ` ${AGENT.name}: “${joe}”` : '';
+  const gains = gainsText(career.lastGains);
+  const said = `${joe ? ` ${AGENT.name}: “${joe}”` : ''}${gains ? ` ${gains}.` : ''}`;
   matchHud.showResult(title, `${score}.${prize}${said} ${matchSummary(m)}`, true, 'Continue');
 }
 
@@ -1346,6 +1403,8 @@ function careerResult(m: Match, winner: string, score: string): void {
 /** The challenge being played: its spec, the run so far, and (once over) its result sheet. */
 let challenge: {
   spec: ChallengeSpec;
+  /** A career training session. */
+  training?: Training;
   run: ChallengeRun;
   next: ChallengeSpec | null;
   sheet: (() => void) | null;
@@ -1377,10 +1436,11 @@ function showTarget(t: ChallengeSpec['target']): void {
   targetRings.position.set(t.x, t.y, 0.0015);
 }
 
-function startChallenge(spec: ChallengeSpec): void {
+function startChallenge(spec: ChallengeSpec, training?: Training): void {
   setGame(GAMES.find((g) => g.id === spec.table) ?? GAMES[0]!);
   const i = CHALLENGES.indexOf(spec);
-  challenge = { spec, run: newRun(), next: CHALLENGES[i + 1] ?? null, sheet: null };
+  challenge = { spec, run: newRun(), next: training ? null : (CHALLENGES[i + 1] ?? null), sheet: null };
+  if (training) challenge.training = training;
   setupChallengeTable();
   matchHud.say(spec.goal, 5000);
 }
@@ -1431,6 +1491,21 @@ function challengeShot(result: ShotResult): void {
   }
   const won = v.status === 'won';
   status(`${c.spec.title} · ${won ? starText(v.stars) : 'not this time'}`);
+  if (c.training) {
+    career = train(career, c.training, won ? v.stars : 0);
+    saveCareer(career);
+    const gains = gainsText(career.lastGains);
+    c.sheet = () =>
+      matchHud.showResult(
+        won ? `${starText(v.stars)}  Training: ${c.spec.title}` : `Training: ${c.spec.title}`,
+        `${v.message} ${AGENT.name}: “${won ? (v.stars >= 3 ? 'Perfect. Again tomorrow.' : 'Good work. Keep at it.') : "That's what practice is for."}” ${gains ? `${gains}.` : ''}`,
+        true,
+        'Back to Old Joe',
+        null,
+      );
+    c.sheet();
+    return;
+  }
   const better = won && recordStars(c.spec.id, v.stars);
   const best = loadStars()[c.spec.id] ?? 0;
   c.sheet = () =>
@@ -2270,7 +2345,14 @@ function frame(now: number): void {
     phase === 'aim' && cue
       ? computeGuide(game.table, balls, cueId, guideSquirt ? launchDirection(cue, shot) : shot.aim)
       : null;
-  guideView.update(showGuide && !placing ? guide : null);
+  const tuning = phase === 'aim' ? careerTuning() : null;
+  hud.setLimits(tuning);
+  if (tuning && guide)
+    guideView.update(
+      placing ? null : guide,
+      careerShape(game.table, guide, tuning.vision, shot.tip.b, powerToSpeed(hud.power, game.maxSpeed)),
+    );
+  else guideView.update(showGuide && !placing && !(match?.config.career && aiTurn()) ? guide : null);
   if (match && phase === 'aim') {
     const pocket = guide?.object ? pocketAhead(game.table, guide.object.from, guide.object.dir) : null;
     autoCall = guide?.object && pocket ? { ball: guide.object.id, pocket } : null;
