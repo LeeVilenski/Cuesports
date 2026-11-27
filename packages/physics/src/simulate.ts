@@ -1,5 +1,5 @@
 import { DEFAULT_CUE, type TableSpec, type Vec2 } from '@cuesports/shared';
-import { collideBalls } from './ball-collision';
+import { collideBalls, collideCluster } from './ball-collision';
 import { collideCushion } from './cushion';
 import { overDrop, tableGeometry, type Segment } from './geometry';
 import { advanceBall } from './motion';
@@ -246,6 +246,12 @@ export function simulate(
     if (c.kind === 'ball') {
       const a = state[c.i]!;
       const b = state[c.j]!;
+      const cluster = collideCluster(state, c.i, c.j, table.balls);
+      if (cluster) {
+        for (const x of cluster)
+          events.push({ type: 'ball', t, a: state[x.a]!.id, b: state[x.b]!.id, speed: x.speed });
+        return;
+      }
       const speed = collideBalls(a, b, table.balls);
       if (speed > 0) events.push({ type: 'ball', t, a: a.id, b: b.id, speed });
     } else {
