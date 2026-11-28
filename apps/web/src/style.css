@@ -2927,6 +2927,16 @@ body.result-open .match-hud .xp-pop {
   font-size: 0.8em;
 }
 
+/* A feat (a plant, a snooker escaped): the shot itself, in purple, ahead of its XP. */
+.gain.feat,
+.xp-card .gain.feat {
+  background: rgba(124, 92, 224, 0.9);
+  border-color: #a993f0;
+  color: #fff;
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+}
+
 .gain.level {
   background: rgba(242, 193, 78, 0.2);
   border-color: var(--accent);

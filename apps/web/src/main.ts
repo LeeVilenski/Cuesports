@@ -86,8 +86,9 @@ import { pressureKind, situation, stakes, type PressureInput } from './game/pres
 import { eligibility } from './game/season';
 import { isTourEvent } from './game/tour-events';
 import { cueBonus } from './game/economy';
-import { AGENT, enterEvent, gainsItems, playMatch, shotGains, train } from './game/agent';
+import { AGENT, enterEvent, gainsItems, playMatch, shotGains, train, type GainItem } from './game/agent';
 import { matchSituation, rackBadge } from './game/rack-story';
+import { shotFeats, snookered, type Spot } from './game/feats';
 import {
   applyTuning,
   ATTRS,
@@ -726,6 +727,8 @@ function shoot(p: number): void {
   const t = careerTuning();
   strikeFelt = t?.felt ?? 0;
   strikeSituation = t ? shotSituation() : {};
+  strikeSnookered =
+    !!t && !!match && match.turn.ballInHand === 'none' && snookeredNow(cueId, match.turn.targets);
   if (t) p = Math.min(p, t.maxPower);
   let input = {
     ...shot,
@@ -837,6 +840,19 @@ function careerPressure(): { pressure: number; kind: string } | null {
 let strikeSituation: ShotSituation = {};
 /** Pressure (as felt) on the shot just played, for Nerve XP. */
 let strikeFelt = 0;
+/** You were snookered on the shot just played. */
+let strikeSnookered = false;
+
+/** The balls on the table, where they stand. */
+const spots = (): Spot[] =>
+  balls.filter((b) => b.state !== 'pocketed').map((b) => ({ id: b.id, x: b.pos.x, y: b.pos.y }));
+
+/** Is the cue ball snookered on the balls given (pool and snooker; not carom games)? */
+function snookeredNow(cue: string, targets: readonly string[]): boolean {
+  if (match && CAROM_GAMES.has(match.config.game)) return false;
+  const r = balls.find((b) => b.id === cue)?.radius ?? game.table.balls.cue.radius;
+  return snookered(spots(), cue, targets, r);
+}
 
 /** Takes a shot exactly as given (used by the player's stroke and by the AI). */
 function strike(input: ShotInput, declaration: ShotDeclaration, pullVisual: number): void {
@@ -913,6 +929,27 @@ function endPlayback(): void {
         if (rec && rec.player === 0) {
           const xpBefore = careerXp;
           careerXp = sumXp(careerXp, shotXp(rec, result.events));
+          // Escapes, combinations, plants, cannons and snookers left: XP on top.
+          const t = match.turn;
+          const after = result.final.filter((b) => b.state !== 'pocketed');
+          const leftSnookered =
+            t.player === 1 &&
+            t.ballInHand === 'none' &&
+            !t.cueBallChoices &&
+            !CAROM_GAMES.has(match.config.game) &&
+            snookered(
+              after.map((b) => ({ id: b.id, x: b.pos.x, y: b.pos.y })),
+              t.cueBall ?? 'cue',
+              t.targets,
+              game.table.balls.cue.radius,
+            );
+          const feats = shotFeats(rec, result.events, {
+            snookeredBefore: strikeSnookered,
+            leftSnookered,
+            R: game.table.balls.cue.radius,
+          });
+          careerXp = sumXp(careerXp, feats.xp);
+          rackFeats.push(...feats.names);
           // A hard ball potted, cleanly, trains the skill for that kind of shot.
           if (rec.potted.length && !rec.fouls.length) {
             if (strikeFelt >= PRESSURE_BALL)
@@ -921,7 +958,8 @@ function endPlayback(): void {
             if (strikeSituation.cushion) careerXp = sumXp(careerXp, { cushion: 5 });
           }
           // Not on the shot that ends a rack: its sheet has the rack's (or the match's) XP.
-          if (!match.rackResult) matchHud.showXp(shotGains(career, xpBefore, careerXp));
+          if (!match.rackResult)
+            matchHud.showXp([...featItems(feats.names), ...shotGains(career, xpBefore, careerXp)]);
         }
       }
       saveMatch();
@@ -1537,6 +1575,12 @@ const careerRecorded = new WeakSet<Match>();
 let careerXp: Partial<Ratings> = {};
 /** Career XP so far at the start of this rack, for the rack's sheet. */
 let rackXpStart: Partial<Ratings> = {};
+/** The rack's fancy shots so far ("Plant!"), for its sheet. */
+let rackFeats: string[] = [];
+
+/** Fancy shots as chips, for the XP pop and the rack sheet. */
+const featItems = (names: readonly string[]): GainItem[] =>
+  names.map((label) => ({ label, value: '', kind: 'feat' }));
 
 /** Racks you won from hill-hill: the deciders. */
 function decidersWon(m: Match): number {
@@ -1554,6 +1598,7 @@ function decidersWon(m: Match): number {
 function startCareerMatch(): void {
   careerXp = {};
   rackXpStart = {};
+  rackFeats = [];
   const run = career.run;
   const e = run && careerEvent(run.event);
   const opp = run && nextOpponent(run);
@@ -1625,8 +1670,15 @@ function rackResult(m: Match, w: string): void {
     : undefined;
   let gains: ReturnType<typeof gainsItems> = [];
   if (m.config.career) {
-    gains = shotGains(career, rackXpStart, careerXp);
+    // Each kind of feat once, with a count when it came up more than once.
+    const counts = new Map<string, number>();
+    for (const f of rackFeats) counts.set(f, (counts.get(f) ?? 0) + 1);
+    gains = [
+      ...featItems([...counts].map(([f, n]) => (n > 1 ? `${f} ×${n}` : f))),
+      ...shotGains(career, rackXpStart, careerXp),
+    ];
     rackXpStart = careerXp;
+    rackFeats = [];
   }
   const vsComputer = m.config.ai !== null && r.winner === 1;
   matchHud.showResult(`${w} wins ${unit} ${m.rack}`, {
