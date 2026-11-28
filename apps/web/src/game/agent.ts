@@ -18,6 +18,16 @@ import {
   type CareerState,
 } from './career';
 import type { MatchGame } from './match';
+import {
+  chooseNickname,
+  isRival,
+  nicknameChoices,
+  nicknameEarned,
+  semisReached,
+  signSponsor,
+  sponsorable,
+  sponsorOffer,
+} from './economy';
 import { isTourEvent, MAJOR_FIELD } from './tour-events';
 import { tourDef } from './roster';
 import {
@@ -258,7 +268,8 @@ export function preTalk(state: CareerState, e: CareerEvent, target: number, seed
         finals: "The Tour Finals. Only the top eight get here. You've earned this.",
       }[e.kind]
     : null;
-  return [opener, ...gameLines(e, firstTime), field, ...(tour ? [tour] : []), ask];
+  const nick = state.nickname ? [`Go on, ${state.nickname}. Show them why they call you that.`] : [];
+  return [opener, ...gameLines(e, firstTime), field, ...(tour ? [tour] : []), ask, ...nick];
 }
 
 /** Joe's line after a match you won, before the next round. */
@@ -274,7 +285,11 @@ export function betweenRounds(state: CareerState, seed: number, stat?: string): 
     opp.id === e.rival
       ? `${o.name} next, in the ${roundName(e, run.round).toLowerCase()}. ${o.style}. This is the one.`
       : `${o.name} in the ${roundName(e, run.round).toLowerCase()}. ${o.style}.`;
-  return [stat ? `${won} ${stat}` : won, next];
+  const [w, l] = state.h2h[opp.id] ?? [0, 0];
+  const grudge = isRival(state, opp.id)
+    ? [`Your rival. ${o.name} has beaten you ${l} time${l === 1 ? '' : 's'} to your ${w}. Not today.`]
+    : [];
+  return [stat ? `${won} ${stat}` : won, next, ...grudge];
 }
 
 /** Joe's verdict on the whole event. */
@@ -454,26 +469,89 @@ function endWeek(s0: CareerState, played: string | null): CareerState {
       ),
     );
   const { state, seasonOver } = nextWeek(s);
-  if (!seasonOver) return state;
-  const sum = seasonSummary(state, season);
-  const verdict =
-    sum.titles >= 2
-      ? 'What a season. People know your name now.'
-      : sum.titles === 1
-        ? 'A title in the bag. That changes things.'
-        : sum.met >= sum.events / 2 && sum.events > 0
-          ? 'Steady. You did what I asked more often than not.'
-          : 'Not the season we wanted. We go again, and we go harder.';
-  return send(
-    state,
-    message(
-      `season-${season}`,
-      `Season ${season}: the review`,
-      `${verdict} ${sum.events} event${sum.events === 1 ? '' : 's'}, ${sum.titles} title${sum.titles === 1 ? '' : 's'}, ` +
-        `£${sum.earned} won after my cut. You've got £${state.money} in the bank. Season ${state.season} starts now: ${WEEKS} weeks, same deal.`,
-    ),
-  );
+  let out = state;
+  if (seasonOver) {
+    const sum = seasonSummary(state, season);
+    const verdict =
+      sum.titles >= 2
+        ? 'What a season. People know your name now.'
+        : sum.titles === 1
+          ? 'A title in the bag. That changes things.'
+          : sum.met >= sum.events / 2 && sum.events > 0
+            ? 'Steady. You did what I asked more often than not.'
+            : 'Not the season we wanted. We go again, and we go harder.';
+    // The sponsor's bonus, if you earned it.
+    const sp = state.sponsor?.season === season ? state.sponsor : null;
+    const semis = sp ? semisReached(state, season) : 0;
+    const paid = sp && semis >= sp.semis ? sp.bonus : 0;
+    if (paid) out = { ...out, money: out.money + paid };
+    const sponsorLine = sp
+      ? paid
+        ? ` ${sp.name} are happy: ${semis} semi-finals, so their £${paid} bonus is in your account.`
+        : ` ${sp.name} wanted ${sp.semis} semi-finals and got ${semis}. No bonus this time.`
+      : '';
+    out = send(
+      out,
+      message(
+        `season-${season}`,
+        `Season ${season}: the review`,
+        `${verdict} ${sum.events} event${sum.events === 1 ? '' : 's'}, ${sum.titles} title${sum.titles === 1 ? '' : 's'}, ` +
+          `£${sum.earned} won after my cut.${sponsorLine} You've got £${out.money} in the bank. Season ${out.season} starts now: ${WEEKS} weeks, same deal.`,
+      ),
+    );
+  }
+  return offers(out);
 }
+
+/** Joe's offers, when you've earned them: a sponsor each season, and a nickname once. */
+function offers(s: CareerState): CareerState {
+  let out = s;
+  if (sponsorable(out) && out.sponsor?.season !== out.season) {
+    const offer = sponsorOffer(out);
+    out = send(out, {
+      ...message(
+        `sponsor-${out.season}`,
+        `${offer.name} want to sponsor you`,
+        `${offer.name} have been on the phone. They'll pay £${offer.retainer} up front to put their name on your ` +
+          `shirt for season ${offer.season}, and £${offer.bonus} more if you reach ${offer.semis} semi-finals or better. ` +
+          "I'd take it, kid. Money's money.",
+      ),
+      action: { kind: 'sponsor', offer },
+    });
+  }
+  if (nicknameEarned(out) && !out.nickname)
+    out = send(out, {
+      ...message(
+        'nickname',
+        'Every player needs a name',
+        "The papers have started calling you all sorts. Let's pick one before they pick it for you. What'll it be?",
+      ),
+      action: { kind: 'nickname', choices: nicknameChoices(out) },
+    });
+  return out;
+}
+
+/** Signs the sponsor offered in a message. */
+export function acceptSponsor(s: CareerState, id: string): CareerState {
+  const m = s.inbox.find((x) => x.id === id);
+  if (!m || m.done || m.action?.kind !== 'sponsor' || m.action.offer.season !== s.season) return s;
+  return markDone(signSponsor(s, m.action.offer), id);
+}
+
+/** Takes the nickname picked in a message. */
+export function pickNickname(s: CareerState, id: string, name: string): CareerState {
+  const m = s.inbox.find((x) => x.id === id);
+  if (!m || m.done || m.action?.kind !== 'nickname' || !m.action.choices.includes(name)) return s;
+  return markDone(chooseNickname(s, name), id);
+}
+
+/** Turns an offer down. */
+export const declineOffer = (s: CareerState, id: string): CareerState => markDone(s, id);
+
+const markDone = (s: CareerState, id: string): CareerState => ({
+  ...s,
+  inbox: s.inbox.map((m) => (m.id === id ? { ...m, done: true, read: true } : m)),
+});
 
 /** How you played the match: fed to Joe's comments. */
 export interface MatchFigures {
@@ -570,6 +648,17 @@ export function playMatch(
               .join(', ')}. Bigger players, longer matches.`,
         ),
       );
+  // Three defeats to the same player: Joe names a nemesis.
+  if (!won && (s.h2h[opp.id]?.[1] ?? 0) === 3 && (s.h2h[opp.id]?.[0] ?? 0) < 3)
+    s = send(
+      s,
+      message(
+        `nemesis-${opp.id}`,
+        `${opponent(opp.id).name} has your number`,
+        `That's three times ${opponent(opp.id).name} has beaten you. ${opponent(opp.id).style}, and they know it gets to you. ` +
+          "They're your rival now. Next time you draw them, I want to see you enjoy it.",
+      ),
+    );
   if (won && opp.id === e.rival && !(before.h2h[opp.id]?.[0] ?? 0))
     s = send(
       s,

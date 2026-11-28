@@ -83,6 +83,7 @@ import { addMatch, emptyStats, percent } from './game/stats';
 import { pressureLabel, situation, stakes, sway } from './game/pressure';
 import { eligibility } from './game/season';
 import { isTourEvent } from './game/tour-events';
+import { cueBonus } from './game/economy';
 import { AGENT, enterEvent, gainsText, playMatch, train } from './game/agent';
 import {
   applyTuning,
@@ -96,6 +97,7 @@ import {
 } from './game/attributes';
 import {
   careerEvent,
+  venueOf,
   loadCareer,
   nextOpponent,
   opponent,
@@ -174,7 +176,36 @@ scene.fog = new Fog('#0b0e0c', 6, 16);
 const pmrem = new PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = tierParams.reflections;
-scene.add(new HemisphereLight('#fff6e8', '#20160e', 0.18));
+const hemi = new HemisphereLight('#fff6e8', '#20160e', 0.18);
+scene.add(hemi);
+
+/**
+ * The room around the table: the default club look, or a career venue's. A pub is warm and close,
+ * a hall cool and bright, an arena black with the light only on the table.
+ */
+const MOODS: Record<
+  'default' | 'Pub' | 'Club' | 'Hall' | 'Arena',
+  { bg: string; hemi: number; light: string; power: number }
+> = {
+  default: { bg: '#0b0e0c', hemi: 0.18, light: '#fff3e0', power: 2.6 },
+  Pub: { bg: '#1a110a', hemi: 0.26, light: '#ffd9a8', power: 2.3 },
+  Club: { bg: '#0b0e0c', hemi: 0.18, light: '#fff3e0', power: 2.6 },
+  Hall: { bg: '#0e1318', hemi: 0.24, light: '#f2f6ff', power: 2.8 },
+  Arena: { bg: '#030304', hemi: 0.06, light: '#ffffff', power: 3.3 },
+};
+let mood: keyof typeof MOODS = 'default';
+function setMood(m: keyof typeof MOODS): void {
+  mood = m;
+  const v = MOODS[m];
+  (scene.background as Color).set(v.bg);
+  (scene.fog as Fog).color.set(v.bg);
+  hemi.intensity = v.hemi;
+  for (const l of canopy) {
+    l.color.set(v.light);
+    l.intensity = v.power;
+  }
+  dirty = true;
+}
 
 const world = physicsGroup();
 scene.add(world);
@@ -186,7 +217,7 @@ function placeCanopy(length: number): void {
   const n = length > 3 ? 3 : 2;
   for (let i = 0; i < n; i++) {
     const x = -length / 3 + ((2 * length) / 3) * (i / (n - 1));
-    const l = new SpotLight('#fff3e0', 2.6, 4, 1.05, 0.9, 1.6);
+    const l = new SpotLight(MOODS[mood].light, MOODS[mood].power, 4, 1.05, 0.9, 1.6);
     l.position.set(x, 0, 1.0);
     l.target.position.set(x, 0, 0);
     world.add(l, l.target);
@@ -477,6 +508,9 @@ function playerWants(i: number, cue: BallState | undefined, gap: number): Want {
 // Match play
 
 function startMatch(config: MatchConfig): void {
+  // A career match is played in its venue's room; anything else in the club.
+  const ce = config.career && careerEvent(config.career.event);
+  setMood(ce ? venueOf(ce).kind : 'default');
   resetTurnState();
   endChallenge();
   setTable(GAMES.find((g) => g.id === config.game) ?? GAMES[0]!);
@@ -650,9 +684,9 @@ function defaultObject(g: NonNullable<ReturnType<typeof computeGuide>>): { x: nu
 
 /** Your career ratings for this shot: in a career match on your turn, or a training session. */
 function careerTuning(): ShotTuning | null {
-  if (challenge?.training) return shotTuning(career.player, challenge.spec.table);
+  if (challenge?.training) return shotTuning(career.player, challenge.spec.table, 0, cueBonus(career));
   if (!match?.config.career || aiTurn()) return null;
-  return shotTuning(career.player, match.config.game, careerPressure());
+  return shotTuning(career.player, match.config.game, careerPressure(), cueBonus(career));
 }
 
 /** The pressure on your shot in a career match: the ball and the score, times the event's stakes. */
@@ -1496,6 +1530,7 @@ function showTarget(t: ChallengeSpec['target']): void {
 }
 
 function startChallenge(spec: ChallengeSpec, training?: Training): void {
+  setMood('default');
   setGame(GAMES.find((g) => g.id === spec.table) ?? GAMES[0]!);
   const i = CHALLENGES.indexOf(spec);
   challenge = { spec, run: newRun(), next: training ? null : (CHALLENGES[i + 1] ?? null), sheet: null };
@@ -1834,6 +1869,7 @@ app.append(replayBar.root);
 
 /** Back to a practice rack behind the home screen. */
 function quitToHome(): void {
+  setMood('default');
   playCamera = 'aim';
   setGame(GAMES[0]!);
   // A new version that waited for the match to finish goes in now.

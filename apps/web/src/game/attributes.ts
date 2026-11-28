@@ -229,8 +229,15 @@ export const FULL_TIP = 0.52;
 export const FULL_ELEVATION = 60;
 
 /** Everything the ratings change about a shot, for one game. */
-export function shotTuning(p: CareerPlayer, game: MatchGame, pressure = 0): ShotTuning {
+export function shotTuning(
+  p: CareerPlayer,
+  game: MatchGame,
+  pressure = 0,
+  /** Rating points from your cue (economy.ts). */
+  bonus: Partial<Ratings> = {},
+): ShotTuning {
   const r = effective(p, game);
+  for (const k of Object.keys(bonus) as Attr[]) r[k] = Math.max(1, Math.min(99, r[k] + (bonus[k] ?? 0)));
   const x = (a: Attr) => (r[a] - 1) / 98;
   const f = felt(pressure, r.nerve);
   return {
