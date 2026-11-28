@@ -2766,17 +2766,17 @@ body {
 }
 
 /* =============================================================================================
-   Match over: the shot controls step aside, and the result comes in three parts — the result,
+   A result up: the shot controls step aside, and the result comes in three parts — the result,
    how each player played, and what you gained.
    ============================================================================================= */
 
-body.match-over .hud .power,
-body.match-over .hud .fine,
-body.match-over #app .hud .spin-mini,
-body.match-over .hud .actions,
-body.match-over .hud .spin-sheet,
-body.match-over .match-hud .pressure-badge,
-body.match-over .match-hud .xp-pop {
+body.result-open .hud .power,
+body.result-open .hud .fine,
+body.result-open #app .hud .spin-mini,
+body.result-open .hud .actions,
+body.result-open .hud .spin-sheet,
+body.result-open .match-hud .pressure-badge,
+body.result-open .match-hud .xp-pop {
   display: none;
 }
 
@@ -2800,8 +2800,7 @@ body.match-over .match-hud .xp-pop {
 
 .result-sheet .result-note {
   margin: 0 0 4px;
-  color: var(--accent);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .result-quote {
@@ -2929,62 +2928,211 @@ body.match-over .match-hud .xp-pop {
   color: var(--accent);
 }
 
-/* Career: a shot's XP, popping up on the left of the table, then drifting away. */
+/* Career: a shot's XP, single file down the left of the table (a second column past six),
+   each chip sliding in a beat after the one above, then the lot drifting away. */
 .xp-pop {
   position: absolute;
-  left: calc(16px + var(--safe-l, 0px));
-  top: 30%;
+  left: calc(16px + var(--safe-l));
+  top: calc(64px + var(--safe-t));
+  bottom: calc(120px + var(--safe-b));
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
-  max-width: min(46vw, 320px);
   pointer-events: none;
 }
 
 .xp-card {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 5px;
-  border-radius: 12px;
-  background: rgba(14, 20, 17, 0.82);
-  border: 1px solid var(--glass-line);
-  animation: xp-in 0.35s ease-out both;
-}
-
-.xp-card .gain {
-  font-size: 12px;
-  padding: 2px 8px;
-}
-
-.xp-card.up {
-  border-color: rgba(54, 166, 74, 0.8);
-  box-shadow: 0 0 16px rgba(54, 166, 74, 0.35);
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(var(--rows, 6), auto);
+  justify-items: start;
+  gap: 5px 6px;
 }
 
 .xp-card.out {
-  animation: xp-out 0.6s ease-in both;
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: xp-out 0.5s ease-in both;
+}
+
+.xp-card .gain {
+  font-size: 13px;
+  padding: 4px 10px;
+  background: rgba(14, 20, 17, 0.85);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  animation: xp-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+.xp-card .gain.up {
+  background: rgba(24, 70, 34, 0.92);
+  box-shadow: 0 0 14px rgba(54, 166, 74, 0.45);
 }
 
 @keyframes xp-in {
   from {
     opacity: 0;
-    transform: translateX(-16px) scale(0.96);
+    transform: translateX(-18px) scale(0.9);
   }
 }
 
 @keyframes xp-out {
   to {
     opacity: 0;
-    transform: translateY(-14px);
+    transform: translateY(-12px);
+  }
+}
+
+/* Between racks: a stamped badge, the race as pips, the situation, then the rack in figures. */
+.result-badge {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 2px 12px 3px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #1b1405;
+  font: 800 22px/1.1 var(--font-display);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  rotate: -2deg;
+  box-shadow: 0 4px 0 #a8801f;
+  animation: badge-stamp 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+@keyframes badge-stamp {
+  from {
+    opacity: 0;
+    scale: 1.8;
+    rotate: -8deg;
+  }
+}
+
+.race {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  justify-content: start;
+  gap: 4px 14px;
+  align-items: center;
+  margin: 6px 0 4px;
+}
+
+.race-row {
+  display: contents;
+}
+
+.race-name {
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.race-row.just .race-name {
+  color: var(--text);
+}
+
+.race-score {
+  font: 700 26px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--muted);
+}
+
+.race-row.just .race-score {
+  color: var(--accent);
+  animation: score-bump 0.5s 0.25s ease-out both;
+}
+
+@keyframes score-bump {
+  40% {
+    scale: 1.45;
+  }
+}
+
+.pips {
+  display: flex;
+  gap: 6px;
+}
+
+.pip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.pip.on {
+  border-color: transparent;
+  background: radial-gradient(circle at 35% 30%, #fff6 0 18%, transparent 20%), var(--accent);
+}
+
+.pip.new {
+  animation: pip-pop 0.55s 0.3s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+@keyframes pip-pop {
+  from {
+    scale: 0;
+    background-color: #fff;
+  }
+}
+
+.result-sheet .result-situation {
+  margin: 2px 0 10px;
+  font: 600 15px var(--font-display);
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+/* Confetti in ball colours, bursting up from the sheet. */
+.confetti {
+  position: absolute;
+  left: 50%;
+  bottom: 45%;
+  pointer-events: none;
+}
+
+.confetti span {
+  position: absolute;
+  width: 8px;
+  height: 12px;
+  background: var(--c);
+  border-radius: 2px;
+  opacity: 0;
+  animation: confetti 1.8s var(--d, 0s) cubic-bezier(0.15, 0.7, 0.4, 1) both;
+}
+
+.confetti span.round {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+@keyframes confetti {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(var(--x), var(--y)) rotate(calc(var(--r) * 0.6));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(var(--x) * 1.15), calc(var(--y) + 160px)) rotate(var(--r));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .xp-card,
-  .xp-card.out {
+  .xp-card .gain,
+  .xp-card.out,
+  .result-badge,
+  .race-row.just .race-score,
+  .pip.new {
     animation-duration: 0.01s;
+    animation-delay: 0s;
   }
 }
 
