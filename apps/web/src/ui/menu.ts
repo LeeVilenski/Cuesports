@@ -93,6 +93,7 @@ import { PRESETS } from '../render/figure';
 import { bestLabel, DRILLS, type DrillId } from '../game/drills';
 import { visitWord } from '../game/games';
 import { DEFAULT_MATCH, type MatchConfig } from '../game/match';
+import type { ResumeSlot } from '../game/resume';
 import { STRAIGHT_POOL } from '@cuesports/rules';
 import { reelOfHighlight, reelOfRack, type Highlight, type MatchRecord, type Reel } from '../game/record';
 import { knownPlayers, percent, playerStats } from '../game/stats';
@@ -170,8 +171,11 @@ export interface MenuCallbacks {
   onCareerTrain(id: string): void;
   /** A change to the career from the hub (the intro seen, a message read). */
   onCareerUpdate(s: CareerState): void;
-  /** Play your next match in the career event. */
+  /** Play your next match in the career event (or carry on with it, if it was left unfinished). */
   onCareerPlay(): void;
+  /** A match left unfinished that can be picked up again. */
+  resumable(slot: ResumeSlot): { config: MatchConfig; score: [number, number] } | null;
+  onResume(slot: ResumeSlot): void;
 }
 
 type Screen =
@@ -423,6 +427,7 @@ export class Menu {
       h(
         'div',
         { className: 'tiles' },
+        this.resumeTile(),
         this.tile('blue', 'play', 'Quick match', this.quickSub, () => this.start(), 'wide'),
         this.tile('orange', 'cue', 'Play', 'Game, opponent, format', () => this.go('play')),
         this.tile('green', 'target', 'Practice', 'Free table', () => this.go('practice')),
@@ -439,6 +444,23 @@ export class Menu {
         h('button', { className: 'ubtn', onclick: () => this.go('settings') }, icon('settings'), 'Settings'),
       ),
       this.status,
+    );
+  }
+
+  /** The match you left, to carry on from the same shot. */
+  private resumeTile(): HTMLElement | string {
+    const r = this.cb.resumable('match');
+    if (!r) return '';
+    return this.tile(
+      'green',
+      'play',
+      'Resume match',
+      `${describe(r.config)} · ${r.score[0]}–${r.score[1]}`,
+      () => {
+        this.close();
+        this.cb.onResume('match');
+      },
+      'wide',
     );
   }
 
@@ -1012,6 +1034,8 @@ export class Menu {
     const n = unread(s);
     if (n) return `${n} new message${n > 1 ? 's' : ''} from ${AGENT.name}`;
     const e = s.run?.status === 'playing' && careerEvent(s.run.event);
+    const left = e ? this.cb.resumable('career') : null;
+    if (e && left) return `${roundName(e, s.run!.round)} in progress · ${left.score[0]}–${left.score[1]}`;
     return e ? `${e.title} · ${roundName(e, s.run!.round)}` : 'Pub to arena';
   }
 
@@ -2000,6 +2024,7 @@ export class Menu {
       bracket.append(col);
     }
     const opp = nextOpponent(run);
+    const resume = run.status === 'playing' ? this.cb.resumable('career') : null;
     const action =
       run.status === 'playing' && opp
         ? h(
@@ -2012,7 +2037,13 @@ export class Menu {
               },
             },
             icon('play'),
-            h('strong', {}, `Play the ${roundName(e, run.round).toLowerCase()}`),
+            h(
+              'strong',
+              {},
+              resume
+                ? `Resume the ${roundName(e, run.round).toLowerCase()} · ${resume.score[0]}–${resume.score[1]}`
+                : `Play the ${roundName(e, run.round).toLowerCase()}`,
+            ),
           )
         : h(
             'button',

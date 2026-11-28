@@ -58,6 +58,8 @@ physics engine works.
 - **9-ball match:** the start screen (or the menu's New 9-ball match) sets up names, race length, who breaks
   and the three-foul rule. With ball in hand, drag the cue ball (behind the head string on the break). After
   a legal break the next shooter can tap Push out; the opponent then chooses to play or pass it back.
+- **Leaving a match:** an unfinished match is saved after every shot. Close to the menu (or close the browser)
+  and the home screen offers Resume match; a career match picks up again from the event's Resume button.
 - **Practice tools:** Move cue ball, Replay and Undo. The menu's Practice list has 9-ball, 8-ball, 10-ball,
   English pool, snooker and a two-ball practice table.
 - **Keyboard:** ← → aim (Shift for bigger steps), ↑ ↓ tilt, Space shoots at the last power, 1/2/3 cameras.

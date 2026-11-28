@@ -142,6 +142,7 @@ import {
 import { Coach } from './ui/coach';
 import { resolveTier, TIERS, type TierChoice } from './render/quality';
 import { CAROM_GAMES, DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
+import { clearSaved, loadSaved, slotOf, storeSaved, type ResumeSlot } from './game/resume';
 import {
   canPlaceCueBall,
   headStringX,
@@ -567,6 +568,12 @@ function playerWants(i: number, cue: BallState | undefined, gap: number): Want {
 // Match play
 
 function startMatch(config: MatchConfig): void {
+  openMatch(new Match(config, (Math.random() * 1e9) | 0, clothSpeed));
+}
+
+/** Puts a match (new, or picked up again) on the table. */
+function openMatch(m: Match): void {
+  const config = m.config;
   // A career match is played in its venue's room; anything else in the Settings room.
   const ce = config.career && careerEvent(config.career.event);
   roomWant = ce ? venueRoom(ce) : practiceRoom();
@@ -576,7 +583,7 @@ function startMatch(config: MatchConfig): void {
   viewer = null;
   replayBar.show(null);
   app.classList.remove('viewing');
-  match = new Match(config, (Math.random() * 1e9) | 0, clothSpeed);
+  match = m;
   // Each player gets their own look, chosen from their name.
   buildPlayers();
   matchHud.showResult(null);
@@ -666,8 +673,66 @@ function syncTurn(): void {
       );
     else rackResult(match, w);
   }
+  persistMatch();
   rig.snap();
   dirty = true;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Picking a match up again
+
+/** Saves the match between shots so it can be resumed from the menu, or forgets it once it's over. */
+function persistMatch(): void {
+  if (!match || match.config.drill) return;
+  const snap = match.snapshot();
+  if (match.winner !== null) clearSaved(slotOf(snap));
+  else
+    storeSaved({
+      v: 1,
+      saved: Date.now(),
+      match: snap,
+      ...(match.config.career ? { xp: { match: careerXp, rack: rackXpStart } } : {}),
+    });
+}
+
+/**
+ * The saved match in a slot, if it can still be played: a career match only while you're still in
+ * that round of that event.
+ */
+function savedMatch(slot: ResumeSlot) {
+  const s = loadSaved(slot);
+  const c = s?.match.config.career;
+  if (
+    !s ||
+    (c && (career.run?.status !== 'playing' || career.run.event !== c.event || career.run.round !== c.round))
+  ) {
+    if (s) clearSaved(slot);
+    return null;
+  }
+  return s;
+}
+
+/** Back to the table where the saved match was left. */
+function resumeMatch(slot: ResumeSlot): boolean {
+  const s = savedMatch(slot);
+  if (!s) return false;
+  let m: Match;
+  try {
+    m = Match.restore(s.match);
+  } catch {
+    clearSaved(slot);
+    return false;
+  }
+  careerXp = s.xp?.match ?? {};
+  rackXpStart = s.xp?.rack ?? {};
+  // Left on a rack's result sheet: carry on with the next one.
+  if (m.rackResult && m.winner === null) m.startRack();
+  else {
+    m.message = `Welcome back. ${m.notable ? m.message : `${m.config.players[m.turn.player]} to play.`}`;
+    m.notable = true;
+  }
+  openMatch(m);
+  return true;
 }
 
 function rerack(): void {
@@ -1338,7 +1403,16 @@ const menu: Menu = new Menu(
       career = s;
       saveCareer(career);
     },
-    onCareerPlay: () => startCareerMatch(),
+    onCareerPlay: () => {
+      if (!resumeMatch('career')) startCareerMatch();
+    },
+    resumable: (slot) => {
+      const s = savedMatch(slot);
+      return s ? { config: s.match.config, score: s.match.score } : null;
+    },
+    onResume: (slot) => {
+      if (!resumeMatch(slot)) menu.open('home');
+    },
     onTutorial: () => startTutorial(),
     onCareerTrain: (id) => {
       const t = TRAINING.find((x) => x.id === id);
@@ -2068,6 +2142,8 @@ app.append(replayBar.root);
 
 /** Back to a practice rack behind the home screen. */
 function quitToHome(): void {
+  // A shot still rolling counts: it's judged now, so the saved match carries on after it.
+  if (match && playing && !replaying) endPlayback();
   roomWant = practiceRoom();
   playCamera = 'aim';
   setGame(GAMES[0]!);

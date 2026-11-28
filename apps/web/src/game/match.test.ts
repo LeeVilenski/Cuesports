@@ -135,3 +135,35 @@ describe('Match: English pool', () => {
     expect(m.turn).toMatchObject({ player: 1, isBreak: true });
   });
 });
+
+describe('Match snapshots', () => {
+  it('picks up again from a snapshot, through JSON, at the same shot', () => {
+    const m = new Match({ ...DEFAULT_MATCH, players: ['Ann', 'Bo'], raceTo: 2 }, 5);
+    const cue = m.balls.find((b) => b.id === 'cue')!;
+    const one = m.balls.find((b) => b.id === '1')!;
+    const before = m.balls;
+    const result = simulate(m.table, before, {
+      ball: 'cue',
+      aim: Math.atan2(one.pos.y - cue.pos.y, one.pos.x - cue.pos.x),
+      elevation: 0,
+      tip: { a: 0, b: 0 },
+      speed: 8,
+    });
+    m.judge({}, before, result, { ball: 'cue', aim: 0, elevation: 0, tip: { a: 0, b: 0 }, speed: 8 });
+    const back = Match.restore(JSON.parse(JSON.stringify(m.snapshot())));
+    expect(back.turn).toEqual(m.turn);
+    // JSON turns −0 into 0, which is the same to the physics.
+    const json = (x: unknown) => JSON.parse(JSON.stringify(x)) as unknown;
+    expect(back.balls).toEqual(json(m.balls));
+    expect(back.state).toEqual(m.state);
+    expect(back.record).toEqual(m.record);
+    expect(back.rack).toBe(1);
+    // The same rng: the next rack is racked the same way in both.
+    m.concede();
+    back.concede();
+    m.startRack();
+    back.startRack();
+    expect(json(back.balls)).toEqual(json(m.balls));
+    expect(back.record.racks).toHaveLength(2);
+  });
+});

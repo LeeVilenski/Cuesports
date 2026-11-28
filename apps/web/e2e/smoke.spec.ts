@@ -454,3 +454,34 @@ test('Free pyramid: after the break the player taps any ball to make it the cue 
   expect(await page.evaluate(() => window.__cuesports.state().shot.ball)).toBe(target.id);
   expect(errors).toEqual([]);
 });
+
+test('a match left for the menu picks up again after a reload', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await setup(page);
+  await page.getByLabel('Player 1 name').fill('Ann');
+  await page.getByLabel('Player 2 name').fill('Bo');
+  await page.getByRole('button', { name: 'Start' }).click();
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'aim');
+  await page.evaluate(() => window.__cuesports.shoot(0.8));
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'playing', null, { timeout: 30_000 });
+  await page.evaluate(() => window.__cuesports.fastForward());
+  await page.waitForFunction(() => window.__cuesports.state().phase === 'aim', null, { timeout: 30_000 });
+  const left = await page.evaluate(() => {
+    const s = window.__cuesports.state();
+    return { balls: s.balls.map((b) => b.state), turn: s.match!.turn.player };
+  });
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await page.getByRole('button', { name: /^Home/ }).click();
+  await page.reload();
+  await page.getByRole('button', { name: /^Resume match/ }).click();
+  await page.waitForFunction(() => window.__cuesports.state().match !== null);
+  const back = await page.evaluate(() => {
+    const s = window.__cuesports.state();
+    return { balls: s.balls.map((b) => b.state), turn: s.match!.turn.player, message: s.match!.message };
+  });
+  expect(back.balls).toEqual(left.balls);
+  expect(back.turn).toBe(left.turn);
+  expect(back.message).toMatch(/^Welcome back/);
+  expect(errors).toEqual([]);
+});

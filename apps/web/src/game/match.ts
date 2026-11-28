@@ -120,6 +120,26 @@ export interface FramePoints {
   remaining: number | null;
 }
 
+/**
+ * Everything needed to pick a match up again where it was left (closed to the menu, or the browser
+ * closed), between shots. Plain JSON.
+ */
+export interface MatchSnapshot {
+  config: MatchConfig;
+  cloth: ClothSpeed;
+  score: [number, number];
+  rack: number;
+  breaker: number;
+  state: unknown;
+  turn: Turn;
+  balls: BallState[];
+  message: string;
+  notable: boolean;
+  rackResult: { winner: number; reason: string } | null;
+  record: MatchRecord;
+  rng: [number, number, number, number];
+}
+
 // The match only needs the common ruleset interface; each game's state stays inside its ruleset.
 type AnyRuleset = Ruleset<unknown, unknown>;
 
@@ -153,6 +173,7 @@ export class Match {
   /** Everything played so far, for replays and stats. */
   readonly record: MatchRecord;
   private rng: Rng;
+  private readonly cloth: ClothSpeed;
 
   constructor(
     readonly config: MatchConfig,
@@ -161,6 +182,7 @@ export class Match {
     date = Date.now(),
   ) {
     this.rng = new Rng(seed);
+    this.cloth = cloth;
     this.record = {
       id: recordId(date),
       date,
@@ -204,6 +226,43 @@ export class Match {
     };
     [this.ruleset, this.options] = games[config.game];
     this.startRack();
+  }
+
+  /** The match as it stands, to resume later (see `Match.restore`). */
+  snapshot(): MatchSnapshot {
+    return structuredClone({
+      config: this.config,
+      cloth: this.cloth,
+      score: this.score,
+      rack: this.rack,
+      breaker: this.breaker,
+      state: this.state,
+      turn: this.turn,
+      balls: this.balls,
+      message: this.message,
+      notable: this.notable,
+      rackResult: this.rackResult,
+      record: this.record,
+      rng: this.rng.state(),
+    });
+  }
+
+  /** The match a snapshot was taken of, carrying on from the same shot. */
+  static restore(s: MatchSnapshot): Match {
+    const m = new Match(s.config, 1, s.cloth, s.record.date);
+    const c = structuredClone(s);
+    m.score = c.score;
+    m.rack = c.rack;
+    m.breaker = c.breaker;
+    m.state = c.state;
+    m.turn = c.turn;
+    m.balls = c.balls;
+    m.message = c.message;
+    m.notable = c.notable;
+    m.rackResult = c.rackResult;
+    m.rng = Rng.fromState(c.rng);
+    Object.assign(m.record, c.record);
+    return m;
   }
 
   get table() {
