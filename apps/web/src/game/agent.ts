@@ -743,9 +743,10 @@ export function spend(s: CareerState, attr: Attr): CareerState {
 /** One line of progress: XP into a skill, a skill rising, or a level gained. */
 export interface GainItem {
   label: string;
-  /** "+12 XP", "42 → 43", or "a skill point to spend". */
+  /** "+12 XP", "42 → 43", or "a skill point to spend" (empty for a feat). */
   value: string;
-  kind: 'xp' | 'up' | 'level';
+  /** A feat is the shot itself: "Plant!", "Escaped the snooker". */
+  kind: 'xp' | 'up' | 'level' | 'feat';
 }
 
 /** XP gains, rating rises and level-ups, rises first. */

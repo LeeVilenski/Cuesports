@@ -81,7 +81,7 @@ function gainChip(g: GainItem): HTMLElement {
     'span',
     { className: `gain ${g.kind}` },
     h('span', { className: 'gain-label' }, g.label),
-    h('span', { className: 'gain-value' }, g.value),
+    g.value ? h('span', { className: 'gain-value' }, g.value) : '',
   );
 }
 
@@ -297,7 +297,7 @@ export class MatchHud {
   showXp(items: GainItem[]): void {
     if (!items.length) return;
     // Single file down the side, rises first; past six a second column.
-    const card = h('div', { className: `xp-card${items.some((i) => i.kind !== 'xp') ? ' up' : ''}` });
+    const card = h('div', { className: `xp-card${items.some((i) => i.kind === 'up') ? ' up' : ''}` });
     card.style.setProperty('--rows', String(Math.min(6, items.length)));
     card.append(
       ...items.map((g, i) => {
@@ -310,7 +310,10 @@ export class MatchHud {
     for (const old of this.xpPop.children) old.classList.add('out');
     this.xpPop.append(card);
     while (this.xpPop.childElementCount > 2) this.xpPop.firstElementChild!.remove();
-    window.setTimeout(() => card.classList.add('out'), items.some((i) => i.kind === 'up') ? 3600 : 2400);
+    window.setTimeout(
+      () => card.classList.add('out'),
+      items.some((i) => i.kind === 'up' || i.kind === 'feat') ? 3600 : 2400,
+    );
     card.addEventListener('animationend', (e) => {
       if (e.animationName === 'xp-out') card.remove();
     });

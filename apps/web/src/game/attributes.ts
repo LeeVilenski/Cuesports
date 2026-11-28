@@ -16,7 +16,7 @@ export const ATTRS: { id: Attr; label: string; low: string; trained: string }[] 
     id: 'vision',
     label: 'Vision',
     low: 'Guide lines: object ball, cue ball, spin, then cushion rebounds',
-    trained: 'Pots, and position shots that leave a pot',
+    trained: 'Pots, combinations, plants, cannons and snookers escaped',
   },
   {
     id: 'nerve',
@@ -34,7 +34,7 @@ export const ATTRS: { id: Attr; label: string; low: string; trained: string }[] 
     id: 'spin',
     label: 'Spin',
     low: 'How far from centre you can strike',
-    trained: 'Pots with screw, follow or side',
+    trained: 'Pots with screw, follow or side, and swerving out of snookers',
   },
   {
     id: 'cushion',
@@ -52,7 +52,7 @@ export const ATTRS: { id: Attr; label: string; low: string; trained: string }[] 
     id: 'touch',
     label: 'Touch',
     low: 'How well the guide allows for side pushing the cue ball off line',
-    trained: 'Safeties and soft pots',
+    trained: 'Safeties, snookers left, plants, cannons and soft pots',
   },
 ];
 
