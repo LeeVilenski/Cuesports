@@ -34,6 +34,16 @@ physics engine works.
   pull-back stroke mode. Still to come: rigged glTF characters and a proper animation set (chalking,
   reactions), and walking in from the chair while the AI thinks.
 
+- **Venues:** the table now stands in a room instead of the dark. Eleven procedural rooms (no assets): a pub
+  (a different one each time in practice: name, colours, darts or a fire or a jukebox), a pool club with its other
+  tables, a sports and social club, a billiard café, a sports hall, a grand billiard hall, a manor house library,
+  an exhibition centre, a theatre with steep seats close round the table, a Victorian palace under a glass vault,
+  and a full arena. Each career venue plays in its own room; the tours go from the sports hall (Challenge Tour,
+  Q-School) to the exhibition centre and the manor (ranking events), then the palace, the arena and the theatre
+  (majors; the Tour Finals in the arena). Settings has the room for practice and friendly matches. Lighting is
+  baked into vertex colours and each room is merged into a few meshes, so even a full arena is cheap on a phone;
+  anything hanging over the table hides when the camera rises past it.
+
 ## Playing the prototype
 
 - **Aim:** drag sideways on the table. Slow drags turn the aim much more finely than fast ones. The strip along

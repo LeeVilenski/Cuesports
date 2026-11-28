@@ -111,6 +111,7 @@ import {
 } from './kit';
 
 import type { TierChoice } from '../render/quality';
+import { isRoomId, ROOMS, type RoomId } from '../game/rooms';
 import { markTutorialSeen, tutorialSeen } from '../game/tutorial';
 
 export type ClothSpeedId = 'fast' | 'medium' | 'slow';
@@ -123,6 +124,8 @@ export type Settings = Record<OptionName, boolean> & {
   stroke: StrokeId;
   textSize: TextSize;
   graphics: TierChoice;
+  /** The room for practice, challenges and friendly matches (career matches use the venue's). */
+  room: RoomId;
   /** Older saves: false meant the camera stayed put during shots. */
   overview?: boolean;
 };
@@ -136,6 +139,7 @@ export interface MenuCallbacks {
   /** Leave the table for the home screen. */
   onQuit(): void;
   onClothSpeed(speed: ClothSpeedId): void;
+  onRoom(room: RoomId): void;
   onOption(name: OptionName, on: boolean): void;
   onShotCamera(mode: ShotCamId): void;
   onStroke(mode: StrokeId): void;
@@ -280,8 +284,10 @@ export class Menu {
       stroke: 'bar',
       textSize: 'normal',
       graphics: 'auto',
+      room: 'club',
       ...saved0,
     };
+    if (!isRoomId(this.settings.room)) this.settings.room = 'club';
     applyTextSize(this.settings.textSize);
     const saved = load<Partial<MatchConfig>>(LAST_MATCH_KEY, {});
     this.config = {
@@ -2196,11 +2202,34 @@ export class Menu {
         ),
         h('h3', {}, 'Table'),
         this.field('Cloth', cloth.el),
+        this.field('Room', this.roomPicker()),
+        h(
+          'p',
+          { className: 'fine-print' },
+          'For practice and friendly matches. Career matches are played in the venue.',
+        ),
         h('h3', {}, 'Sound'),
         ...this.soundFields(),
         h('p', { className: 'fine-print' }, h('a', { href: '/lab/' }, 'Physics lab ›')),
       ),
     );
+  }
+
+  /** Where practice and friendly matches are played. */
+  private roomPicker(): HTMLElement {
+    const sel = h(
+      'select',
+      { ariaLabel: 'Room' },
+      ...ROOMS.map((r) => h('option', { value: r.id, title: r.blurb }, r.label)),
+    );
+    sel.value = this.settings.room;
+    sel.addEventListener('change', () => {
+      if (!isRoomId(sel.value)) return;
+      this.settings.room = sel.value;
+      save(SETTINGS_KEY, this.settings);
+      this.cb.onRoom(sel.value);
+    });
+    return sel;
   }
 
   private help(): HTMLElement {

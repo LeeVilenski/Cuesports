@@ -53,6 +53,8 @@ import { SimClient } from './game/sim-client';
 import { BallsView } from './render/balls-view';
 import { CameraRig, type CameraMode } from './render/cameras';
 import { physicsGroup, toPhysics, toWorld } from './render/coords';
+import { buildRoom, type Room, type RoomMood } from './render/venue/rooms';
+import type { RoomId } from './game/rooms';
 import { CueView } from './render/cue-view';
 import { Character, chooseTool, type StanceInput, type TableFrame, type Want } from './render/character';
 import { lookFor, PRESETS, presetsFor } from './render/figure';
@@ -107,6 +109,7 @@ import {
   REWARDS,
   roundName,
   saveCareer,
+  type CareerEvent,
   type CareerState,
 } from './game/career';
 import { loadProfile, profilePreset, saveProfile, type Profile } from './game/profile';
@@ -183,30 +186,80 @@ const hemi = new HemisphereLight('#fff6e8', '#20160e', 0.18);
 scene.add(hemi);
 
 /**
- * The room around the table: the default club look, or a career venue's. A pub is warm and close,
- * a hall cool and bright, an arena black with the light only on the table.
+ * The room around the table: a career match is played in its venue's room, anything else in the
+ * room chosen in Settings. Each room sets the mood too: a pub warm and close, a hall cool and
+ * bright, an arena black with the light only on the table.
  */
-const MOODS: Record<
-  'default' | 'Pub' | 'Club' | 'Hall' | 'Arena',
-  { bg: string; hemi: number; light: string; power: number }
-> = {
-  default: { bg: '#0b0e0c', hemi: 0.18, light: '#fff3e0', power: 2.6 },
-  Pub: { bg: '#1a110a', hemi: 0.26, light: '#ffd9a8', power: 2.3 },
-  Club: { bg: '#0b0e0c', hemi: 0.18, light: '#fff3e0', power: 2.6 },
-  Hall: { bg: '#0e1318', hemi: 0.24, light: '#f2f6ff', power: 2.8 },
-  Arena: { bg: '#030304', hemi: 0.06, light: '#ffffff', power: 3.3 },
+interface RoomWant {
+  id: RoomId;
+  seed: number;
+  name?: string;
+  event?: string;
+}
+let practiceRoomId: RoomId = 'club';
+let roomWant: RoomWant | null = null;
+let room: Room | null = null;
+let roomKey = '';
+const DEFAULT_MOOD: RoomMood = {
+  bg: '#0b0e0c',
+  fog: [6, 16],
+  hemi: 0.18,
+  light: '#fff3e0',
+  power: 2.6,
+  orbit: 8,
 };
-let mood: keyof typeof MOODS = 'default';
-function setMood(m: keyof typeof MOODS): void {
-  mood = m;
-  const v = MOODS[m];
-  (scene.background as Color).set(v.bg);
-  (scene.fog as Fog).color.set(v.bg);
-  hemi.intensity = v.hemi;
-  for (const l of canopy) {
-    l.color.set(v.light);
-    l.intensity = v.power;
+let mood: RoomMood = DEFAULT_MOOD;
+const ROOM_DETAIL = { low: 0.5, medium: 0.8, high: 1 } as const;
+
+/** Practice and friendly matches: the Settings room (a new pub each time, if it's the pub). */
+function practiceRoom(): RoomWant {
+  return { id: practiceRoomId, seed: practiceRoomId === 'pub' ? (Math.random() * 1e9) | 0 : 7 };
+}
+
+/** A career event's room: the same every time you go back. */
+function venueRoom(e: CareerEvent): RoomWant {
+  const v = venueOf(e);
+  const seed = [...v.id].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261);
+  return { id: v.room, seed, name: v.name, event: e.title };
+}
+
+function setRoom(want: RoomWant): void {
+  roomWant = want;
+  refreshRoom();
+}
+
+/** Builds the room for the table in play (rooms are sized round the table). */
+function refreshRoom(): void {
+  if (!tableView) return;
+  const want = roomWant ?? practiceRoom();
+  roomWant = want;
+  const t = { hx: tableView.outer.hx, hy: tableView.outer.hy, top: tableView.railTop - tableView.floorZ };
+  const key = JSON.stringify([want, t]);
+  if (key === roomKey) return;
+  roomKey = key;
+  if (room) {
+    world.remove(room.group);
+    room.dispose();
   }
+  room = buildRoom(want.id, t, {
+    seed: want.seed,
+    detail: ROOM_DETAIL[tier],
+    ...(want.name ? { name: want.name } : {}),
+    ...(want.event ? { event: want.event } : {}),
+  });
+  room.group.position.z = tableView.floorZ;
+  world.add(room.group);
+  mood = room.mood;
+  (scene.background as Color).set(mood.bg);
+  (scene.fog as Fog).color.set(mood.bg);
+  (scene.fog as Fog).near = mood.fog[0];
+  (scene.fog as Fog).far = mood.fog[1];
+  hemi.intensity = mood.hemi;
+  for (const l of canopy) {
+    l.color.set(mood.light);
+    l.intensity = mood.power;
+  }
+  rig.orbit.maxDistance = mood.orbit;
   dirty = true;
 }
 
@@ -220,7 +273,7 @@ function placeCanopy(length: number): void {
   const n = length > 3 ? 3 : 2;
   for (let i = 0; i < n; i++) {
     const x = -length / 3 + ((2 * length) / 3) * (i / (n - 1));
-    const l = new SpotLight(MOODS[mood].light, MOODS[mood].power, 4, 1.05, 0.9, 1.6);
+    const l = new SpotLight(mood.light, mood.power, 4, 1.05, 0.9, 1.6);
     l.position.set(x, 0, 1.0);
     l.target.position.set(x, 0, 0);
     world.add(l, l.target);
@@ -442,6 +495,7 @@ function setTable(def: GameDef): void {
   );
   placeCanopy(def.table.playfield.length);
   rig.setTable(def.table);
+  refreshRoom();
   buildPlayers();
 }
 
@@ -512,9 +566,9 @@ function playerWants(i: number, cue: BallState | undefined, gap: number): Want {
 // Match play
 
 function startMatch(config: MatchConfig): void {
-  // A career match is played in its venue's room; anything else in the club.
+  // A career match is played in its venue's room; anything else in the Settings room.
   const ce = config.career && careerEvent(config.career.event);
-  setMood(ce ? venueOf(ce).kind : 'default');
+  roomWant = ce ? venueRoom(ce) : practiceRoom();
   resetTurnState();
   endChallenge();
   setTable(GAMES.find((g) => g.id === config.game) ?? GAMES[0]!);
@@ -1231,6 +1285,11 @@ const menu: Menu = new Menu(
       syncTurn();
     },
     onQuit: quitToHome,
+    onRoom: (id) => {
+      practiceRoomId = id;
+      // Change the room now unless a career match is on.
+      if (!match?.config.career) setRoom(practiceRoom());
+    },
     onClothSpeed: (speed) => {
       clothSpeed = speed;
       simTable = withClothSpeed(game.table, speed);
@@ -1319,6 +1378,7 @@ const menu: Menu = new Menu(
   GAMES.map((g) => ({ id: g.id, label: g.label })),
   clothSpeed,
 );
+practiceRoomId = menu.settings.room;
 showGuide = menu.settings.guide;
 guideSquirt = menu.settings.squirt;
 cushionLine = menu.settings.cushionLine;
@@ -1587,7 +1647,7 @@ function showTarget(t: ChallengeSpec['target']): void {
 }
 
 function startChallenge(spec: ChallengeSpec, training?: Training): void {
-  setMood('default');
+  roomWant = practiceRoom();
   setGame(GAMES.find((g) => g.id === spec.table) ?? GAMES[0]!);
   const i = CHALLENGES.indexOf(spec);
   challenge = { spec, run: newRun(), next: training ? null : (CHALLENGES[i + 1] ?? null), sheet: null };
@@ -1926,7 +1986,7 @@ app.append(replayBar.root);
 
 /** Back to a practice rack behind the home screen. */
 function quitToHome(): void {
-  setMood('default');
+  roomWant = practiceRoom();
   playCamera = 'aim';
   setGame(GAMES[0]!);
   // A new version that waited for the match to finish goes in now.
@@ -2549,6 +2609,9 @@ function frame(now: number): void {
     }
   }
 
+  // What hangs over the table hides once the camera rises past it.
+  if (room && tableView && room.update(rig.camera.position.y - tableView.floorZ, rig.mode === 'top'))
+    dirty = true;
   if (dirty) {
     const t0 = performance.now();
     renderer.render(scene, rig.camera);
@@ -2659,6 +2722,15 @@ void navigator.storage?.persist?.().catch(() => false);
 // Exposed for automated smoke tests.
 (window as unknown as { __cuesports: unknown }).__cuesports = {
   shoot,
+  /** Puts the table in a room (as practice would), e.g. to look round it. */
+  room: (id: RoomId, seed = 7) => setRoom({ id, seed }),
+  /** Free camera at `eye` looking at `look` (physics coordinates). */
+  look: (eye: [number, number, number], look: [number, number, number]) => {
+    rig.setMode('free');
+    rig.orbit.target.copy(toWorld(...look));
+    rig.persp.position.copy(toWorld(...eye));
+    dirty = true;
+  },
   /** The last frame's draw calls and triangles, and the quality tier. */
   /** The last frame's draw calls and triangles, and the quality tier. */
   perfTree: () => {
