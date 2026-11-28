@@ -240,6 +240,8 @@ export const FULL_ELEVATION = 60;
 export interface ShotSituation {
   /** Pressure on the ball (pressure.ts), 0–1. A pressure ball from 0.25. */
   pressure?: number;
+  /** Why it's a pressure shot, in words: "Money ball", "Run-out on", "Decider". */
+  pressureKind?: string;
   /** On the rest or the spider. */
   rest?: boolean;
   /** Cue ball on the cushion, or the cue raised to clear the rail or a ball. */
