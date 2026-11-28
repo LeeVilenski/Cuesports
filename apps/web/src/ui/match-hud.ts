@@ -1,4 +1,5 @@
 import type { Turn } from '@cuesports/rules';
+import type { GainItem } from '../game/agent';
 import { ballArt } from '../render/textures';
 import { h } from './kit';
 
@@ -17,6 +18,29 @@ export interface MatchHudCallbacks {
   onWatch(): void;
   /** The result sheet's second choice, when it has one (a challenge's Retry). */
   onAlt(): void;
+}
+
+/** A result sheet in parts: the result, how each player played, and what you gained. */
+export interface ResultDetail {
+  /** The score line, shown large. */
+  score?: string;
+  /** Short lines under the score: a prize unlocked, the rack's last message. */
+  notes?: string[];
+  quote?: { who: string; text: string };
+  /** Each player's figures, one row each. */
+  stats?: { columns: string[]; rows: { name: string; values: string[] }[] };
+  /** Career: XP, skills up and levels. */
+  gains?: GainItem[];
+}
+
+/** One gain as a chip: a level up in gold, a skill up with an arrow, XP plain. */
+function gainChip(g: GainItem): HTMLElement {
+  return h(
+    'span',
+    { className: `gain ${g.kind}` },
+    h('span', { className: 'gain-label' }, g.label),
+    h('span', { className: 'gain-value' }, g.value),
+  );
 }
 
 /** What a snooker player is on, in words. */
@@ -38,6 +62,8 @@ export class MatchHud {
   private decision = h('div', { className: 'sheet decision-sheet', hidden: true });
   private result = h('div', { className: 'sheet result-sheet', hidden: true });
   private pressure = h('div', { className: 'pressure-badge', hidden: true, ariaLive: 'polite' });
+  /** Career: the XP a shot just earned, popping up beside the table. */
+  private xpPop = h('div', { className: 'xp-pop', ariaLive: 'polite' });
   private toastTimer = 0;
   private pushOn = false;
 
@@ -49,6 +75,7 @@ export class MatchHud {
     });
     this.toast.addEventListener('click', () => (this.toast.hidden = true));
     this.root.append(
+      this.xpPop,
       this.pressure,
       this.toast,
       this.pushBtn,
@@ -224,19 +251,37 @@ export class MatchHud {
     );
   }
 
+  /** Career: shows the XP one shot earned (and any skill it took up), then fades it out. */
+  showXp(items: GainItem[]): void {
+    if (!items.length) return;
+    const card = h('div', { className: `xp-card${items.some((i) => i.kind !== 'xp') ? ' up' : ''}` });
+    card.append(...items.map(gainChip));
+    this.xpPop.append(card);
+    // Keep the stack short: older cards go first.
+    while (this.xpPop.childElementCount > 3) this.xpPop.firstElementChild!.remove();
+    window.setTimeout(() => card.classList.add('out'), items.some((i) => i.kind === 'up') ? 3600 : 2400);
+    card.addEventListener('animationend', (e) => {
+      if (e.animationName === 'xp-out') card.remove();
+    });
+  }
+
   /** `again` labels the main button once the match is over (a drill says "Go again"). */
   showResult(
     title: string | null,
-    detail = '',
+    detail: string | ResultDetail = '',
     matchOver = false,
     again = 'New match',
     alt: string | null = null,
   ): void {
     this.result.hidden = title === null;
+    // With the match over the shot controls step aside for the result.
+    document.body.classList.toggle('match-over', title !== null && matchOver);
+    this.result.classList.toggle('full', title !== null && typeof detail !== 'string');
     if (title === null) return;
+    const body = typeof detail === 'string' ? [h('p', {}, detail)] : this.resultBody(detail);
     this.result.replaceChildren(
       h('h2', {}, title),
-      h('p', {}, detail),
+      ...body,
       h(
         'div',
         { className: 'row wrap result-actions' },
@@ -248,5 +293,47 @@ export class MatchHud {
         h('button', { className: 'chip', onclick: () => this.cb.onHome() }, 'Home'),
       ),
     );
+  }
+
+  private resultBody(d: ResultDetail): HTMLElement[] {
+    const out: HTMLElement[] = [];
+    if (d.score) out.push(h('div', { className: 'result-score' }, d.score));
+    for (const n of d.notes ?? []) out.push(h('p', { className: 'result-note' }, n));
+    if (d.quote)
+      out.push(
+        h('blockquote', { className: 'result-quote' }, `“${d.quote.text}”`, h('cite', {}, d.quote.who)),
+      );
+    const panels: HTMLElement[] = [];
+    if (d.stats && d.stats.rows.length) {
+      const { columns, rows } = d.stats;
+      panels.push(
+        h(
+          'section',
+          { className: 'result-panel' },
+          h('h3', {}, 'Performance'),
+          h(
+            'table',
+            { className: 'result-stats' },
+            h('thead', {}, h('tr', {}, h('th', {}, ''), ...columns.map((c) => h('th', {}, c)))),
+            h(
+              'tbody',
+              {},
+              ...rows.map((r) => h('tr', {}, h('th', {}, r.name), ...r.values.map((v) => h('td', {}, v)))),
+            ),
+          ),
+        ),
+      );
+    }
+    if (d.gains && d.gains.length)
+      panels.push(
+        h(
+          'section',
+          { className: 'result-panel' },
+          h('h3', {}, 'Progress'),
+          h('div', { className: 'gains' }, ...d.gains.map(gainChip)),
+        ),
+      );
+    if (panels.length) out.push(h('div', { className: 'result-panels' }, ...panels));
+    return out;
   }
 }
