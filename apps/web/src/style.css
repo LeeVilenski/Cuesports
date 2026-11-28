@@ -2116,6 +2116,26 @@ body {
   color: var(--muted);
   font-size: 13px;
 }
+/* Career calendar */
+.menu .career .tiles .tile small {
+  white-space: normal;
+}
+.menu .week-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.menu .week-bar .money {
+  font: 700 18px var(--font-display);
+  color: var(--yellow);
+}
+.menu .timeline.ahead li {
+  opacity: 0.75;
+}
+
 /* Career skills */
 .menu .skills {
   display: flex;

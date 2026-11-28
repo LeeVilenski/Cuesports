@@ -81,6 +81,7 @@ import { cuesFor, due, type SoundCue } from './audio/cues';
 import { DEFAULT_SOUND, Sound, type SoundSettings } from './audio/sound';
 import { addMatch, emptyStats, percent } from './game/stats';
 import { pressureLabel, situation, stakes, sway } from './game/pressure';
+import { eligibility } from './game/season';
 import { AGENT, enterEvent, gainsText, playMatch, train } from './game/agent';
 import {
   applyTuning,
@@ -130,7 +131,7 @@ import {
 } from './game/tutorial';
 import { Coach } from './ui/coach';
 import { resolveTier, TIERS, type TierChoice } from './render/quality';
-import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
+import { CAROM_GAMES, DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
 import {
   canPlaceCueBall,
   headStringX,
@@ -1172,10 +1173,10 @@ const menu: Menu = new Menu(
       }
     },
     career: () => career,
-    onCareerEnter: (id) => {
+    onCareerEnter: (id, booked) => {
       const e = careerEvent(id);
-      if (!e) return;
-      career = enterEvent(career, e, (Math.random() * 1e9) | 0);
+      if (!e || !eligibility(career, e, booked).ok) return;
+      career = enterEvent(career, e, (Math.random() * 1e9) | 0, booked);
       saveCareer(career);
     },
     onCareerUpdate: (s) => {
@@ -1424,10 +1425,15 @@ function careerResult(m: Match, winner: string, score: string): void {
     const st = emptyStats();
     addMatch(st, m.record, 0);
     const figures = {
-      potPct: st.potAttempts ? Math.round((100 * st.pots) / st.potAttempts) : 0,
+      potPct:
+        st.potAttempts && !CAROM_GAMES.has(m.config.game)
+          ? Math.round((100 * st.pots) / st.potAttempts)
+          : null,
       best: st.highestBreak,
       word: visitWord(m.config.game),
       fouls: st.fouls,
+      game: m.config.game,
+      carom: CAROM_GAMES.has(m.config.game),
     };
     career = playMatch(career, won, (Math.random() * 1e9) | 0, figures, {
       xp: careerXp,
