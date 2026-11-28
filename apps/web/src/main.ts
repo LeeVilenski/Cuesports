@@ -130,7 +130,7 @@ import {
 } from './game/tutorial';
 import { Coach } from './ui/coach';
 import { resolveTier, TIERS, type TierChoice } from './render/quality';
-import { DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
+import { CAROM_GAMES, DEFAULT_MATCH, Match, type MatchConfig } from './game/match';
 import {
   canPlaceCueBall,
   headStringX,
@@ -1424,10 +1424,15 @@ function careerResult(m: Match, winner: string, score: string): void {
     const st = emptyStats();
     addMatch(st, m.record, 0);
     const figures = {
-      potPct: st.potAttempts ? Math.round((100 * st.pots) / st.potAttempts) : 0,
+      potPct:
+        st.potAttempts && !CAROM_GAMES.has(m.config.game)
+          ? Math.round((100 * st.pots) / st.potAttempts)
+          : null,
       best: st.highestBreak,
       word: visitWord(m.config.game),
       fouls: st.fouls,
+      game: m.config.game,
+      carom: CAROM_GAMES.has(m.config.game),
     };
     career = playMatch(career, won, (Math.random() * 1e9) | 0, figures, {
       xp: careerXp,

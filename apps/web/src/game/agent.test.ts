@@ -9,6 +9,7 @@ import {
   nextGoal,
   playMatch,
   preTalk,
+  statLine,
   targetFor,
   targetText,
   unread,
@@ -72,6 +73,20 @@ describe('Old Joe', () => {
     expect(lost.confidence).toBeLessThan(50);
     expect(lost.run?.debrief?.length).toBeGreaterThan(0);
     expect(lost.log).toEqual([{ event: 'lion-9ball', reached: 0, target: 1, champion: false }]);
+  });
+
+  it('never talks about potting in a game without pockets', () => {
+    const carom = {
+      potPct: null,
+      best: 1,
+      word: 'run',
+      fouls: 0,
+      game: 'three-cushion' as const,
+      carom: true,
+    };
+    expect(statLine(false, carom)).not.toMatch(/potting/);
+    expect(statLine(true, { ...carom, best: 5 })).toMatch(/5 run/);
+    expect(statLine(false, { potPct: 30, best: 2, word: 'break', fouls: 0 })).toMatch(/30% potting/);
   });
 
   it('previews the next opponent between rounds', () => {

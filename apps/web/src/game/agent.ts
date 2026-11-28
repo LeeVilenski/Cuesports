@@ -283,11 +283,14 @@ export function debrief(
 }
 
 /** A short comment on how you played, from the last match's figures. */
-export function statLine(won: boolean, potPct: number, best: number, word: string, fouls: number): string {
-  if (best >= 50) return `That ${best} ${word} was the real deal.`;
-  if (potPct >= 75) return `Potting ${potPct}%. Lovely.`;
-  if (fouls >= 4) return `${fouls} fouls, though. You can't give tables away like that.`;
-  if (!won && potPct < 50) return `Only ${potPct}% potting. We'll fix that.`;
+export function statLine(won: boolean, f: MatchFigures): string {
+  // Carom games have no pockets: a run is counted in points, and nobody pots anything.
+  const big = f.carom ? (f.game === 'three-cushion' ? 4 : 25) : 50;
+  if (f.best >= big) return `That ${f.best} ${f.word} was the real deal.`;
+  if (f.potPct !== null && f.potPct >= 75) return `Potting ${f.potPct}%. Lovely.`;
+  if (f.fouls >= 4) return `${f.fouls} fouls, though. You can't give tables away like that.`;
+  if (!won && f.potPct !== null && f.potPct < 50) return `Only ${f.potPct}% potting. We'll fix that.`;
+  if (!won && f.carom && f.best <= 1) return 'Never got a run going. These carom games take time.';
   return '';
 }
 
@@ -378,10 +381,14 @@ export function enterEvent(state: CareerState, e: CareerEvent, seed: number): Ca
 
 /** How you played the match: fed to Joe's comments. */
 export interface MatchFigures {
-  potPct: number;
+  /** Pots made, as a percentage of attempts; null when there was nothing to pot (carom games). */
+  potPct: number | null;
   best: number;
   word: string;
   fouls: number;
+  game?: MatchGame;
+  /** A carom game: no pockets. */
+  carom?: boolean;
 }
 
 /**
@@ -405,7 +412,7 @@ export function playMatch(
   const run = s.run!;
   const champion = run.status === 'won';
   s = develop(s, e.game, won, champion, play ?? { xp: {}, deciders: 0 });
-  const stat = figures ? statLine(won, figures.potPct, figures.best, figures.word, figures.fouls) : '';
+  const stat = figures ? statLine(won, figures) : '';
   if (run.status === 'playing') return { ...s, run: { ...run, talk: betweenRounds(s, seed, stat) } };
 
   s = { ...s, player: rust(s.player, e.game), trainingReady: true };
