@@ -376,7 +376,7 @@ test('career: meets Old Joe, enters an event and shows the bracket', async ({ pa
   await page.getByRole('button', { name: "Let's go" }).click();
   // He has a booking for you and a message waiting.
   await expect(page.getByRole('button', { name: 'Take it' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Inbox (1)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Inbox 1' })).toBeVisible();
   await expect(page.locator('.week-bar')).toContainText('Season 1 · Week 1 of 12');
   await page.getByRole('button', { name: 'Calendar', exact: true }).click();
   // Only the pub is open at first: anything bigger on the calendar is locked.

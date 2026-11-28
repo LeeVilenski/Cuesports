@@ -132,7 +132,7 @@ describe('Old Joe', () => {
   it('names the next goal', () => {
     expect(nextGoal(newCareer())).toMatch(/Red Lion/);
     const all = EVENTS.reduce((s, e) => ({ ...s, best: { ...s.best, [e.id]: rounds(e) } }), newCareer());
-    expect(nextGoal(all)).toMatch(/won everything/);
+    expect(nextGoal(all)).toMatch(/Tours tab/);
   });
 
   it('loads an old career with Joe at the start', () => {

@@ -3,6 +3,8 @@ import {
   careerEvent,
   EVENTS,
   enter,
+  enterField,
+  venueOf,
   nextOpponent,
   opponent,
   recordMatch,
@@ -16,6 +18,22 @@ import {
   type CareerState,
 } from './career';
 import type { MatchGame } from './match';
+import { isTourEvent, MAJOR_FIELD } from './tour-events';
+import { tourDef } from './roster';
+import {
+  bankEvent,
+  canSpecialise,
+  CHALLENGE_CARDS,
+  endTourSeason,
+  hasCard,
+  ordinal,
+  rankOf,
+  fieldFor,
+  finishYourEvent,
+  playTourWeek,
+  qschoolResult,
+  tourCeiling,
+} from './tours';
 import { cost, eligibility, nextWeek, pay, seasonSummary, weekEvents, winnings, WEEKS } from './season';
 import {
   addLevelXp,
@@ -94,6 +112,10 @@ export function gameName(e: CareerEvent): string {
     billiards: 'English billiards',
     'three-cushion': 'three-cushion',
     pyramid: 'Russian pyramid',
+    'straight-pool': 'straight pool',
+    'chinese-8ball': 'Chinese eight-ball',
+    'balkline-47-2': 'balkline',
+    'balkline-71-2': 'balkline',
   };
   return names[e.game] ?? e.game;
 }
@@ -200,7 +222,7 @@ export const confidenceBand = (c: number): string =>
 /** Joe's talk before an event. */
 export function preTalk(state: CareerState, e: CareerEvent, target: number, seed: number): string[] {
   const rng = new Rng(seed);
-  const venue = VENUES.find((v) => v.id === e.venue)!;
+  const venue = venueOf(e);
   const firstTime = !state.log.some((l) => careerEvent(l.event)?.game === e.game);
   const holder = (state.best[e.id] ?? 0) >= rounds(e);
   const opener = holder
@@ -227,7 +249,16 @@ export function preTalk(state: CareerState, e: CareerEvent, target: number, seed
             `I want you to ${want}.`,
             `${want[0]!.toUpperCase()}${want.slice(1)}, and I'll be happy.`,
           ]);
-  return [opener, ...gameLines(e, firstTime), field, ask];
+  const tour = isTourEvent(e)
+    ? {
+        challenge: 'Challenge Tour money counts. Top two at the end of the season get a tour card.',
+        ranking: 'Ranking money. Every round you win moves you up the table.',
+        major: 'This is a major, kid. The best on the tour, the biggest purse. Enjoy it.',
+        qschool: 'Q-School. Get to the semi-finals and you get a tour card. Nothing else matters this week.',
+        finals: "The Tour Finals. Only the top eight get here. You've earned this.",
+      }[e.kind]
+    : null;
+  return [opener, ...gameLines(e, firstTime), field, ...(tour ? [tour] : []), ask];
 }
 
 /** Joe's line after a match you won, before the next round. */
@@ -386,19 +417,42 @@ export function enterEvent(state: CareerState, e: CareerEvent, seed: number, boo
         : ''
       : `Entry and travel: £${c.total}${booked ? " (I've paid the travel)" : ''}.`;
   const talk = [...preTalk(state, e, target, seed), ...(paid ? [paid] : [])];
-  const run = { ...enter(e, seed), target, talk, booked };
+  // Tour events have their own field: the ranking decides who plays.
+  const base = isTourEvent(e) ? enterField(e, fieldFor(state, e, seed, true), seed) : enter(e, seed);
+  const run = { ...base, target, talk, booked };
   return { ...pay(state, e, booked), run };
 }
 
 /** A week off: rest, train, and the calendar moves on. */
 export function restWeek(state: CareerState): CareerState {
   if (state.run?.status === 'playing') return state;
-  return endWeek({ ...state, trainingReady: true });
+  return endWeek({ ...state, trainingReady: true }, null);
 }
 
-/** The week is over: on to the next, with a season review when the season ends. */
-function endWeek(s: CareerState): CareerState {
-  const season = s.season;
+/**
+ * The week is over: every tour plays out its events (all but the one you played), cards are
+ * decided at the end of the season, and on to the next week, with a season review when the season
+ * ends.
+ */
+function endWeek(s0: CareerState, played: string | null): CareerState {
+  const season = s0.season;
+  let s = playTourWeek(s0, season, s0.week, played);
+  if (s.week >= WEEKS) {
+    const t = endTourSeason(s, season);
+    s = t.state;
+    for (const n of t.news) s = send(s, message(n.id, n.subject, n.body));
+  }
+  if (canSpecialise(s) && !s.tours.length)
+    s = send(
+      s,
+      message(
+        'specialise',
+        'Time to choose',
+        "You've outgrown the club tables, kid. It's time to pick a path: one tour, or two if you're greedy. " +
+          'Snooker, American pool, blackball, billiards or pyramid. Each has a Challenge Tour, a Q-School and a ' +
+          "tour card at the end of it. Have a look on the Tours tab. Until you choose, I'll keep finding you whatever's going.",
+      ),
+    );
   const { state, seasonOver } = nextWeek(s);
   if (!seasonOver) return state;
   const sum = seasonSummary(state, season);
@@ -522,7 +576,7 @@ export function playMatch(
       message(
         `rival-${opp.id}`,
         `You beat ${opponent(opp.id).name}`,
-        `Everyone at ${VENUES.find((v) => v.id === e.venue)!.name} is talking about it. ${opponent(opp.id).name} doesn't lose often. ` +
+        `Everyone at ${venueOf(e).name} is talking about it. ${opponent(opp.id).name} doesn't lose often. ` +
           "Don't let it go to your head: they'll want it back.",
       ),
     );
@@ -545,7 +599,21 @@ export function playMatch(
         "I've had three calls this week about you. Three! Keep this going and I'll be expecting more of you, mind.",
       ),
     );
-  return endWeek(s);
+  // A tour event: the rest of the bracket is played out, everyone's prize money goes to the
+  // ranking, and Q-School hands out cards.
+  if (isTourEvent(e)) {
+    const all = finishYourEvent(run, e, seed + 7);
+    s = bankEvent(s, e, all);
+    const q = qschoolResult(s, e, reached);
+    s = q.state;
+    if (q.news) s = send(s, message(q.news.id, q.news.subject, q.news.body));
+    const winner = Object.entries(all).find(([, r]) => r >= rounds(e))?.[0];
+    if (winner && !champion) {
+      const w = opponent(winner).name;
+      s = { ...s, run: { ...s.run!, debrief: [...(s.run!.debrief ?? []), `${w} won it in the end.`] } };
+    }
+  }
+  return endWeek(s, run.event);
 }
 
 /** What you did in a match, for XP: per-shot XP summed, and deciding racks won. */
@@ -554,7 +622,7 @@ export interface MatchPlay {
   deciders: number;
 }
 
-export const ceiling = (s: CareerState): number => ceilingFor(topTier(s));
+export const ceiling = (s: CareerState): number => Math.max(ceilingFor(topTier(s)), tourCeiling(s) ?? 0);
 
 /** XP into your ratings and level, and familiarity with the game, after a career match. */
 function develop(
@@ -607,6 +675,20 @@ export function careerRecord(s: CareerState): { won: number; lost: number; title
 
 /** The next thing to aim for, in words. */
 export function nextGoal(s: CareerState): string {
+  // On tour: a card first, then the majors.
+  for (const m of s.tours) {
+    const name = tourDef(m.tour).name;
+    if (!hasCard(s, m.tour))
+      return `A ${name} card: top ${CHALLENGE_CARDS} on its Challenge Tour, or the Q-School semi-finals in week 12.`;
+  }
+  if (s.tours.length) {
+    const m = s.tours[0]!;
+    const r = rankOf(s, m.tour) ?? 999;
+    return r <= MAJOR_FIELD
+      ? `Win a major on the ${tourDef(m.tour).name}. You're ${ordinal(r)} in the ranking.`
+      : `Top ${MAJOR_FIELD} on the ${tourDef(m.tour).name} ranking for the majors (you're ${ordinal(r)}).`;
+  }
+  if (canSpecialise(s)) return 'Choose your tours on the Tours tab: one, or two.';
   const shut = VENUES.find((v) => !tierOpen(s, v.tier));
   if (shut) {
     const below = VENUES.filter((v) => v.tier === shut.tier - 1).map((v) => v.name);

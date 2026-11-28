@@ -1,6 +1,6 @@
 # Career mode v2: plan
 
-Status: phases 1–4 (Old Joe and the hub, attributes and the guide, pressure, the calendar and money) are built; phases 5–6 are planned. The current career (`apps/web/src/game/career.ts`) is the v1
+Status: phases 1–5 are built (Old Joe and the hub, attributes and the guide, pressure, the calendar and money, specialising and tours). Phase 6 (flavour) is planned. The current career (`apps/web/src/game/career.ts`) is the v1
 this replaces.
 
 ## Where we are
@@ -334,8 +334,28 @@ Each phase ships on its own and leaves the game playable.
    always free. At the end of the season Joe sends a review. The Events tab is now the Calendar: this
    week, coming up, and the season so far. Not built: the bigger fields and quick simulation, which
    wait for the tours in phase 5. Spending on coaching, cues and kit comes with phase 6.
-5. **Specialising and tours.** The specialise scene, the five tours, rankings, cards, Q-School, majors and
-   qualifiers, switching tours at season end.
+5. **Specialising and tours.** _Built._ Code: `game/roster.ts` (the tours, 120 fictional tour players, the
+   crossover table), `game/tour-events.ts` (each tour's weekly events as data), `game/tours.ts` (cards,
+   rankings, fields, the season's end) and a Tours tab.
+   - **Choosing:** once the halls are open, Joe sends "Time to choose" and the Tours tab lets you pick one
+     or two tours. You can change them in week 1 of any season. Dropping a tour loses its card, and a new
+     tour starts you on its Challenge Tour. From then on your calendar is your tours.
+   - **Each week, on each tour:** a Challenge Tour event (8 players, £100 entry, £1,500 to the winner)
+     and a ranking event (16 players, £250, £8,000). Majors are in weeks 4, 8 and 11 (top 12 only, free
+     entry, £25,000). Week 12 has Q-School (£500, free for the Challenge Tour top 4) and the Tour Finals
+     (top 8, £40,000).
+   - **Rankings:** prize money over this season and last, with a season 0 standing in at the start.
+     Every tour plays out every event each week (the computer plays the ones you're not in), so tables
+     move whether you're on that tour or not. The Challenge Tour has its own table.
+   - **Cards:** top 2 on the Challenge Tour at the end of the season, or the Q-School semi-finals,
+     earn a card for 2 seasons. When it runs out you keep it in the top 16 and lose it outside. A card
+     raises your ceiling to 99, and being on a tour without one raises it to 80.
+   - **Crossover players:** each tour has 16 pros and 8 hopefuls. The top half of the pros play a side
+     tour or two at the crossover table's offset, and they're marked in the rankings and on the walk-on
+     card.
+   - **Majors and the finals** add to the pressure. Joe's cut on tour is 10%.
+   - **Not built:** major qualifiers and Joe's wildcards into majors, fields bigger than 16, and players
+     changing tours over the seasons.
 6. **Flavour.** The shop and cues with stats, coaching, sponsors, rivals per tour, nicknames, venues (pub,
    club, hall, TV arena).
 

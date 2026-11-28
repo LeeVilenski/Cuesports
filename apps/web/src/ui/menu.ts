@@ -16,6 +16,23 @@ import {
   targetText,
   unread,
 } from '../game/agent';
+import { tourDef, tourPlayer, TOURS, type TourId } from '../game/roster';
+import { isTourEvent, MAJOR_FIELD, MAJOR_WEEKS } from '../game/tour-events';
+import {
+  canChooseTours,
+  canSpecialise,
+  CARD_CUT,
+  challengeKey,
+  CHALLENGE_CARDS,
+  chooseTours,
+  hasCard,
+  MAX_TOURS,
+  membership,
+  ordinal,
+  QSCHOOL_PLACES,
+  rankOf,
+  ranking,
+} from '../game/tours';
 import { cost, cut, eligibility, prize, seasonSummary, weekEvents, WEEKS } from '../game/season';
 import { ATTRS, levelCost, pointCost, shotTuning, TRAINING } from '../game/attributes';
 import {
@@ -31,6 +48,7 @@ import {
   rounds,
   unlockedBy,
   VENUES,
+  venueOf,
   YOU,
   type CareerState,
 } from '../game/career';
@@ -212,7 +230,11 @@ export class Menu {
   private inMatch = false;
   private canSave = false;
   private statsPlayer: string | null = null;
-  private careerTab: 'home' | 'events' | 'inbox' | 'profile' = 'home';
+  private careerTab: 'home' | 'events' | 'tours' | 'inbox' | 'profile' = 'home';
+  /** Tours ticked on the specialise screen, before you confirm. */
+  private tourPick: TourId[] | null = null;
+  /** The tour chooser is open (it starts closed once you're on tours). */
+  private tourChooserOpen = false;
   private introPage = 0;
   private openMessage: string | null = null;
   private statsGame: MatchConfig['game'] | 'all' = 'all';
@@ -1037,7 +1059,8 @@ export class Menu {
       [
         { value: 'home', label: 'Home' },
         { value: 'events', label: 'Calendar' },
-        { value: 'inbox', label: n ? `Inbox (${n})` : 'Inbox' },
+        { value: 'tours', label: 'Tours' },
+        { value: 'inbox', label: n ? `Inbox ${n}` : 'Inbox' },
         { value: 'profile', label: 'Profile' },
       ],
       this.careerTab,
@@ -1050,11 +1073,13 @@ export class Menu {
     const body =
       this.careerTab === 'events'
         ? this.careerEvents()
-        : this.careerTab === 'inbox'
-          ? this.careerInbox()
-          : this.careerTab === 'profile'
-            ? this.careerProfile()
-            : this.careerHome();
+        : this.careerTab === 'tours'
+          ? this.careerTours()
+          : this.careerTab === 'inbox'
+            ? this.careerInbox()
+            : this.careerTab === 'profile'
+              ? this.careerProfile()
+              : this.careerHome();
     return h('div', { className: 'sub career' }, this.header('Career'), tabs.el, body);
   }
 
@@ -1238,7 +1263,7 @@ export class Menu {
     const tiles = h('div', { className: 'tiles' });
     weekEvents(s).forEach((e, i) => {
       const game = MATCH_GAMES.find((g) => g.id === e.game)?.label ?? e.game;
-      const venue = VENUES.find((v) => v.id === e.venue)!;
+      const venue = venueOf(e);
       const c = cost(s, e, false);
       const ok = eligibility(s, e);
       const now = run?.event === e.id;
@@ -1246,14 +1271,14 @@ export class Menu {
         `${game} · ${venue.name} · ${2 ** rounds(e)} players`,
         c.total ? `Entry £${c.fee} + travel £${c.travel}` : 'Free entry',
         `Winner £${prize(e, rounds(e))}`,
-        bestText(e, s.best[e.id]),
+        isTourEvent(e) ? '' : bestText(e, s.best[e.id]),
         now ? 'In progress' : ok.ok ? '' : ok.reason,
       ]
         .filter(Boolean)
         .join(' · ');
       tiles.append(
         this.tile(
-          colours[i % colours.length]!,
+          isTourEvent(e) ? tourDef(e.tour).colour : colours[i % colours.length]!,
           'trophy',
           e.title,
           sub,
@@ -1337,6 +1362,161 @@ export class Menu {
       body.append(list);
     }
     return body;
+  }
+
+  /** Specialising, and the tours you're on: your status, the ranking and the majors. */
+  private careerTours(): HTMLElement {
+    const s = this.cb.career();
+    const body = h('div', { className: 'scroll' });
+    if (!canSpecialise(s)) {
+      body.append(
+        this.joeCard([
+          "Tours are for players who've outgrown the club tables. Win at the clubs, get the halls open, and we'll talk about which tours to go for.",
+        ]),
+        h('h3', {}, 'The tours'),
+      );
+      for (const t of TOURS)
+        body.append(h('div', { className: 'rival' }, h('strong', {}, t.name), h('span', {}, t.blurb)));
+      return body;
+    }
+    if (canChooseTours(s) && (!s.tours.length || this.tourChooserOpen)) body.append(this.tourChooser());
+    else if (canChooseTours(s))
+      body.append(
+        h(
+          'button',
+          {
+            className: 'coach-btn',
+            onclick: () => {
+              this.tourChooserOpen = true;
+              this.show('career');
+            },
+          },
+          'Change tours (week 1 only)',
+        ),
+      );
+    for (const m of s.tours) body.append(this.tourCard(m.tour));
+    return body;
+  }
+
+  /** Pick up to two tours (in week 1 of a season, or the first time). */
+  private tourChooser(): HTMLElement {
+    const s = this.cb.career();
+    const pick = (this.tourPick ??= s.tours.map((m) => m.tour));
+    const wrap = h('div', { className: 'tour-chooser' });
+    wrap.append(
+      this.joeCard([
+        s.tours.length
+          ? 'Keep your tours, or change them. Drop one and you lose your card on it. Join a new one and you start on its Challenge Tour.'
+          : "Pick your path, kid. One tour, or two if you think you can handle both. You start on each tour's Challenge Tour: top two at the end of the season get a tour card, or get to the Q-School semi-finals in week 12.",
+      ]),
+    );
+    const tiles = h('div', { className: 'tiles' });
+    for (const t of TOURS) {
+      const on = pick.includes(t.id);
+      const m = membership(s, t.id);
+      const status = m ? (hasCard(s, t.id) ? 'Your tour: card held' : 'Your tour: Challenge Tour') : t.blurb;
+      const tile = this.tile(
+        t.colour,
+        on ? 'star' : 'trophy',
+        t.name,
+        status,
+        () => {
+          const cur = this.tourPick ?? [];
+          this.tourPick = cur.includes(t.id)
+            ? cur.filter((x) => x !== t.id)
+            : cur.length < MAX_TOURS
+              ? [...cur, t.id]
+              : cur;
+          this.show('career');
+        },
+        `wide${on ? ' picked' : ''}`,
+      );
+      tile.setAttribute('aria-pressed', String(on));
+      tiles.append(tile);
+    }
+    const same = pick.length === s.tours.length && pick.every((t) => s.tours.some((m) => m.tour === t));
+    wrap.append(
+      tiles,
+      h(
+        'button',
+        {
+          className: 'tile yellow cta',
+          disabled: pick.length === 0 || same,
+          onclick: () => {
+            this.cb.onCareerUpdate(chooseTours(this.cb.career(), pick));
+            this.tourPick = null;
+            this.tourChooserOpen = false;
+            this.careerTab = 'events';
+            this.show('career');
+          },
+        },
+        h(
+          'strong',
+          {},
+          pick.length === 0
+            ? 'Pick a tour'
+            : same
+              ? 'These are your tours'
+              : `Go with ${pick.map((t) => tourDef(t).name).join(' and ')}`,
+        ),
+      ),
+    );
+    return wrap;
+  }
+
+  /** One of your tours: status, the ranking (or the Challenge Tour's) with the cut, and the majors. */
+  private tourCard(tour: TourId): HTMLElement {
+    const s = this.cb.career();
+    const t = tourDef(tour);
+    const card = hasCard(s, tour);
+    const m = membership(s, tour)!;
+    const key = card ? tour : challengeKey(tour);
+    const me = rankOf(s, key) ?? 0;
+    const wrap = h('div', { className: `tour-card ${t.colour}` });
+    const status = card
+      ? `Tour card until the end of season ${m.card!.until}. Keep it by finishing in the top ${CARD_CUT}. Majors (weeks ${MAJOR_WEEKS.join(', ')}): top ${MAJOR_FIELD}.`
+      : `Challenge Tour. Top ${CHALLENGE_CARDS} at the end of the season earn a card; top ${QSCHOOL_PLACES} get a free Q-School place in week 12 (or pay the entry).`;
+    wrap.append(
+      h('h3', {}, t.name),
+      h('p', { className: 'fine-print' }, status),
+      h(
+        'p',
+        { className: 'event-status' },
+        `You're ${ordinal(me)} on the ${card ? 'ranking' : 'Challenge Tour'}.`,
+      ),
+    );
+    const rows = ranking(s, key);
+    const cutAt = card ? CARD_CUT : CHALLENGE_CARDS;
+    const show = rows.slice(0, 16);
+    const table = h('ol', { className: 'ranking' });
+    const row = (r: { id: string; money: number }, i: number) => {
+      const p = tourPlayer(r.id);
+      const visitor = p && p.home !== tour ? ` · ${tourDef(p.home).name.replace(/ Tour$/, '')}` : '';
+      const li = h(
+        'li',
+        { className: `${r.id === YOU ? 'you' : ''}${i + 1 === cutAt ? ' cut' : ''}`.trim() },
+        h('span', { className: 'pos' }, String(i + 1)),
+        h(
+          'span',
+          { className: 'who' },
+          r.id === YOU ? this.cb.profile().name : opponent(r.id).name,
+          h('small', {}, visitor),
+        ),
+        h('span', { className: 'cash' }, `£${r.money.toLocaleString('en-GB')}`),
+      );
+      return li;
+    };
+    show.forEach((r, i) => table.append(row(r, i)));
+    if (me > show.length) table.append(h('li', { className: 'gap' }, '…'), row(rows[me - 1]!, me - 1));
+    wrap.append(
+      table,
+      h(
+        'p',
+        { className: 'fine-print' },
+        `Prize money over this season and last. The line marks the ${card ? `top ${CARD_CUT} (keep your card)` : `top ${CHALLENGE_CARDS} (a tour card)`}. Players from other tours are marked.`,
+      ),
+    );
+    return wrap;
   }
 
   private careerInbox(): HTMLElement {
@@ -1648,7 +1828,11 @@ export class Menu {
     );
     const status =
       run.status === 'won'
-        ? h('p', { className: 'event-status won' }, `Champion! Unlocked: ${REWARDS[e.reward] ?? ''}.`)
+        ? h(
+            'p',
+            { className: 'event-status won' },
+            REWARDS[e.reward] ? `Champion! Unlocked: ${REWARDS[e.reward]}.` : 'Champion!',
+          )
         : run.status === 'out'
           ? h(
               'p',
@@ -1691,7 +1875,15 @@ export class Menu {
       { className: `walk-on${opp.id === e.rival ? ' rival-card' : ''}` },
       h('small', {}, `${roundName(e, run.round)} · ${gameName(e)}`),
       h('strong', {}, `You vs ${o.name}`),
-      h('span', {}, `${o.style} · ${level}${opp.id === e.rival ? ' · your rival' : ''}`),
+      h(
+        'span',
+        {},
+        `${o.style} · ${level}${opp.id === e.rival ? ' · your rival' : ''}${
+          isTourEvent(e) && tourPlayer(o.id) && tourPlayer(o.id)!.home !== e.tour
+            ? ` · from the ${tourDef(tourPlayer(o.id)!.home).name}`
+            : ''
+        }`,
+      ),
       h('span', {}, w + l ? `Head to head: you ${w}–${l}` : 'First meeting'),
       h('span', {}, `Your ${gameName(e)}: familiarity ${s.player.familiarity[e.game] ?? 0}`),
       h('em', {}, stake),
