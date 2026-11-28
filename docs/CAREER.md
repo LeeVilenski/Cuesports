@@ -1,6 +1,6 @@
 # Career mode v2: plan
 
-Status: phases 1–3 (Old Joe and the hub, attributes and the guide, pressure) are built; phases 4–6 are planned. The current career (`apps/web/src/game/career.ts`) is the v1
+Status: phases 1–4 (Old Joe and the hub, attributes and the guide, pressure, the calendar and money) are built; phases 5–6 are planned. The current career (`apps/web/src/game/career.ts`) is the v1
 this replaces.
 
 ## Where we are
@@ -313,8 +313,18 @@ Each phase ships on its own and leaves the game playable.
    and most in the final), and Nerve takes up to 85% of it away. What you feel shrinks the Vision lines
    (by up to 60%), adds an aim tremor and a slow sway of the aim (off with reduced motion), and shows a
    heartbeat badge ("Nervy", "Pressure", "Big pressure"). Potting a pressure ball cleanly earns Nerve XP.
-4. **Calendar and money.** Weeks, agent bookings, entry rules, fees, travel, confidence and the cut,
-   brackets, quick simulation, v1 → v2 migration.
+4. **Calendar and money.** _Built._ `game/season.ts`: seasons of 12 weeks. Each week has three events on
+   the calendar, seeded per career, so a season looks the same every time: one at your level (a tier lower
+   when Joe has lost faith), one in a different game, and one locked just above you to aim for. You
+   play one event a week or rest, and the week moves on when your event ends. A rest week gives you a
+   training session. Entry fees by tier: pub free, £20, £50, £100. Travel: free, £10, £30, £60. Joe's
+   bookings save you the travel, and he covers the entry too when his confidence is 75 or more. Prize
+   money by tier (£100, £400, £1,200, £4,000 to the winner): half for the runner-up, a quarter for
+   losing in the semis, nothing for losing your first match. Joe takes 20% (15% once the halls are
+   open, 10% at the arena). You start with £50, can't enter what you can't afford, and the pub is
+   always free. At the end of the season Joe sends a review. The Events tab is now the Calendar: this
+   week, coming up, and the season so far. Not built: the bigger fields and quick simulation, which
+   wait for the tours in phase 5. Spending on coaching, cues and kit comes with phase 6.
 5. **Specialising and tours.** The specialise scene, the five tours, rankings, cards, Q-School, majors and
    qualifiers, switching tours at season end.
 6. **Flavour.** The shop and cues with stats, coaching, sponsors, rivals per tour, nicknames, venues (pub,

@@ -4,6 +4,7 @@ import {
   booking,
   bookingPitch,
   ceiling,
+  restWeek,
   spend,
   careerRecord,
   confidenceBand,
@@ -15,6 +16,7 @@ import {
   targetText,
   unread,
 } from '../game/agent';
+import { cost, cut, eligibility, prize, seasonSummary, weekEvents, WEEKS } from '../game/season';
 import { ATTRS, levelCost, pointCost, shotTuning, TRAINING } from '../game/attributes';
 import {
   bestText,
@@ -27,7 +29,6 @@ import {
   REWARDS,
   roundName,
   rounds,
-  tierOpen,
   unlockedBy,
   VENUES,
   YOU,
@@ -124,8 +125,8 @@ export interface MenuCallbacks {
   career(): CareerState;
   sound(): SoundSettings;
   onSound(s: SoundSettings): void;
-  /** Enter a career event (abandoning any other in progress). */
-  onCareerEnter(event: string): void;
+  /** Enter a career event this week: one Joe booked, or one you picked. */
+  onCareerEnter(event: string, booked: boolean): void;
   /** Start a career training session (a challenge id from TRAINING). */
   onCareerTrain(id: string): void;
   /** A change to the career from the hub (the intro seen, a message read). */
@@ -1035,7 +1036,7 @@ export class Menu {
       'Career',
       [
         { value: 'home', label: 'Home' },
-        { value: 'events', label: 'Events' },
+        { value: 'events', label: 'Calendar' },
         { value: 'inbox', label: n ? `Inbox (${n})` : 'Inbox' },
         { value: 'profile', label: 'Profile' },
       ],
@@ -1061,6 +1062,7 @@ export class Menu {
     const s = this.cb.career();
     const body = h('div', { className: 'scroll' });
     const run = s.run?.status === 'playing' ? s.run : null;
+    body.append(this.weekBar());
     if (run) {
       const e = careerEvent(run.event)!;
       body.append(
@@ -1080,10 +1082,34 @@ export class Menu {
       );
     } else {
       const e = booking(s, 1);
-      if (e) {
+      const rest = h(
+        'button',
+        {
+          className: 'coach-btn',
+          onclick: () => {
+            this.cb.onCareerUpdate(restWeek(this.cb.career()));
+            this.show('career');
+          },
+        },
+        'Rest this week',
+      );
+      if (!e)
         body.append(
           this.joeCard(
-            [bookingPitch(s, e, 1)],
+            ["Nothing I can get you into this week, kid. Rest up, train, and we'll go again next week."],
+            h('div', { className: 'joe-actions' }, rest),
+          ),
+        );
+      if (e) {
+        const c = cost(s, e, true);
+        body.append(
+          this.joeCard(
+            [
+              bookingPitch(s, e, 1),
+              c.total
+                ? `Entry £${c.fee}. I'll cover the travel. Winner gets £${prize(e, rounds(e))}.`
+                : `It's on me. Winner gets £${prize(e, rounds(e))}.`,
+            ],
             h(
               'div',
               { className: 'joe-actions' },
@@ -1092,7 +1118,7 @@ export class Menu {
                 {
                   className: 'coach-btn primary',
                   onclick: () => {
-                    this.cb.onCareerEnter(e.id);
+                    this.cb.onCareerEnter(e.id, true);
                     this.go('event');
                   },
                 },
@@ -1109,6 +1135,7 @@ export class Menu {
                 },
                 'Something else',
               ),
+              rest,
             ),
           ),
         );
@@ -1190,44 +1217,124 @@ export class Menu {
     return body;
   }
 
+  /** Season, week and bank balance. */
+  private weekBar(): HTMLElement {
+    const s = this.cb.career();
+    return h(
+      'div',
+      { className: 'week-bar' },
+      h('strong', {}, `Season ${s.season} · Week ${s.week} of ${WEEKS}`),
+      h('span', { className: 'money' }, `£${s.money}`),
+    );
+  }
+
+  /** This week's events, a week off, what's coming, and how the season has gone. */
   private careerEvents(): HTMLElement {
     const s = this.cb.career();
     const colours = ['blue', 'orange', 'green', 'red', 'purple', 'teal'];
     const run = s.run?.status === 'playing' ? s.run : null;
     const body = h('div', { className: 'scroll' });
-    let colour = 0;
-    for (const v of VENUES) {
-      const open = tierOpen(s, v.tier);
-      body.append(h('h3', {}, `${v.kind} · ${v.name}`));
-      const tiles = h('div', { className: 'tiles' });
-      for (const e of EVENTS.filter((x) => x.venue === v.id)) {
-        const game = MATCH_GAMES.find((g) => g.id === e.game)?.label ?? e.game;
-        const prize = REWARDS[e.reward];
-        const now = run?.event === e.id ? ' · In progress' : '';
-        const sub = `${game} · ${2 ** rounds(e)} players · ${bestText(e, s.best[e.id])}${now}${prize ? ` · Prize: ${prize}` : ''}`;
-        tiles.append(
-          this.tile(
-            colours[colour++ % colours.length]!,
-            'trophy',
-            e.title,
-            sub,
-            open
+    body.append(this.weekBar(), h('h3', {}, 'This week'));
+    const tiles = h('div', { className: 'tiles' });
+    weekEvents(s).forEach((e, i) => {
+      const game = MATCH_GAMES.find((g) => g.id === e.game)?.label ?? e.game;
+      const venue = VENUES.find((v) => v.id === e.venue)!;
+      const c = cost(s, e, false);
+      const ok = eligibility(s, e);
+      const now = run?.event === e.id;
+      const sub = [
+        `${game} · ${venue.name} · ${2 ** rounds(e)} players`,
+        c.total ? `Entry £${c.fee} + travel £${c.travel}` : 'Free entry',
+        `Winner £${prize(e, rounds(e))}`,
+        bestText(e, s.best[e.id]),
+        now ? 'In progress' : ok.ok ? '' : ok.reason,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      tiles.append(
+        this.tile(
+          colours[i % colours.length]!,
+          'trophy',
+          e.title,
+          sub,
+          now
+            ? () => this.go('event')
+            : ok.ok
               ? () => {
-                  if (run?.event !== e.id) this.cb.onCareerEnter(e.id);
+                  this.cb.onCareerEnter(e.id, false);
                   this.go('event');
                 }
               : null,
-            'wide',
+          'wide',
+        ),
+      );
+    });
+    body.append(tiles);
+    if (!run)
+      body.append(
+        h(
+          'button',
+          {
+            className: 'coach-btn',
+            onclick: () => {
+              this.cb.onCareerUpdate(restWeek(this.cb.career()));
+              this.show('career');
+            },
+          },
+          'Rest this week (and train)',
+        ),
+      );
+    body.append(
+      h(
+        'p',
+        { className: 'fine-print' },
+        `Joe's bookings on the Home tab save you the travel. He takes ${Math.round(cut(s) * 100)}% of prize money.`,
+      ),
+    );
+    // The weeks ahead.
+    const ahead = h('ol', { className: 'timeline ahead' });
+    for (let w = s.week + 1; w <= Math.min(WEEKS, s.week + 4); w++)
+      ahead.append(
+        h(
+          'li',
+          {},
+          h('strong', {}, `Week ${w}`),
+          h(
+            'small',
+            {},
+            weekEvents(s, s.season, w)
+              .map((e) => e.title)
+              .join(' · '),
+          ),
+        ),
+      );
+    if (ahead.childElementCount) body.append(h('h3', {}, 'Coming up'), ahead);
+    // This season so far.
+    const played = s.log.filter((l) => l.season === s.season);
+    if (played.length) {
+      const sum = seasonSummary(s, s.season);
+      body.append(
+        h('h3', {}, `Season ${s.season} so far`),
+        h(
+          'p',
+          { className: 'fine-print' },
+          `${sum.events} events · ${sum.titles} titles · £${sum.earned} won`,
+        ),
+      );
+      const list = h('ol', { className: 'timeline' });
+      for (const l of played) {
+        const e = careerEvent(l.event);
+        if (!e) continue;
+        list.append(
+          h(
+            'li',
+            { className: l.champion ? 'title' : l.reached >= l.target ? 'met' : 'missed' },
+            h('strong', {}, `Week ${l.week}: ${e.title}`),
+            h('small', {}, `${bestText(e, l.reached)}${l.prize ? ` · £${l.prize}` : ''}`),
           ),
         );
       }
-      if (!open) {
-        const below = VENUES.filter((x) => x.tier === v.tier - 1).map((x) => x.name);
-        tiles.append(
-          h('p', { className: 'fine-print' }, `Win an event at ${below.join(' or ')} to play here.`),
-        );
-      }
-      body.append(tiles);
+      body.append(list);
     }
     return body;
   }
@@ -1274,6 +1381,8 @@ export class Menu {
         cell('Titles', String(r.titles)),
         cell('Matches won', String(r.won)),
         cell('Matches lost', String(r.lost)),
+        cell('In the bank', `£${s.money}`),
+        cell('Prize money', `£${s.log.reduce((a, l) => a + (l.prize ?? 0), 0)}`),
       ),
     );
     body.append(this.skills());

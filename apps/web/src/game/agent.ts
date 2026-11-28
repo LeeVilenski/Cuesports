@@ -16,6 +16,7 @@ import {
   type CareerState,
 } from './career';
 import type { MatchGame } from './match';
+import { cost, eligibility, nextWeek, pay, seasonSummary, weekEvents, winnings, WEEKS } from './season';
 import {
   addLevelXp,
   addXp,
@@ -302,13 +303,15 @@ export function statLine(won: boolean, f: MatchFigures): string {
  * a lower one), in a different game from the last one where he can, so you play everything.
  */
 export function booking(state: CareerState, seed: number): CareerEvent | null {
-  const open = EVENTS.filter((e) => tierOpen(state, e.tier));
+  // He can only book what's on this week, and what you can afford once he's paid the travel.
+  const open = weekEvents(state).filter((e) => eligibility(state, e, true).ok);
   if (!open.length) return null;
   const top = Math.max(...open.map((e) => e.tier));
   const unwon = open.filter((e) => (state.best[e.id] ?? 0) < rounds(e));
   // Confidence buys a booking at the top tier; doubt keeps you a tier lower.
   const tier = state.confidence < 30 && top > 0 ? top - 1 : top;
   let pool = unwon.filter((e) => e.tier === tier);
+  if (!pool.length) pool = open.filter((e) => e.tier === tier);
   if (!pool.length) pool = unwon.filter((e) => e.tier <= top);
   if (!pool.length) pool = open.filter((e) => e.tier === top);
   const last = state.log.at(-1);
@@ -373,10 +376,49 @@ export const markRead = (s: CareerState, id: string): CareerState => ({
 // Actions
 
 /** Enters an event with Joe's target and pre-event talk. */
-export function enterEvent(state: CareerState, e: CareerEvent, seed: number): CareerState {
+export function enterEvent(state: CareerState, e: CareerEvent, seed: number, booked = false): CareerState {
   const target = targetFor(state, e);
-  const run = { ...enter(e, seed), target, talk: preTalk(state, e, target, seed) };
-  return { ...state, run };
+  const c = cost(state, e, booked);
+  const paid =
+    c.total === 0
+      ? booked && c.fee === 0 && e.tier > 0
+        ? "I've sorted the entry and the travel. Don't make me regret it."
+        : ''
+      : `Entry and travel: £${c.total}${booked ? " (I've paid the travel)" : ''}.`;
+  const talk = [...preTalk(state, e, target, seed), ...(paid ? [paid] : [])];
+  const run = { ...enter(e, seed), target, talk, booked };
+  return { ...pay(state, e, booked), run };
+}
+
+/** A week off: rest, train, and the calendar moves on. */
+export function restWeek(state: CareerState): CareerState {
+  if (state.run?.status === 'playing') return state;
+  return endWeek({ ...state, trainingReady: true });
+}
+
+/** The week is over: on to the next, with a season review when the season ends. */
+function endWeek(s: CareerState): CareerState {
+  const season = s.season;
+  const { state, seasonOver } = nextWeek(s);
+  if (!seasonOver) return state;
+  const sum = seasonSummary(state, season);
+  const verdict =
+    sum.titles >= 2
+      ? 'What a season. People know your name now.'
+      : sum.titles === 1
+        ? 'A title in the bag. That changes things.'
+        : sum.met >= sum.events / 2 && sum.events > 0
+          ? 'Steady. You did what I asked more often than not.'
+          : 'Not the season we wanted. We go again, and we go harder.';
+  return send(
+    state,
+    message(
+      `season-${season}`,
+      `Season ${season}: the review`,
+      `${verdict} ${sum.events} event${sum.events === 1 ? '' : 's'}, ${sum.titles} title${sum.titles === 1 ? '' : 's'}, ` +
+        `£${sum.earned} won after my cut. You've got £${state.money} in the bank. Season ${state.season} starts now: ${WEEKS} weeks, same deal.`,
+    ),
+  );
 }
 
 /** How you played the match: fed to Joe's comments. */
@@ -416,14 +458,28 @@ export function playMatch(
   if (run.status === 'playing') return { ...s, run: { ...run, talk: betweenRounds(s, seed, stat) } };
 
   s = { ...s, player: rust(s.player, e.game), trainingReady: true };
+  const reached0 = run.status === 'won' ? rounds(e) : run.round;
+  const money = winnings(s, e, reached0);
   const reached = champion ? rounds(e) : run.round;
   const target = run0.target ?? targetFor(before, e);
   const confidence = Math.max(0, Math.min(100, s.confidence + confidenceDelta(reached, target, champion)));
   s = {
     ...s,
     confidence,
-    log: [...s.log, { event: e.id, reached, target, champion }],
-    run: { ...run, debrief: debrief(e, reached, target, champion, seed, stat) },
+    money: s.money + money.net,
+    log: [
+      ...s.log,
+      { event: e.id, reached, target, champion, season: s.season, week: s.week, prize: money.net },
+    ],
+    run: {
+      ...run,
+      debrief: [
+        ...debrief(e, reached, target, champion, seed, stat),
+        ...(money.gross
+          ? [`£${money.gross} in prize money. My cut's £${money.cut}, so £${money.net} for you.`]
+          : []),
+      ],
+    },
   };
 
   if (topTier(s) > topTier(before))
@@ -489,7 +545,7 @@ export function playMatch(
         "I've had three calls this week about you. Three! Keep this going and I'll be expecting more of you, mind.",
       ),
     );
-  return s;
+  return endWeek(s);
 }
 
 /** What you did in a match, for XP: per-shot XP summed, and deciding racks won. */

@@ -377,10 +377,13 @@ test('career: meets Old Joe, enters an event and shows the bracket', async ({ pa
   // He has a booking for you and a message waiting.
   await expect(page.getByRole('button', { name: 'Take it' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Inbox (1)' })).toBeVisible();
-  await page.getByRole('button', { name: 'Events', exact: true }).click();
-  // Only the pub is open at first.
-  await expect(page.getByRole('button', { name: /^Corner Pocket 9-Ball Open/ })).toBeDisabled();
-  await page.getByRole('button', { name: /^Red Lion 9-Ball Night/ }).click();
+  await expect(page.locator('.week-bar')).toContainText('Season 1 · Week 1 of 12');
+  await page.getByRole('button', { name: 'Calendar', exact: true }).click();
+  // Only the pub is open at first: anything bigger on the calendar is locked.
+  await expect(page.locator('.tiles .tile:not(:disabled)').first()).toContainText('Red Lion');
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  // Joe's booking: a pub event, free.
+  await page.getByRole('button', { name: 'Take it' }).click();
   await expect(page.locator('.bracket .slot')).toHaveCount(6);
   // His talk, the target and the walk-on card.
   await expect(page.locator('.joe-target')).toHaveText('Target: make the final');

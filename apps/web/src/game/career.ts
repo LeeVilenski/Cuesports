@@ -274,6 +274,8 @@ export interface CareerRun {
   talk?: string[];
   /** His verdict once the event is over for you. */
   debrief?: string[];
+  /** Joe booked it (he pays the travel). */
+  booked?: boolean;
 }
 
 /** A message in the career inbox. */
@@ -292,6 +294,11 @@ export interface CareerLogEntry {
   reached: number;
   target: number;
   champion: boolean;
+  /** When it was played (older saves lack these). */
+  season?: number;
+  week?: number;
+  /** Prize money after Joe's cut. */
+  prize?: number;
 }
 
 export interface CareerState {
@@ -315,6 +322,13 @@ export interface CareerState {
   trainingReady: boolean;
   /** What your last career match or session earned, for the result sheet and the hub. */
   lastGains: CareerGains | null;
+  /** Seeds the calendar. */
+  seed: number;
+  season: number;
+  /** 1 to WEEKS (season.ts). */
+  week: number;
+  /** Money in the bank, in pounds. */
+  money: number;
 }
 
 export interface CareerGains {
@@ -337,6 +351,10 @@ export const newCareer = (): CareerState => ({
   player: newPlayer(),
   trainingReady: true,
   lastGains: null,
+  seed: 1,
+  season: 1,
+  week: 1,
+  money: 50,
 });
 
 export const rounds = (e: CareerEvent): number => e.raceTo.length;
@@ -457,7 +475,9 @@ const KEY = 'cuesports.career';
 
 export function loadCareer(): CareerState {
   try {
-    return parseCareer(localStorage.getItem(KEY));
+    const raw = localStorage.getItem(KEY);
+    // A new career gets a calendar of its own.
+    return raw ? parseCareer(raw) : { ...newCareer(), seed: (Math.random() * 1e9) | 0 };
   } catch {
     return newCareer();
   }

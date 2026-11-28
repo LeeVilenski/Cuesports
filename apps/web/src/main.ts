@@ -81,6 +81,7 @@ import { cuesFor, due, type SoundCue } from './audio/cues';
 import { DEFAULT_SOUND, Sound, type SoundSettings } from './audio/sound';
 import { addMatch, emptyStats, percent } from './game/stats';
 import { pressureLabel, situation, stakes, sway } from './game/pressure';
+import { eligibility } from './game/season';
 import { AGENT, enterEvent, gainsText, playMatch, train } from './game/agent';
 import {
   applyTuning,
@@ -1172,10 +1173,10 @@ const menu: Menu = new Menu(
       }
     },
     career: () => career,
-    onCareerEnter: (id) => {
+    onCareerEnter: (id, booked) => {
       const e = careerEvent(id);
-      if (!e) return;
-      career = enterEvent(career, e, (Math.random() * 1e9) | 0);
+      if (!e || !eligibility(career, e, booked).ok) return;
+      career = enterEvent(career, e, (Math.random() * 1e9) | 0, booked);
       saveCareer(career);
     },
     onCareerUpdate: (s) => {

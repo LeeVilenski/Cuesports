@@ -72,7 +72,9 @@ describe('Old Joe', () => {
     const lost = play(newCareer(), 'lion-9ball', 0);
     expect(lost.confidence).toBeLessThan(50);
     expect(lost.run?.debrief?.length).toBeGreaterThan(0);
-    expect(lost.log).toEqual([{ event: 'lion-9ball', reached: 0, target: 1, champion: false }]);
+    expect(lost.log).toMatchObject([
+      { event: 'lion-9ball', reached: 0, target: 1, champion: false, prize: 0 },
+    ]);
   });
 
   it('never talks about potting in a game without pockets', () => {
