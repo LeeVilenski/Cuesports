@@ -52,4 +52,11 @@ export class Rng {
   state(): [number, number, number, number] {
     return [this.a, this.b, this.c, this.d];
   }
+
+  /** A generator that carries on from a saved `state()`. */
+  static fromState(s: readonly [number, number, number, number]): Rng {
+    const r = new Rng(0);
+    [r.a, r.b, r.c, r.d] = s;
+    return r;
+  }
 }
