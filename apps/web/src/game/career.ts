@@ -2,6 +2,7 @@ import { Rng } from '@cuesports/shared';
 import type { MatchGame } from './match';
 import { tourPlayer, type TourId } from './roster';
 import { tourEventById, TOUR_VENUES } from './tour-events';
+import type { RoomId } from './rooms';
 import { migratedPlayer, newPlayer, START, type Attr, type CareerPlayer, type Ratings } from './attributes';
 
 /**
@@ -18,6 +19,8 @@ export interface Venue {
   name: string;
   kind: 'Pub' | 'Club' | 'Hall' | 'Arena';
   tier: number;
+  /** The room the table stands in. */
+  room: RoomId;
 }
 
 export interface Opponent {
@@ -54,13 +57,13 @@ export interface CareerEvent {
 }
 
 export const VENUES: Venue[] = [
-  { id: 'red-lion', name: 'The Red Lion', kind: 'Pub', tier: 0 },
-  { id: 'corner-pocket', name: 'Corner Pocket Club', kind: 'Club', tier: 1 },
-  { id: 'cannon-room', name: 'The Cannon Room', kind: 'Club', tier: 1 },
-  { id: 'riverside', name: 'Riverside Hall', kind: 'Hall', tier: 2 },
-  { id: 'carambole', name: 'Café Carambole', kind: 'Hall', tier: 2 },
-  { id: 'neva', name: 'Neva Billiard Hall', kind: 'Hall', tier: 2 },
-  { id: 'northgate', name: 'Northgate Arena', kind: 'Arena', tier: 3 },
+  { id: 'red-lion', name: 'The Red Lion', kind: 'Pub', tier: 0, room: 'pub' },
+  { id: 'corner-pocket', name: 'Corner Pocket Club', kind: 'Club', tier: 1, room: 'club' },
+  { id: 'cannon-room', name: 'The Cannon Room', kind: 'Club', tier: 1, room: 'social' },
+  { id: 'riverside', name: 'Riverside Hall', kind: 'Hall', tier: 2, room: 'sportshall' },
+  { id: 'carambole', name: 'Café Carambole', kind: 'Hall', tier: 2, room: 'cafe' },
+  { id: 'neva', name: 'Neva Billiard Hall', kind: 'Hall', tier: 2, room: 'neva' },
+  { id: 'northgate', name: 'Northgate Arena', kind: 'Arena', tier: 3, room: 'arena' },
 ];
 
 export const ROSTER: Opponent[] = [

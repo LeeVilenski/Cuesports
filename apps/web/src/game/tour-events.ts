@@ -30,11 +30,27 @@ export const MAJOR_WEEKS = [4, 8, 11];
 export const MAJOR_FIELD = 12;
 export const FINALS_FIELD = 8;
 
+/**
+ * Where the tours play: Challenge events and Q-School in a sports hall; ranking events in an
+ * exhibition centre or, now and then, a country house; the majors in the palace, the arena and the
+ * theatre; the Tour Finals in the arena.
+ */
 export const TOUR_VENUES: Venue[] = [
-  { id: 'tour-challenge', name: 'Challenge Tour hall', kind: 'Hall', tier: 2 },
-  { id: 'tour-ranking', name: 'Exhibition Centre', kind: 'Arena', tier: 3 },
-  { id: 'tour-major', name: 'The Grand Arena', kind: 'Arena', tier: 3 },
+  { id: 'tour-challenge', name: 'Challenge Tour hall', kind: 'Hall', tier: 2, room: 'sportshall' },
+  { id: 'tour-ranking', name: 'Exhibition Centre', kind: 'Arena', tier: 3, room: 'exhibition' },
+  { id: 'tour-manor', name: 'Ashcombe Manor', kind: 'Hall', tier: 3, room: 'manor' },
+  { id: 'tour-major', name: 'Kingsmere Palace', kind: 'Arena', tier: 3, room: 'palace' },
+  { id: 'tour-arena', name: 'The Harbour Arena', kind: 'Arena', tier: 3, room: 'arena' },
+  { id: 'tour-theatre', name: 'The Forge Theatre', kind: 'Arena', tier: 3, room: 'theatre' },
 ];
+
+/** The venue for a tour event. */
+function tourVenue(kind: TourEventKind, season: number, week: number, major: number): string {
+  if (kind === 'challenge' || kind === 'qschool') return 'tour-challenge';
+  if (kind === 'ranking') return (week + season) % 3 === 0 ? 'tour-manor' : 'tour-ranking';
+  if (kind === 'finals') return 'tour-arena';
+  return ['tour-major', 'tour-arena', 'tour-theatre'][major] ?? 'tour-major';
+}
 
 const PLACES = [
   'Marrowby',
@@ -146,12 +162,7 @@ export function tourEvent(tour: TourId, season: number, week: number, kind: Tour
   const e: TourEvent = {
     id: `t.${tour}.${season}.${week}.${kind}`,
     title,
-    venue:
-      kind === 'challenge' || kind === 'qschool'
-        ? 'tour-challenge'
-        : kind === 'ranking'
-          ? 'tour-ranking'
-          : 'tour-major',
+    venue: tourVenue(kind, season, week, n),
     tier: level,
     game,
     raceTo: kind === 'finals' ? raceTo.slice(-3) : raceTo,
