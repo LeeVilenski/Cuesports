@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { Rng } from '@cuesports/shared';
 import { makeBall } from '@cuesports/physics';
 import { AMERICAN_POOL_9FT } from '@cuesports/shared';
 import {
@@ -87,6 +86,9 @@ describe('ratings and XP', () => {
 describe('the shot', () => {
   it('starts with no lines after contact, and grows them with Vision', () => {
     expect(visionTuning(1)).toEqual({ object: 0, cue: 0, spinAware: false, rebound: false });
+    // It starts growing almost at once, a little at a time.
+    expect(visionTuning(4).object).toBeGreaterThan(0);
+    expect(visionTuning(4).object).toBeLessThan(visionTuning(8).object);
     const v20 = visionTuning(20);
     expect(v20.object).toBeGreaterThan(0);
     expect(v20.cue).toBe(0);
@@ -99,29 +101,26 @@ describe('the shot', () => {
 
   it('plays like the normal game at 99', () => {
     const t = shotTuning(maxed(), 'nine-ball');
-    expect(t.aimSigma).toBeCloseTo(0);
-    expect(t.powerSigma).toBeCloseTo(0);
-    expect(t.tipSigma).toBeCloseTo(0);
+    expect(t.maxPower).toBeCloseTo(1);
+    expect(t.squirt).toBeCloseTo(1);
     expect(t.maxTip).toBeCloseTo(FULL_TIP);
     expect(t.maxElevation).toBe(FULL_ELEVATION);
     const s = { ball: 'cue', aim: 0.3, elevation: 0.1, tip: { a: 0.1, b: -0.2 }, speed: 2 };
-    expect(applyTuning(s, t, new Rng(1), true)).toEqual(s);
+    expect(applyTuning(s, t)).toEqual(s);
   });
 
-  it('scatters a starting player, and limits their spin and elevation', () => {
+  it('limits a starting player, but never moves the aim', () => {
     const t = shotTuning(newPlayer(), 'nine-ball');
     expect(t.maxTip).toBeLessThan(0.3);
     expect(t.maxElevation).toBeLessThan(15);
-    const rng = new Rng(7);
-    const s = { ball: 'cue', aim: 0, elevation: 0.6, tip: { a: 0, b: -0.5 }, speed: 2 };
-    let spread = 0;
-    for (let i = 0; i < 200; i++) {
-      const o = applyTuning(s, t, rng, false);
-      expect(Math.abs(o.tip.b)).toBeLessThanOrEqual(t.maxTip + 1e-9);
-      expect(o.elevation).toBeLessThanOrEqual((t.maxElevation * Math.PI) / 180 + 1e-9);
-      spread += Math.abs(o.aim);
-    }
-    expect(spread / 200).toBeGreaterThan(0.002);
+    expect(t.maxPower).toBeLessThan(0.7);
+    expect(t.squirt).toBeLessThan(0.2);
+    const s = { ball: 'cue', aim: 0.7, elevation: 0.6, tip: { a: 0, b: -0.5 }, speed: 2 };
+    const o = applyTuning(s, t);
+    expect(o.aim).toBe(s.aim);
+    expect(o.speed).toBe(s.speed);
+    expect(Math.abs(o.tip.b)).toBeCloseTo(t.maxTip);
+    expect(o.elevation).toBeCloseTo((t.maxElevation * Math.PI) / 180);
   });
 });
 

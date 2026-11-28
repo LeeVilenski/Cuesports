@@ -158,6 +158,20 @@ input {
   background: linear-gradient(to bottom, #f2c14e, var(--power));
 }
 
+.power-cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: calc(var(--cap, 1) * 100%);
+  background: repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.45) 0 6px, rgba(0, 0, 0, 0.25) 6px 12px);
+  border-top: 2px solid rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}
+.power-cap[hidden] {
+  display: none;
+}
+
 .power-mark {
   position: absolute;
   left: 6px;
