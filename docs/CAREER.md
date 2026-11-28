@@ -42,7 +42,7 @@ winning one opens the next tier and unlocks a cosmetic. It works, but:
   playing that game.
 - **Agent stakes:** the agent has a **confidence** in you that moves with results against the targets they
   set. It changes the quality of your bookings, invitations and sponsor offers.
-- **Pressure:** guide lines shrink (by up to about 60% at low Nerve) and you get a small aim wobble, both
+- **Pressure** (superseded after playtesting: on a pressure ball Composure sets the lines; see phase 2 and 3 below): guide lines shrink (by up to about 60% at low Nerve) and you get a small aim wobble, both
   scaled by the stakes.
 - **Pace:** 4–6 seasons of about 12 weeks from your first pub event to the top of a tour.
 - **Guide setting:** in career matches the guide comes from Vision and pressure, and the "Aiming guide"
@@ -307,9 +307,14 @@ Each phase ships on its own and leaves the game playable.
    - **Cueing**: the most power you can use (60% of the bar at first, all of it at 99). The rest of the
      power bar is shaded.
    - **Spin**: how far from centre you can strike (the spin widget shades the rest).
-   - **Cushion craft**: how high you can raise the cue (the elevation slider stops there).
-   - **Touch**: how much the guide allows for squirt from side (none at first, all of it at 99).
-   - **Nerve**: see pressure.
+   - **Hard shots have their own skills**, and each starts at 1, so those shots start with no lines
+     after contact whatever your Vision. On a hard shot the guide uses the lower of Vision and that
+     shot's skill, and a badge names the skill. (The cue line to contact is always there.)
+     - **Composure** (was Nerve): money and frame balls (pressure 0.25 or more).
+     - **Cushion craft**: the cue ball on the cushion (within half a ball of it), or the cue forced up
+       over the rail or a ball. It no longer limits the elevation, which is free.
+     - **Rest play** (new): any shot where the player needs the rest or the spider.
+     Each is trained by potting those shots cleanly. Old saves get Rest play at 1.
 
    At 99 everything is exactly as in quick play. Training: one session between events, on eight of the
    challenges, with XP by stars. Old careers start with ratings for the tier they reached. (The first
@@ -320,8 +325,8 @@ Each phase ships on its own and leaves the game playable.
    puts the frame out of reach, and the last points of a points game. It's worth more on the hill, and a
    hill-hill decider adds a touch on every ball. The event's stakes scale it (by tier, more in the semis
    and most in the final), and Nerve takes up to 85% of it away. What you feel shrinks the Vision lines
-   (by up to 60%), adds a slow sway of the aim that you can see on the cue and the guide (off with reduced motion), and shows a
-   heartbeat badge ("Nervy", "Pressure", "Big pressure"). Potting a pressure ball cleanly earns Nerve XP.
+   (now: from a pressure ball up, Composure sets your lines; the shrinking and the sway were taken out
+   after playtesting) and shows a heartbeat badge. Potting a pressure ball cleanly earns Composure XP.
 4. **Calendar and money.** _Built._ `game/season.ts`: seasons of 12 weeks. Each week has three events on
    the calendar, seeded per career, so a season looks the same every time: one at your level (a tier lower
    when Joe has lost faith), one in a different game, and one locked just above you to aim for. You

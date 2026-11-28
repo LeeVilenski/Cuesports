@@ -410,9 +410,8 @@ test('career: training plays with your own reach', async ({ page }) => {
   await page.getByRole('button', { name: /^Career/ }).click();
   await page.getByRole('button', { name: /^Training/ }).click();
   await page.getByRole('button', { name: /^Cueing: Straight in/ }).click();
-  // A starting player can't raise the cue far.
-  const max = await page.locator('.spin-sheet input[type=range]').getAttribute('max');
-  expect(Number(max)).toBeLessThan(20);
+  // A starting player can't use the full power bar: the rest of it is shaded.
+  await expect(page.locator('.power-cap')).toBeVisible();
   await page.waitForFunction(() => window.__cuesports?.state().phase === 'aim');
   expect(errors).toEqual([]);
 });

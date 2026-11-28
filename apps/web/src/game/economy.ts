@@ -62,7 +62,7 @@ export const CUES: CueDef[] = [
     name: 'Carom special',
     price: 900,
     bonus: { cushion: 5 },
-    blurb: 'Stiff and short: easier to get the butt up.',
+    blurb: 'Stiff and short: steadier off the cushion and over a ball.',
   },
   {
     id: 'ebony',

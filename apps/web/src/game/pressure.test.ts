@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ballStakes, felt, pressureLabel, situation, stakes, sway, type PressureInput } from './pressure';
+import { ballStakes, pressureLabel, situation, stakes, type PressureInput } from './pressure';
 import { newPlayer, shotTuning } from './attributes';
 
 const nine = (over: Partial<PressureInput> = {}): PressureInput => ({
@@ -65,25 +65,25 @@ describe('pressure balls', () => {
     expect(situation(nine({ score: [2, 2] }))).toBeGreaterThan(0);
   });
 
-  it('scales with the stakes, and Nerve takes most of it away', () => {
+  it('scales with the stakes', () => {
     expect(stakes(0, 2)).toBeLessThan(stakes(0, 1));
     expect(stakes(3, 1)).toBe(1);
-    expect(felt(1, 1)).toBe(1);
-    expect(felt(1, 99)).toBeCloseTo(0.15);
     expect(pressureLabel(0.05)).toBeNull();
     expect(pressureLabel(0.8)).toBe('Big pressure');
   });
 
-  it('shrinks the guide and sways the aim (where you can see it)', () => {
+  it('hands the guide to Composure on a money ball', () => {
     const p = newPlayer();
     p.ratings.vision = 50;
-    const calm = shotTuning(p, 'nine-ball', 0);
-    const tense = shotTuning(p, 'nine-ball', 1);
-    expect(tense.vision.object).toBeLessThan(calm.vision.object * 0.6);
-    expect(tense.felt).toBeGreaterThan(calm.felt);
-    expect(sway(1, 0)).toBe(0);
-    const swings = Array.from({ length: 50 }, (_, i) => Math.abs(sway(i * 0.1, 1)));
-    expect(Math.max(...swings)).toBeLessThan((0.36 * Math.PI) / 180);
-    expect(Math.max(...swings)).toBeGreaterThan(0.002);
+    const calm = shotTuning(p, 'nine-ball', { pressure: 0 });
+    const tense = shotTuning(p, 'nine-ball', { pressure: 0.8 });
+    expect(calm.lines).toBe('vision');
+    expect(tense.lines).toBe('nerve');
+    // A new player's Composure is 1: no lines after contact on a money ball.
+    expect(tense.vision).toEqual({ object: 0, cue: 0, spinAware: false, rebound: false });
+    p.ratings.nerve = 40;
+    expect(shotTuning(p, 'nine-ball', { pressure: 0.8 }).vision.object).toBeGreaterThan(0);
+    // A little pressure isn't a money ball.
+    expect(shotTuning(p, 'nine-ball', { pressure: 0.1 }).lines).toBe('vision');
   });
 });
