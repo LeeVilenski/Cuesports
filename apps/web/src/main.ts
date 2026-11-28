@@ -82,7 +82,7 @@ import { openStore } from './game/store';
 import { cuesFor, due, type SoundCue } from './audio/cues';
 import { DEFAULT_SOUND, Sound, type SoundSettings } from './audio/sound';
 import { addMatch, emptyStats, percent } from './game/stats';
-import { situation, stakes } from './game/pressure';
+import { pressureKind, situation, stakes, type PressureInput } from './game/pressure';
 import { eligibility } from './game/season';
 import { isTourEvent } from './game/tour-events';
 import { cueBonus } from './game/economy';
@@ -782,13 +782,19 @@ function shotSituation(): ShotSituation {
     ? chooseTool({ ball: { x: cue.pos.x, y: cue.pos.y }, R, shot: cleared, gap: 0.015, others }, tableFrame)
         .tool !== 'hand'
     : false;
-  return { pressure: match?.config.career ? careerPressure() : 0, cushion: onCushion || raised, rest };
+  const pr = match?.config.career ? careerPressure() : null;
+  return {
+    pressure: pr?.pressure ?? 0,
+    ...(pr?.kind ? { pressureKind: pr.kind } : {}),
+    cushion: onCushion || raised,
+    rest,
+  };
 }
 
 /** The badge for a hard shot: what it is, and which skill is setting your lines. */
 function situationBadge(t: ShotTuning, sit: ShotSituation): string | null {
   const kinds = [
-    (sit.pressure ?? 0) >= PRESSURE_BALL ? 'Money ball' : '',
+    (sit.pressure ?? 0) >= PRESSURE_BALL ? (sit.pressureKind ?? 'Pressure') : '',
     sit.rest ? 'On the rest' : '',
     sit.cushion ? 'Off the cushion' : '',
   ].filter(Boolean);
@@ -797,15 +803,18 @@ function situationBadge(t: ShotTuning, sit: ShotSituation): string | null {
   return `${kinds.join(' · ')}${t.lines !== 'vision' ? ` · lines: ${by}` : ''}`;
 }
 
-/** The pressure on your shot in a career match: the ball and the score, times the event's stakes. */
-function careerPressure(): number {
+/**
+ * The pressure on your shot in a career match: the ball and the score, times the event's stakes,
+ * and why, in words.
+ */
+function careerPressure(): { pressure: number; kind: string } | null {
   const m = match;
   const c = m?.config.career;
   const e = c && careerEvent(c.event);
-  if (!m || !c || !e || m.rackResult || m.winner !== null) return 0;
+  if (!m || !c || !e || m.rackResult || m.winner !== null) return null;
   const fp = m.framePoints;
   const target = (m.ruleOptions as { target?: number } | null)?.target;
-  const p = situation({
+  const input: PressureInput = {
     game: m.config.game,
     targets: m.turn.targets,
     onTable: balls.filter((b) => b.state !== 'pocketed' && b.id !== 'cue').map((b) => b.id),
@@ -814,10 +823,14 @@ function careerPressure(): number {
     points: fp?.points,
     remaining: fp?.remaining,
     target,
-  });
+  };
+  const p = situation(input);
   // Majors and the Tour Finals add a little of their own.
   const big = isTourEvent(e) && (e.kind === 'major' || e.kind === 'finals') ? 0.15 : 0;
-  return p * Math.min(1, stakes(e.tier, e.raceTo.length - c.round) + big);
+  return {
+    pressure: p * Math.min(1, stakes(e.tier, e.raceTo.length - c.round) + big),
+    kind: pressureKind(input),
+  };
 }
 
 /** The kind of shot you just played, for XP. */

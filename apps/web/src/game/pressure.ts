@@ -67,6 +67,29 @@ export function ballStakes(p: PressureInput): number {
   return 0;
 }
 
+/**
+ * Why the shot is a pressure shot, for the HUD badge. Only the ball that settles the rack or
+ * frame is the money (or frame, or match) ball; a ball before it is the run-out, and anything
+ * else is the score.
+ */
+export function pressureKind(p: PressureInput): string {
+  const big = ballStakes(p);
+  const hill = p.score[0] >= p.raceTo - 1;
+  const snooker = p.game === 'snooker';
+  const points = !snooker && !MONEY[p.game] && !!p.target;
+  if (big >= 1) {
+    if (hill) return 'Match ball';
+    return snooker ? 'Frame ball' : points ? 'Game ball' : 'Money ball';
+  }
+  if (big > 0) {
+    if (snooker) return hill ? 'Match on the line' : 'Frame on the line';
+    if (points) return hill ? 'Closing on the match' : 'Closing in';
+    return hill ? 'Run-out for the match' : 'Run-out on';
+  }
+  if (hill && p.score[1] >= p.raceTo - 1) return 'Decider';
+  return hill ? 'On the hill' : 'Pressure';
+}
+
 /** Pressure on the shot, 0–1, before the stakes and your Nerve. */
 export function situation(p: PressureInput): number {
   const big = ballStakes(p);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ballStakes, pressureLabel, situation, stakes, type PressureInput } from './pressure';
+import { ballStakes, pressureKind, pressureLabel, situation, stakes, type PressureInput } from './pressure';
 import { newPlayer, shotTuning } from './attributes';
 
 const nine = (over: Partial<PressureInput> = {}): PressureInput => ({
@@ -9,6 +9,32 @@ const nine = (over: Partial<PressureInput> = {}): PressureInput => ({
   score: [0, 0],
   raceTo: 3,
   ...over,
+});
+
+describe('pressure badge', () => {
+  it('only calls the ball that settles it the money ball', () => {
+    // The screenshot: the 6 on, two balls before the 9, on the hill in a race to 4.
+    const six = nine({ targets: ['6'], onTable: ['6', '7', '9'], score: [3, 1], raceTo: 4 });
+    expect(pressureKind(six)).toBe('Run-out for the match');
+    expect(pressureKind({ ...six, score: [1, 1] })).toBe('Run-out on');
+    expect(pressureKind(nine({ targets: ['9'], onTable: ['9'] }))).toBe('Money ball');
+    expect(pressureKind(nine({ targets: ['9'], onTable: ['9'], score: [2, 0] }))).toBe('Match ball');
+    expect(pressureKind(nine({ score: [2, 2] }))).toBe('Decider');
+    expect(pressureKind(nine({ score: [2, 0] }))).toBe('On the hill');
+  });
+
+  it('says frame ball in snooker', () => {
+    const p: PressureInput = {
+      game: 'snooker',
+      targets: ['black'],
+      onTable: ['black'],
+      score: [0, 0],
+      raceTo: 3,
+      points: [60, 60],
+      remaining: 7,
+    };
+    expect(pressureKind(p)).toBe('Frame ball');
+  });
 });
 
 describe('pressure balls', () => {
