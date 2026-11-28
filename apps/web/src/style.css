@@ -421,6 +421,51 @@ input {
   display: none;
 }
 
+/* Career: a pressure ball. The beat quickens with the pressure. */
+.pressure-badge {
+  position: absolute;
+  bottom: calc(100px + var(--safe-b));
+  left: 50%;
+  translate: -50% 0;
+  padding: 4px 12px 4px 28px;
+  border-radius: 999px;
+  background: rgba(150, 24, 30, 0.85);
+  color: #fff;
+  font: 700 13px var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.pressure-badge::before {
+  content: '♥';
+  position: absolute;
+  left: 11px;
+  animation: heartbeat var(--beat, 1s) ease-in-out infinite;
+}
+.pressure-badge[hidden] {
+  display: none;
+}
+@media (orientation: portrait) {
+  .pressure-badge {
+    bottom: calc(152px + var(--safe-b));
+  }
+}
+@keyframes heartbeat {
+  0%,
+  60%,
+  100% {
+    scale: 1;
+  }
+  20% {
+    scale: 1.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pressure-badge::before {
+    animation: none;
+  }
+}
+
 .chip.push {
   position: absolute;
   right: calc(76px + var(--safe-r));

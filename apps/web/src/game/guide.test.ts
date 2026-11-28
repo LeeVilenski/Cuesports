@@ -87,3 +87,44 @@ describe('launch direction (guide with squirt)', () => {
     expect(Math.atan2(b.vel.y, b.vel.x)).toBeCloseTo(launchDirection(cue, shotWith(0.3)), 12);
   });
 });
+
+describe('3-cushion guide', () => {
+  it('runs from the first ball to the first cushion, with a short rebound after it', async () => {
+    const { CAROM_10FT: C } = await import('@cuesports/shared');
+    const { cushionPath } = await import('./guide');
+    const balls = [
+      makeBall('cue', C.balls.cue, { x: -0.6, y: -0.2 }),
+      makeBall('white', C.balls.object, { x: 0, y: 0 }),
+      makeBall('red', C.balls.object, { x: 1.2, y: 0.6 }),
+    ];
+    const aim = Math.atan2(0.2 + C.balls.object.radius, 0.6);
+    const g = computeGuide(C, balls, 'cue', aim)!;
+    expect(g.object?.id).toBe('white');
+    const pts = cushionPath(C, balls, g, 'cue', 0.2, 3, 0.3);
+    // Ghost ball, first cushion, end of the stub: no second or third cushion.
+    expect(pts).toHaveLength(3);
+    const hl = C.playfield.length / 2 - g.radius;
+    const hw = C.playfield.width / 2 - g.radius;
+    const c = pts[1]!;
+    expect(Math.abs(Math.abs(c.x) - hl) < 1e-6 || Math.abs(Math.abs(c.y) - hw) < 1e-6).toBe(true);
+    expect(Math.hypot(pts[2]!.x - c.x, pts[2]!.y - c.y)).toBeCloseTo(0.3, 6);
+  });
+
+  it('adds only the rebound stub on a cushion-first shot', async () => {
+    const { CAROM_10FT: C } = await import('@cuesports/shared');
+    const { cushionPath } = await import('./guide');
+    const hw = C.playfield.width / 2 - C.balls.cue.radius;
+    const balls = [
+      makeBall('cue', C.balls.cue, { x: -0.5, y: 0 }),
+      makeBall('red', C.balls.object, { x: 1, y: -0.3 }),
+    ];
+    const g = computeGuide(C, balls, 'cue', Math.atan2(hw, hw * 0.5))!;
+    expect(g.object).toBeNull();
+    const pts = cushionPath(C, balls, g, 'cue', 0, 3, 0.3);
+    expect(pts).toHaveLength(2);
+    expect(pts[0]).toEqual(g.end);
+    // Mirrored off the side cushion: heading back down the table.
+    expect(pts[1]!.y).toBeLessThan(g.end.y);
+    expect(Math.hypot(pts[1]!.x - g.end.x, pts[1]!.y - g.end.y)).toBeCloseTo(0.3, 6);
+  });
+});

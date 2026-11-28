@@ -210,3 +210,82 @@ export function careerShape(
     out.cue = travel(table, g.ghost, after.dir, t.cue * Math.max(0.15, after.strength), g.radius, t.rebound);
   return out;
 }
+
+/**
+ * A longer guide for 3-cushion: the cue ball's path to the first cushion, and a short stub of the
+ * rebound off it (`tail` metres). After a hit on the first ball it leaves as screw, stun or follow
+ * allows and runs to the cushion; on a cushion-first shot the guide already reaches the cushion, so
+ * only the stub is added. The second and third cushions are yours to judge. Mirroring ignores side
+ * and the cushion's grip, so it's a guide, not a promise. A ball in the way ends it.
+ */
+export function cushionPath(
+  table: TableSpec,
+  balls: readonly BallState[],
+  g: Guide,
+  cueId: string,
+  tipB: number,
+  speed: number,
+  tail = 0.3,
+): Vec2[] {
+  const r = g.radius;
+  let from: Vec2;
+  let dir: Vec2;
+  let skip: string | null = null;
+  if (g.object && g.ghost) {
+    const dx = g.ghost.x - g.from.x;
+    const dy = g.ghost.y - g.from.y;
+    const dist = Math.hypot(dx, dy);
+    const d = dist > 1e-9 ? { x: dx / dist, y: dy / dist } : g.object.dir;
+    const after = cueAfterContact(d, g.object.dir, tipB, speed, dist);
+    if (after.strength < 0.02) return [];
+    from = g.ghost;
+    dir = after.dir;
+    skip = g.object.id;
+  } else {
+    // Off the first cushion: mirror the shot at the rail it reaches.
+    const dx = g.end.x - g.from.x;
+    const dy = g.end.y - g.from.y;
+    const l = Math.hypot(dx, dy);
+    if (l < 1e-9) return [];
+    const hl = table.playfield.length / 2 - r;
+    const hw = table.playfield.width / 2 - r;
+    const d = { x: dx / l, y: dy / l };
+    const onEnd = Math.abs(Math.abs(g.end.x) - hl) < 1e-6;
+    const onSide = Math.abs(Math.abs(g.end.y) - hw) < 1e-6;
+    dir = { x: onEnd ? -d.x : d.x, y: onSide ? -d.y : d.y };
+    from = g.end;
+  }
+  const others = balls.filter((b) => b.id !== cueId && b.id !== skip && b.state !== 'pocketed');
+  const hl = table.playfield.length / 2 - r;
+  const hw = table.playfield.width / 2 - r;
+  const pts: Vec2[] = [from];
+  // After a ball: on to the first cushion, then the stub. Cushion-first: just the stub.
+  const cushionFirst = skip === null;
+  let left = cushionFirst ? tail : 10;
+  for (let k = 0; k <= (cushionFirst ? 0 : 1) && left > 1e-4; k++) {
+    const tx = dir.x > 1e-9 ? (hl - from.x) / dir.x : dir.x < -1e-9 ? (-hl - from.x) / dir.x : Infinity;
+    const ty = dir.y > 1e-9 ? (hw - from.y) / dir.y : dir.y < -1e-9 ? (-hw - from.y) / dir.y : Infinity;
+    const wall = Math.max(0, Math.min(tx, ty, left));
+    // A ball in the way ends the path where the cue ball would touch it.
+    let hit = Infinity;
+    for (const b of others) {
+      const D = b.radius + r;
+      const px = b.pos.x - from.x;
+      const py = b.pos.y - from.y;
+      const along = px * dir.x + py * dir.y;
+      if (along <= 1e-6) continue;
+      const perp2 = px * px + py * py - along * along;
+      if (perp2 > D * D) continue;
+      hit = Math.min(hit, along - Math.sqrt(D * D - perp2));
+    }
+    if (hit < wall) {
+      pts.push({ x: from.x + dir.x * hit, y: from.y + dir.y * hit });
+      break;
+    }
+    from = { x: from.x + dir.x * wall, y: from.y + dir.y * wall };
+    pts.push(from);
+    left = k === 0 && !cushionFirst ? tail : left - wall;
+    dir = tx < ty ? { x: -dir.x, y: dir.y } : { x: dir.x, y: -dir.y };
+  }
+  return pts;
+}
