@@ -740,15 +740,58 @@ export function spend(s: CareerState, attr: Attr): CareerState {
   return { ...s, player: spendPoint(s.player, attr, ceiling(s)) };
 }
 
+/** One line of progress: XP into a skill, a skill rising, or a level gained. */
+export interface GainItem {
+  label: string;
+  /** "+12 XP", "42 → 43", or "a skill point to spend". */
+  value: string;
+  kind: 'xp' | 'up' | 'level';
+}
+
+/** XP gains, rating rises and level-ups, rises first. */
+export function gainsItems(g: CareerState['lastGains']): GainItem[] {
+  if (!g) return [];
+  const items: GainItem[] = ATTRS.filter((a) => (g.xp[a.id] ?? 0) > 0).map((a) => {
+    const up = g.ups.find((u) => u.attr === a.id);
+    return up
+      ? { label: a.label, value: `${up.from} → ${up.to}`, kind: 'up' }
+      : { label: a.label, value: `+${g.xp[a.id]} XP`, kind: 'xp' };
+  });
+  items.sort((a, b) => Number(b.kind === 'up') - Number(a.kind === 'up'));
+  if (g.levels)
+    items.unshift({
+      label: g.levels > 1 ? `${g.levels} levels up` : 'Level up',
+      value: g.levels > 1 ? `${g.levels} skill points to spend` : 'a skill point to spend',
+      kind: 'level',
+    });
+  return items;
+}
+
 /** XP gains and rating rises, in words: "Vision +12, Cueing 15 → 16". */
 export function gainsText(g: CareerState['lastGains']): string {
-  if (!g) return '';
-  const parts = ATTRS.filter((a) => (g.xp[a.id] ?? 0) > 0).map((a) => {
-    const up = g.ups.find((u) => u.attr === a.id);
-    return up ? `${a.label} ${up.from} → ${up.to}` : `${a.label} +${g.xp[a.id]} XP`;
-  });
-  if (g.levels) parts.push(g.levels > 1 ? `${g.levels} levels up` : 'Level up: a skill point to spend');
-  return parts.join(' · ');
+  return gainsItems(g)
+    .map((i) => (i.kind === 'level' ? `${i.label}: ${i.value}` : `${i.label} ${i.value}`))
+    .join(' · ');
+}
+
+/**
+ * One shot's XP in a match that is still going (nothing is banked until the match ends):
+ * what the shot added, and any skill the match's XP so far has now taken up a point.
+ */
+export function shotGains(s: CareerState, before: Partial<Ratings>, after: Partial<Ratings>): GainItem[] {
+  const xp: Partial<Ratings> = {};
+  for (const a of ATTRS) {
+    const d = (after[a.id] ?? 0) - (before[a.id] ?? 0);
+    if (d > 0) xp[a.id] = d;
+  }
+  const was = addXp(s.player, before, ceiling(s)).player.ratings;
+  const now = addXp(s.player, after, ceiling(s)).player.ratings;
+  const ups = ATTRS.filter((a) => now[a.id] > was[a.id]).map((a) => ({
+    attr: a.id,
+    from: was[a.id],
+    to: now[a.id],
+  }));
+  return gainsItems({ xp, ups, levels: 0 });
 }
 
 /** Your career in numbers, for the profile. */

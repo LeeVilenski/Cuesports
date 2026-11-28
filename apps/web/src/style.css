@@ -2764,3 +2764,242 @@ body {
   flex: none;
   padding: 8px 14px;
 }
+
+/* =============================================================================================
+   Match over: the shot controls step aside, and the result comes in three parts — the result,
+   how each player played, and what you gained.
+   ============================================================================================= */
+
+body.match-over .hud .power,
+body.match-over .hud .fine,
+body.match-over #app .hud .spin-mini,
+body.match-over .hud .actions,
+body.match-over .hud .spin-sheet,
+body.match-over .match-hud .pressure-badge,
+body.match-over .match-hud .xp-pop {
+  display: none;
+}
+
+.sheet.result-sheet.full {
+  bottom: calc(16px + var(--safe-b));
+  width: min(94vw, 720px);
+  max-height: calc(100% - 96px - var(--safe-t) - var(--safe-b));
+  padding: 14px 18px;
+}
+
+.result-sheet.full h2 {
+  font-size: 20px;
+  margin-bottom: 2px;
+}
+
+.result-score {
+  font: 700 30px/1.1 var(--font-display);
+  letter-spacing: 0.01em;
+  margin: 0 0 4px;
+}
+
+.result-sheet .result-note {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.result-quote {
+  margin: 4px 0 10px;
+  padding: 2px 0 2px 10px;
+  border-left: 3px solid var(--accent);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.result-quote cite {
+  display: block;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.result-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.result-panel {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-line);
+  border-radius: 10px;
+  padding: 8px 10px 10px;
+  min-width: 0;
+}
+
+.result-panel h3 {
+  margin: 0 0 6px;
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.result-stats {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.result-stats th,
+.result-stats td {
+  padding: 3px 4px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.result-stats thead th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.result-stats tbody th {
+  text-align: left;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 10em;
+}
+
+.result-stats tbody tr + tr th,
+.result-stats tbody tr + tr td {
+  border-top: 1px solid var(--glass-line);
+}
+
+/* Gains: XP plain, a skill up in green with an arrow, a level up in gold. */
+.gains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gain {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-line);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.gain-label {
+  font-weight: 600;
+}
+
+.gain-value {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gain.up {
+  background: rgba(54, 166, 74, 0.22);
+  border-color: rgba(54, 166, 74, 0.7);
+}
+
+.gain.up .gain-value {
+  color: #9be3a8;
+}
+
+.gain.up .gain-value::after {
+  content: ' ▲';
+  font-size: 0.8em;
+}
+
+.gain.level {
+  background: rgba(242, 193, 78, 0.2);
+  border-color: var(--accent);
+}
+
+.gain.level .gain-label,
+.gain.level .gain-value {
+  color: var(--accent);
+}
+
+/* Career: a shot's XP, popping up on the left of the table, then drifting away. */
+.xp-pop {
+  position: absolute;
+  left: calc(16px + var(--safe-l, 0px));
+  top: 30%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: min(46vw, 320px);
+  pointer-events: none;
+}
+
+.xp-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 12px;
+  background: rgba(14, 20, 17, 0.82);
+  border: 1px solid var(--glass-line);
+  animation: xp-in 0.35s ease-out both;
+}
+
+.xp-card .gain {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+.xp-card.up {
+  border-color: rgba(54, 166, 74, 0.8);
+  box-shadow: 0 0 16px rgba(54, 166, 74, 0.35);
+}
+
+.xp-card.out {
+  animation: xp-out 0.6s ease-in both;
+}
+
+@keyframes xp-in {
+  from {
+    opacity: 0;
+    transform: translateX(-16px) scale(0.96);
+  }
+}
+
+@keyframes xp-out {
+  to {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xp-card,
+  .xp-card.out {
+    animation-duration: 0.01s;
+  }
+}
+
+@media (max-height: 500px) {
+  .sheet.result-sheet.full {
+    bottom: calc(8px + var(--safe-b));
+    max-height: calc(100% - 64px - var(--safe-t) - var(--safe-b));
+    padding: 10px 14px;
+  }
+
+  .result-score {
+    font-size: 24px;
+  }
+
+  .result-quote {
+    margin-bottom: 8px;
+  }
+}

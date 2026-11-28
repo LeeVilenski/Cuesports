@@ -27,7 +27,7 @@ import {
 } from './attributes';
 import { CHALLENGES } from './challenges';
 import { careerShape, computeGuide, cueAfterContact, travel } from './guide';
-import { enterEvent, gainsText, playMatch, spend, train } from './agent';
+import { enterEvent, gainsText, playMatch, shotGains, spend, train } from './agent';
 import { careerEvent, newCareer, parseCareer } from './career';
 import type { ShotRecord } from './record';
 
@@ -229,6 +229,21 @@ describe('XP from play', () => {
     const xp = shotXp(rec({ potted: ['1'] }), events as never);
     expect(xp.cushion).toBe(9);
     expect(shotXp(rec({ potted: ['1'], fouls: ['x'] }), events as never)).toEqual({});
+  });
+
+  it("tells you a shot's XP, and when the match's XP so far takes a skill up", () => {
+    const s = newCareer();
+    const v = s.player.ratings.vision;
+    const need = pointCost(v) - s.player.xp.vision;
+    expect(shotGains(s, {}, { vision: 2, cueing: 4 })).toEqual([
+      { label: 'Vision', value: '+2 XP', kind: 'xp' },
+      { label: 'Cueing', value: '+4 XP', kind: 'xp' },
+    ]);
+    // The shot that tips Vision over a point: shown as the rise, not the XP.
+    expect(shotGains(s, { vision: need - 1 }, { vision: need + 1 })).toEqual([
+      { label: 'Vision', value: `${v} → ${v + 1}`, kind: 'up' },
+    ]);
+    expect(shotGains(s, { vision: 3 }, { vision: 3 })).toEqual([]);
   });
 
   it('feeds the career: XP, familiarity, a level, and a training session after the event', () => {

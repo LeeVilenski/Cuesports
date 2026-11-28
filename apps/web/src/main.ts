@@ -60,7 +60,7 @@ import { ShotCamera, type ShotCameraMode } from './render/shot-camera';
 import { GuideView } from './render/guide-view';
 import { buildTableView, WELL_DEPTH, type TableView } from './render/table-view';
 import { Hud } from './ui/hud';
-import { MatchHud, type CallChoice } from './ui/match-hud';
+import { MatchHud, type CallChoice, type ResultDetail } from './ui/match-hud';
 import { Menu } from './ui/menu';
 import { ReplayBar } from './ui/replay-bar';
 import { EditorBar } from './ui/editor-bar';
@@ -84,7 +84,7 @@ import { situation, stakes } from './game/pressure';
 import { eligibility } from './game/season';
 import { isTourEvent } from './game/tour-events';
 import { cueBonus } from './game/economy';
-import { AGENT, enterEvent, gainsText, playMatch, train } from './game/agent';
+import { AGENT, enterEvent, gainsItems, playMatch, shotGains, train } from './game/agent';
 import {
   applyTuning,
   ATTRS,
@@ -604,7 +604,7 @@ function syncTurn(): void {
     else if (match.winner !== null)
       matchHud.showResult(
         `${w} wins the match`,
-        `${score}. ${matchSummary(match)}`,
+        { score, stats: matchStats(match) },
         true,
         'New match',
         'Rematch',
@@ -843,6 +843,7 @@ function endPlayback(): void {
       if (match.config.career && last.shooter === 0) {
         const rec = match.record.racks.flatMap((r) => r.shots).at(-1);
         if (rec && rec.player === 0) {
+          const xpBefore = careerXp;
           careerXp = sumXp(careerXp, shotXp(rec, result.events));
           // A hard ball potted, cleanly, trains the skill for that kind of shot.
           if (rec.potted.length && !rec.fouls.length) {
@@ -851,6 +852,8 @@ function endPlayback(): void {
             if (strikeSituation.rest) careerXp = sumXp(careerXp, { rest: 6 });
             if (strikeSituation.cushion) careerXp = sumXp(careerXp, { cushion: 5 });
           }
+          // Not on the shot that ends the match: the result sheet has the whole match's XP.
+          if (match.winner === null) matchHud.showXp(shotGains(career, xpBefore, careerXp));
         }
       }
       saveMatch();
@@ -1495,16 +1498,22 @@ function startCareerMatch(): void {
   });
 }
 
-/** Each player's match in a line: pots, best break (or run) and fouls, from the match record. */
-function matchSummary(m: Match): string {
+/** Each player's match: pots, best break (or run) and fouls, from the match record. */
+function matchStats(m: Match): NonNullable<ResultDetail['stats']> {
   const word = visitWord(m.config.game);
-  return m.config.players
-    .map((name, seat) => {
-      const s = emptyStats();
-      addMatch(s, m.record, seat);
-      return `${name}: pots ${percent(s.pots, s.potAttempts)}, best ${word} ${s.highestBreak}, fouls ${s.fouls}`;
-    })
-    .join(' · ');
+  const carom = CAROM_GAMES.has(m.config.game);
+  const columns = [...(carom ? [] : ['Pots']), `Best ${word}`, 'Fouls'];
+  const rows = m.config.players.map((name, seat) => {
+    const s = emptyStats();
+    addMatch(s, m.record, seat);
+    const values = [
+      ...(carom ? [] : [percent(s.pots, s.potAttempts)]),
+      String(s.highestBreak),
+      String(s.fouls),
+    ];
+    return { name, values };
+  });
+  return { columns, rows };
 }
 
 /** The end of a career match: into the bracket, then on to the next round (or out). */
@@ -1541,10 +1550,19 @@ function careerResult(m: Match, winner: string, score: string): void {
     : won
       ? `Through to the ${roundName(e, c.round + 1).toLowerCase()}`
       : `${winner} wins the ${roundName(e, c.round).toLowerCase()}`;
-  const prize = champion && REWARDS[e.reward] ? ` Unlocked: ${REWARDS[e.reward]}.` : '';
-  const gains = gainsText(career.lastGains);
-  const said = `${joe ? ` ${AGENT.name}: “${joe}”` : ''}${gains ? ` ${gains}.` : ''}`;
-  matchHud.showResult(title, `${score}.${prize}${said} ${matchSummary(m)}`, true, 'Continue');
+  const notes = champion && REWARDS[e.reward] ? [`Unlocked: ${REWARDS[e.reward]}`] : [];
+  matchHud.showResult(
+    title,
+    {
+      score,
+      notes,
+      ...(joe ? { quote: { who: AGENT.name, text: joe } } : {}),
+      stats: matchStats(m),
+      gains: gainsItems(career.lastGains),
+    },
+    true,
+    'Continue',
+  );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1645,11 +1663,22 @@ function challengeShot(result: ShotResult): void {
   if (c.training) {
     career = train(career, c.training, won ? v.stars : 0);
     saveCareer(career);
-    const gains = gainsText(career.lastGains);
+    const gains = gainsItems(career.lastGains);
     c.sheet = () =>
       matchHud.showResult(
         won ? `${starText(v.stars)}  Training: ${c.spec.title}` : `Training: ${c.spec.title}`,
-        `${v.message} ${AGENT.name}: “${won ? (v.stars >= 3 ? 'Perfect. Again tomorrow.' : 'Good work. Keep at it.') : "That's what practice is for."}” ${gains ? `${gains}.` : ''}`,
+        {
+          notes: [v.message],
+          quote: {
+            who: AGENT.name,
+            text: won
+              ? v.stars >= 3
+                ? 'Perfect. Again tomorrow.'
+                : 'Good work. Keep at it.'
+              : "That's what practice is for.",
+          },
+          gains,
+        },
         true,
         'Back to Old Joe',
         null,
