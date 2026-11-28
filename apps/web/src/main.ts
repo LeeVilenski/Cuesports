@@ -85,6 +85,7 @@ import { eligibility } from './game/season';
 import { isTourEvent } from './game/tour-events';
 import { cueBonus } from './game/economy';
 import { AGENT, enterEvent, gainsItems, playMatch, shotGains, train } from './game/agent';
+import { matchSituation, rackBadge } from './game/rack-story';
 import {
   applyTuning,
   ATTRS,
@@ -604,12 +605,12 @@ function syncTurn(): void {
     else if (match.winner !== null)
       matchHud.showResult(
         `${w} wins the match`,
-        { score, stats: matchStats(match) },
+        { score, stats: matchStats(match), celebrate: cheers(match) },
         true,
         'New match',
         'Rematch',
       );
-    else matchHud.showResult(`${w} wins ${match.unit} ${match.rack}`, `${match.message} ${score}`);
+    else rackResult(match, w);
   }
   rig.snap();
   dirty = true;
@@ -852,8 +853,8 @@ function endPlayback(): void {
             if (strikeSituation.rest) careerXp = sumXp(careerXp, { rest: 6 });
             if (strikeSituation.cushion) careerXp = sumXp(careerXp, { cushion: 5 });
           }
-          // Not on the shot that ends the match: the result sheet has the whole match's XP.
-          if (match.winner === null) matchHud.showXp(shotGains(career, xpBefore, careerXp));
+          // Not on the shot that ends a rack: its sheet has the rack's (or the match's) XP.
+          if (!match.rackResult) matchHud.showXp(shotGains(career, xpBefore, careerXp));
         }
       }
       saveMatch();
@@ -1461,6 +1462,8 @@ const careerRecorded = new WeakSet<Match>();
 
 /** XP your shots have earned in the career match being played. */
 let careerXp: Partial<Ratings> = {};
+/** Career XP so far at the start of this rack, for the rack's sheet. */
+let rackXpStart: Partial<Ratings> = {};
 
 /** Racks you won from hill-hill: the deciders. */
 function decidersWon(m: Match): number {
@@ -1477,6 +1480,7 @@ function decidersWon(m: Match): number {
 
 function startCareerMatch(): void {
   careerXp = {};
+  rackXpStart = {};
   const run = career.run;
   const e = run && careerEvent(run.event);
   const opp = run && nextOpponent(run);
@@ -1514,6 +1518,54 @@ function matchStats(m: Match): NonNullable<ResultDetail['stats']> {
     return { name, values };
   });
   return { columns, rows };
+}
+
+/** A win worth confetti: anyone's but the computer's. */
+function cheers(m: Match): boolean {
+  return m.config.ai === null || m.winner === 0;
+}
+
+/** Between racks: what kind of rack it was, the race so far, the rack's figures and its XP. */
+function rackResult(m: Match, w: string): void {
+  const r = m.rackResult!;
+  const rack = m.record.racks.at(-1);
+  const unit = m.unit;
+  const players = m.config.players;
+  const word = visitWord(m.config.game);
+  const carom = CAROM_GAMES.has(m.config.game);
+  const stats = rack
+    ? (() => {
+        const one = { ...m.record, racks: [rack], winner: null };
+        return {
+          title: `This ${unit}`,
+          columns: [...(carom ? [] : ['Pots']), `Best ${word}`, 'Fouls'],
+          rows: players.map((name, seat) => {
+            const st = emptyStats();
+            addMatch(st, one, seat);
+            return {
+              name,
+              values: [...(carom ? [] : [String(st.pots)]), String(st.highestBreak), String(st.fouls)],
+            };
+          }),
+        };
+      })()
+    : undefined;
+  let gains: ReturnType<typeof gainsItems> = [];
+  if (m.config.career) {
+    gains = shotGains(career, rackXpStart, careerXp);
+    rackXpStart = careerXp;
+  }
+  const vsComputer = m.config.ai !== null && r.winner === 1;
+  matchHud.showResult(`${w} wins ${unit} ${m.rack}`, {
+    ...(rack ? { badge: rackBadge(rack, r.winner, m.rack + rack.shots.length) } : {}),
+    notes: m.message ? [m.message] : [],
+    race: { players, score: m.score, raceTo: m.config.raceTo, won: r.winner },
+    situation: matchSituation(players, m.score, m.config.raceTo, unit),
+    ...(stats ? { stats } : {}),
+    gains,
+    gainsTitle: `XP this ${unit}`,
+    celebrate: !vsComputer,
+  });
 }
 
 /** The end of a career match: into the bracket, then on to the next round (or out). */
@@ -1559,6 +1611,7 @@ function careerResult(m: Match, winner: string, score: string): void {
       ...(joe ? { quote: { who: AGENT.name, text: joe } } : {}),
       stats: matchStats(m),
       gains: gainsItems(career.lastGains),
+      celebrate: won,
     },
     true,
     'Continue',

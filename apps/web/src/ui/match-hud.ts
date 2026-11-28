@@ -28,9 +28,51 @@ export interface ResultDetail {
   notes?: string[];
   quote?: { who: string; text: string };
   /** Each player's figures, one row each. */
-  stats?: { columns: string[]; rows: { name: string; values: string[] }[] };
+  stats?: { title?: string; columns: string[]; rows: { name: string; values: string[] }[] };
   /** Career: XP, skills up and levels. */
   gains?: GainItem[];
+  gainsTitle?: string;
+  /** The rack in a few words ("Break and run!"), stamped above the title. */
+  badge?: string;
+  /** The race so far, as pips: `won` is the seat that just took a rack (its pip pops in). */
+  race?: { players: readonly string[]; score: readonly number[]; raceTo: number; won: number };
+  /** Where the match stands: "Hill-hill", "Edward leads 2–1". */
+  situation?: string;
+  /** A burst of confetti in ball colours. */
+  celebrate?: boolean;
+}
+
+/** Confetti colours: the pool balls'. */
+const CONFETTI = ['#f6bd16', '#2f7cf6', '#e0352b', '#7c5ce0', '#f07f2e', '#36a64a', '#8b2332', '#ffffff'];
+
+/** The race as two rows of pips, the newest won pip popping in. */
+function raceBoard(r: NonNullable<ResultDetail['race']>): HTMLElement {
+  // A long race (or a points game) is a number, not a row of pips.
+  const pips = r.raceTo >= 2 && r.raceTo <= 11;
+  return h(
+    'div',
+    { className: 'race' },
+    ...r.players.slice(0, 2).map((name, seat) => {
+      const won = r.score[seat] ?? 0;
+      return h(
+        'div',
+        { className: `race-row${seat === r.won ? ' just' : ''}` },
+        h('span', { className: 'race-name' }, name),
+        pips
+          ? h(
+              'span',
+              { className: 'pips', ariaLabel: `${won} of ${r.raceTo}` },
+              ...Array.from({ length: r.raceTo }, (_, i) =>
+                h('span', {
+                  className: `pip${i < won ? ' on' : ''}${seat === r.won && i === won - 1 ? ' new' : ''}`,
+                }),
+              ),
+            )
+          : '',
+        h('span', { className: 'race-score' }, String(won)),
+      );
+    }),
+  );
 }
 
 /** One gain as a chip: a level up in gold, a skill up with an arrow, XP plain. */
@@ -254,11 +296,20 @@ export class MatchHud {
   /** Career: shows the XP one shot earned (and any skill it took up), then fades it out. */
   showXp(items: GainItem[]): void {
     if (!items.length) return;
+    // Single file down the side, rises first; past six a second column.
     const card = h('div', { className: `xp-card${items.some((i) => i.kind !== 'xp') ? ' up' : ''}` });
-    card.append(...items.map(gainChip));
+    card.style.setProperty('--rows', String(Math.min(6, items.length)));
+    card.append(
+      ...items.map((g, i) => {
+        const chip = gainChip(g);
+        chip.style.setProperty('--i', String(i));
+        return chip;
+      }),
+    );
+    // One shot at a time: the last shot's card makes way.
+    for (const old of this.xpPop.children) old.classList.add('out');
     this.xpPop.append(card);
-    // Keep the stack short: older cards go first.
-    while (this.xpPop.childElementCount > 3) this.xpPop.firstElementChild!.remove();
+    while (this.xpPop.childElementCount > 2) this.xpPop.firstElementChild!.remove();
     window.setTimeout(() => card.classList.add('out'), items.some((i) => i.kind === 'up') ? 3600 : 2400);
     card.addEventListener('animationend', (e) => {
       if (e.animationName === 'xp-out') card.remove();
@@ -274,12 +325,17 @@ export class MatchHud {
     alt: string | null = null,
   ): void {
     this.result.hidden = title === null;
-    // With the match over the shot controls step aside for the result.
-    document.body.classList.toggle('match-over', title !== null && matchOver);
+    // With a result up, the shot controls step aside for it.
+    document.body.classList.toggle('result-open', title !== null);
     this.result.classList.toggle('full', title !== null && typeof detail !== 'string');
     if (title === null) return;
-    const body = typeof detail === 'string' ? [h('p', {}, detail)] : this.resultBody(detail);
+    // The sheet says it all: no need for the same line in the toast above.
+    this.say('');
+    const d = typeof detail === 'string' ? null : detail;
+    const body = d ? this.resultBody(d) : [h('p', {}, detail as string)];
+    if (d?.celebrate) this.confetti();
     this.result.replaceChildren(
+      d?.badge ? h('div', { className: 'result-badge' }, d.badge) : '',
       h('h2', {}, title),
       ...body,
       h(
@@ -295,9 +351,31 @@ export class MatchHud {
     );
   }
 
+  /** Confetti in ball colours, bursting up from behind the sheet and falling away. */
+  private confetti(): void {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const burst = h('div', { className: 'confetti', ariaHidden: 'true' });
+    for (let i = 0; i < 28; i++) {
+      const bit = h('span', {});
+      const angle = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+      const dist = 140 + Math.random() * 200;
+      bit.style.setProperty('--x', `${Math.cos(angle) * dist}px`);
+      bit.style.setProperty('--y', `${Math.sin(angle) * dist}px`);
+      bit.style.setProperty('--r', `${(Math.random() - 0.5) * 1080}deg`);
+      bit.style.setProperty('--c', CONFETTI[i % CONFETTI.length]!);
+      bit.style.setProperty('--d', `${Math.random() * 0.15}s`);
+      if (i % 3 === 0) bit.classList.add('round');
+      burst.append(bit);
+    }
+    this.root.append(burst);
+    window.setTimeout(() => burst.remove(), 2200);
+  }
+
   private resultBody(d: ResultDetail): HTMLElement[] {
     const out: HTMLElement[] = [];
     if (d.score) out.push(h('div', { className: 'result-score' }, d.score));
+    if (d.race) out.push(raceBoard(d.race));
+    if (d.situation) out.push(h('p', { className: 'result-situation' }, d.situation));
     for (const n of d.notes ?? []) out.push(h('p', { className: 'result-note' }, n));
     if (d.quote)
       out.push(
@@ -310,7 +388,7 @@ export class MatchHud {
         h(
           'section',
           { className: 'result-panel' },
-          h('h3', {}, 'Performance'),
+          h('h3', {}, d.stats.title ?? 'Performance'),
           h(
             'table',
             { className: 'result-stats' },
@@ -329,7 +407,7 @@ export class MatchHud {
         h(
           'section',
           { className: 'result-panel' },
-          h('h3', {}, 'Progress'),
+          h('h3', {}, d.gainsTitle ?? 'Progress'),
           h('div', { className: 'gains' }, ...d.gains.map(gainChip)),
         ),
       );
