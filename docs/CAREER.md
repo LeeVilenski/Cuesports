@@ -1,6 +1,6 @@
 # Career mode v2: plan
 
-Status: phases 1–5 are built (Old Joe and the hub, attributes and the guide, pressure, the calendar and money, specialising and tours). Phase 6 (flavour) is planned. The current career (`apps/web/src/game/career.ts`) is the v1
+Status: all six phases are built: Old Joe and the hub, attributes and the guide, pressure, the calendar and money, specialising and tours, and flavour. The current career (`apps/web/src/game/career.ts`) is the v1
 this replaces.
 
 ## Where we are
@@ -356,6 +356,22 @@ Each phase ships on its own and leaves the game playable.
    - **Majors and the finals** add to the pressure. Joe's cut on tour is 10%.
    - **Not built:** major qualifiers and Joe's wildcards into majors, fields bigger than 16, and players
      changing tours over the seasons.
-6. **Flavour.** The shop and cues with stats, coaching, sponsors, rivals per tour, nicknames, venues (pub,
-   club, hall, TV arena).
-
+6. **Flavour.** _Built._ Code: `game/economy.ts`, plus a Shop & coaching screen and inbox actions.
+   - **Cues with stats:** seven cues from the house cue (free) to the ebony pro (£2,500). Each adds or
+     takes up to 5 rating points (power, spin, elevation or squirt allowance) while it's in your hands.
+     You can switch between the ones you own.
+   - **Kit:** the career's cosmetic prizes can be bought (£150–£800) as well as won.
+   - **Coaching:** one paid session a week, 50 XP on the skill of your choice, £40 at the pub up to
+     £300 on tour. It never takes you past your ceiling.
+   - **Sponsors:** once you have two titles or a tour, Joe brings an offer each season: a retainer when
+     you sign (£150, £500 or £1,500 by level) and double that as a bonus for 3 semi-finals or better. You
+     sign or decline from the inbox, and the bonus is settled in the season review.
+   - **Nickname:** after three titles or a tour card, pick one of four from the inbox. Joe uses it before
+     events, and it's on the walk-on card and the profile.
+   - **Rivals:** in each group (the circuit, each tour), the player who has beaten you most (at least
+     twice, and leading the head-to-head) is your rival. Joe sends a "has your number" message after
+     three defeats, and rivals are marked on the walk-on card and in his between-rounds talk.
+   - **Venues:** career matches light the room by venue. The pub is warm and close, the hall cool and
+     bright, and the arena black with only the table lit.
+   - **Not built:** sponsor patches on the shirt, walk-on music, and venue models (the lighting changes,
+     the room doesn't).

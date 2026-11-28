@@ -3,7 +3,10 @@ import {
   AGENT,
   booking,
   bookingPitch,
+  acceptSponsor,
   ceiling,
+  declineOffer,
+  pickNickname,
   restWeek,
   spend,
   careerRecord,
@@ -17,6 +20,20 @@ import {
   unread,
 } from '../game/agent';
 import { tourDef, tourPlayer, TOURS, type TourId } from '../game/roster';
+import {
+  buyCue,
+  buyKit,
+  coach,
+  coachedThisWeek,
+  COACHING_XP,
+  coachingPrice,
+  cueDef,
+  CUES,
+  equipCue,
+  isRival,
+  KIT_PRICES,
+  rivals,
+} from '../game/economy';
 import { isTourEvent, MAJOR_FIELD, MAJOR_WEEKS } from '../game/tour-events';
 import {
   canChooseTours,
@@ -167,6 +184,7 @@ type Screen =
   | 'career'
   | 'intro'
   | 'training'
+  | 'shop'
   | 'event';
 
 const MATCH_GAMES: { id: MatchConfig['game']; label: string; ball: string; sub: string }[] = [
@@ -329,6 +347,7 @@ export class Menu {
       career: () => (this.cb.career().introSeen ? this.careerScreen() : this.introScreen()),
       intro: () => this.introScreen(),
       training: () => this.trainingScreen(),
+      shop: () => this.shopScreen(),
       event: () => this.eventScreen(),
     };
     this.cb.onPreview(screen === 'player');
@@ -912,7 +931,7 @@ export class Menu {
           if (!isLocked(career, key)) return;
           b.disabled = true;
           b.classList.add('locked');
-          b.title = `Win the ${unlockedBy(key)?.title ?? 'career'} to unlock`;
+          b.title = `Win the ${unlockedBy(key)?.title ?? 'career event'}, or buy it in the career shop`;
         });
         return el;
       };
@@ -1186,6 +1205,20 @@ export class Menu {
           ),
         ),
       );
+    body.append(
+      h(
+        'div',
+        { className: 'tiles' },
+        this.tile(
+          'purple',
+          'star',
+          'Shop & coaching',
+          `Cues, kit and a coach · £${s.money}`,
+          () => this.go('shop'),
+          'wide',
+        ),
+      ),
+    );
     if (s.player.points > 0)
       body.append(
         h(
@@ -1523,27 +1556,176 @@ export class Menu {
     const s = this.cb.career();
     const body = h('div', { className: 'scroll' });
     if (!s.inbox.length) body.append(h('p', { className: 'fine-print' }, 'No messages yet.'));
+    const act = (next: CareerState) => {
+      this.cb.onCareerUpdate(next);
+      this.show('career');
+    };
     for (const m of s.inbox) {
       const open = this.openMessage === m.id;
+      const head = h(
+        'button',
+        {
+          className: 'message-head',
+          ariaExpanded: String(open),
+          onclick: () => {
+            this.openMessage = open ? null : m.id;
+            if (!m.read) this.cb.onCareerUpdate(markRead(this.cb.career(), m.id));
+            this.show('career');
+          },
+        },
+        h('strong', {}, m.subject),
+        h('small', {}, m.from),
+      );
+      const actions = h('div', { className: 'joe-actions' });
+      if (open && m.action && !m.done) {
+        if (m.action.kind === 'sponsor' && m.action.offer.season === s.season) {
+          const id = m.id;
+          actions.append(
+            h(
+              'button',
+              { className: 'coach-btn primary', onclick: () => act(acceptSponsor(this.cb.career(), id)) },
+              `Sign (£${m.action.offer.retainer})`,
+            ),
+            h(
+              'button',
+              { className: 'coach-btn', onclick: () => act(declineOffer(this.cb.career(), id)) },
+              'No thanks',
+            ),
+          );
+        } else if (m.action.kind === 'nickname') {
+          const id = m.id;
+          for (const n of m.action.choices)
+            actions.append(
+              h(
+                'button',
+                { className: 'coach-btn', onclick: () => act(pickNickname(this.cb.career(), id, n)) },
+                `“${n}”`,
+              ),
+            );
+        }
+      }
       body.append(
         h(
-          'button',
-          {
-            className: `message${m.read ? '' : ' unread'}${open ? ' open' : ''}`,
-            ariaExpanded: String(open),
-            onclick: () => {
-              this.openMessage = open ? null : m.id;
-              if (!m.read) this.cb.onCareerUpdate(markRead(this.cb.career(), m.id));
-              this.show('career');
-            },
-          },
-          h('strong', {}, m.subject),
-          h('small', {}, m.from),
+          'div',
+          { className: `message${m.read ? '' : ' unread'}${open ? ' open' : ''}` },
+          head,
           open ? h('p', {}, m.body) : '',
+          open && m.done && m.action ? h('small', {}, 'Done.') : '',
+          actions.childElementCount ? actions : '',
         ),
       );
     }
     return body;
+  }
+
+  /** Coaching, cues and kit, paid for with prize money. */
+  private shopScreen(): HTMLElement {
+    const s = this.cb.career();
+    const cap = ceiling(s);
+    const body = h('div', { className: 'scroll' });
+    const update = (next: CareerState) => {
+      this.cb.onCareerUpdate(next);
+      this.show('shop');
+    };
+    body.append(this.weekBar());
+    // Coaching
+    const price = coachingPrice(s);
+    body.append(
+      h('h3', {}, 'Coaching'),
+      h(
+        'p',
+        { className: 'fine-print' },
+        coachedThisWeek(s)
+          ? "You've had your session this week. One a week: there's only so much a coach can teach."
+          : `One session a week: £${price} for ${COACHING_XP} XP on the skill of your choice. It speeds you up, but it won't take you past your ceiling (${cap}).`,
+      ),
+    );
+    const grid = h('div', { className: 'shop-grid' });
+    for (const a of ATTRS) {
+      const r = s.player.ratings[a.id];
+      const ok = !coachedThisWeek(s) && s.money >= price && r < cap;
+      grid.append(
+        h(
+          'button',
+          {
+            className: 'coach-btn',
+            disabled: !ok,
+            onclick: () => update(coach(this.cb.career(), a.id, cap)),
+          },
+          `${a.label} ${r}`,
+        ),
+      );
+    }
+    body.append(grid);
+    // Cues
+    body.append(h('h3', {}, 'Cues'));
+    for (const c of CUES) {
+      const owned = s.cues.includes(c.id);
+      const using = s.cue === c.id;
+      const stats = Object.entries(c.bonus)
+        .map(([k, v]) => `${ATTRS.find((x) => x.id === k)?.label ?? k} ${v! > 0 ? '+' : ''}${v}`)
+        .join(', ');
+      body.append(
+        h(
+          'div',
+          { className: `shop-item${using ? ' using' : ''}` },
+          h('span', {}, h('strong', {}, c.name), h('small', {}, `${c.blurb}${stats ? ` (${stats})` : ''}`)),
+          using
+            ? h('em', {}, 'In your hands')
+            : owned
+              ? h(
+                  'button',
+                  { className: 'coach-btn', onclick: () => update(equipCue(this.cb.career(), c.id)) },
+                  'Use',
+                )
+              : h(
+                  'button',
+                  {
+                    className: 'coach-btn primary',
+                    disabled: s.money < c.price,
+                    onclick: () => update(buyCue(this.cb.career(), c.id)),
+                  },
+                  `£${c.price}`,
+                ),
+        ),
+      );
+    }
+    // Kit
+    body.append(
+      h('h3', {}, 'Kit'),
+      h(
+        'p',
+        { className: 'fine-print' },
+        'Cosmetic only. Win the event to get it free, or buy it here. Use it from the Player screen.',
+      ),
+    );
+    for (const [key, p] of Object.entries(KIT_PRICES)) {
+      const owned = s.unlocked.includes(key);
+      body.append(
+        h(
+          'div',
+          { className: 'shop-item' },
+          h(
+            'span',
+            {},
+            h('strong', {}, REWARDS[key] ?? key),
+            h('small', {}, owned ? 'Yours' : `Or win the ${unlockedBy(key)?.title ?? 'event'}`),
+          ),
+          owned
+            ? h('em', {}, 'Owned')
+            : h(
+                'button',
+                {
+                  className: 'coach-btn primary',
+                  disabled: s.money < p,
+                  onclick: () => update(buyKit(this.cb.career(), key)),
+                },
+                `£${p}`,
+              ),
+        ),
+      );
+    }
+    return h('div', { className: 'sub career' }, this.header('Shop & coaching'), body);
   }
 
   private careerProfile(): HTMLElement {
@@ -1553,7 +1735,12 @@ export class Menu {
     const cell = (label: string, value: string) =>
       h('div', { className: 'stat' }, h('strong', {}, value), h('small', {}, label));
     body.append(
-      h('h3', {}, this.cb.profile().name),
+      h('h3', {}, s.nickname ? `${this.cb.profile().name} “${s.nickname}”` : this.cb.profile().name),
+      h(
+        'p',
+        { className: 'fine-print' },
+        `Cue: ${cueDef(s.cue).name}.${s.sponsor?.season === s.season ? ` Sponsored by ${s.sponsor.name} this season.` : ''}`,
+      ),
       h(
         'div',
         { className: 'stat-grid' },
@@ -1590,9 +1777,23 @@ export class Menu {
       });
       body.append(list);
     }
-    // Rivals: one per tier, waiting in the finals.
+    // Rivals: the players who've earned it by beating you, then the circuit's finalists.
     body.append(h('h3', {}, 'Rivals'));
-    const seen = new Set<string>();
+    const earned = rivals(s);
+    for (const r of earned) {
+      const o = opponent(r.id);
+      const where = r.group === 'circuit' ? 'The circuit' : tourDef(r.group).name;
+      body.append(
+        h(
+          'div',
+          { className: 'rival nemesis' },
+          h('strong', {}, o.name),
+          h('span', {}, `${o.style} · ${where}`),
+          h('small', {}, `You ${r.won}–${r.lost}`),
+        ),
+      );
+    }
+    const seen = new Set<string>(earned.map((r) => r.id));
     for (const e of EVENTS) {
       if (seen.has(e.rival)) continue;
       seen.add(e.rival);
@@ -1604,7 +1805,7 @@ export class Menu {
           'div',
           { className: 'rival' },
           h('strong', {}, o.name),
-          h('span', {}, `${o.style} · ${venue.kind}`),
+          h('span', {}, `${o.style} · ${venue.kind} finals`),
           h('small', {}, w + l ? `You ${w}–${l}` : 'Not met yet'),
         ),
       );
@@ -1874,11 +2075,11 @@ export class Menu {
       'div',
       { className: `walk-on${opp.id === e.rival ? ' rival-card' : ''}` },
       h('small', {}, `${roundName(e, run.round)} · ${gameName(e)}`),
-      h('strong', {}, `You vs ${o.name}`),
+      h('strong', {}, `${s.nickname ? `“${s.nickname}”` : 'You'} vs ${o.name}`),
       h(
         'span',
         {},
-        `${o.style} · ${level}${opp.id === e.rival ? ' · your rival' : ''}${
+        `${o.style} · ${level}${opp.id === e.rival || isRival(s, opp.id) ? ' · your rival' : ''}${
           isTourEvent(e) && tourPlayer(o.id) && tourPlayer(o.id)!.home !== e.tour
             ? ` · from the ${tourDef(tourPlayer(o.id)!.home).name}`
             : ''

@@ -298,6 +298,19 @@ export interface CareerMessage {
   subject: string;
   body: string;
   read: boolean;
+  /** Something to decide from the inbox: sign a sponsor, or pick a nickname. */
+  action?: { kind: 'sponsor'; offer: Sponsor } | { kind: 'nickname'; choices: string[] };
+  /** The action has been taken (or turned down). */
+  done?: boolean;
+}
+
+/** A sponsor deal for a season (see economy.ts). */
+export interface Sponsor {
+  name: string;
+  season: number;
+  retainer: number;
+  semis: number;
+  bonus: number;
 }
 
 /** One finished event, for the timeline and Old Joe's memory. */
@@ -349,6 +362,13 @@ export interface CareerState {
    * season, then player. The ranking is the last two seasons of it.
    */
   tourMoney: Record<string, Record<string, Record<string, number>>>;
+  /** The cue in your hands, and the cues you own. */
+  cue: string;
+  cues: string[];
+  /** The week you last paid for coaching (`season-week`). */
+  coached: string | null;
+  sponsor: Sponsor | null;
+  nickname: string | null;
 }
 
 export interface TourMembership {
@@ -385,6 +405,11 @@ export const newCareer = (): CareerState => ({
   money: 50,
   tours: [],
   tourMoney: {},
+  cue: 'house',
+  cues: ['house'],
+  coached: null,
+  sponsor: null,
+  nickname: null,
 });
 
 export const rounds = (e: CareerEvent): number => e.raceTo.length;
