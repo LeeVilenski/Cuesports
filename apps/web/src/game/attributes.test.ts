@@ -95,8 +95,6 @@ describe('the shot', () => {
     expect(visionTuning(45).cue).toBeGreaterThan(0);
     expect(visionTuning(65).spinAware).toBe(true);
     expect(visionTuning(90).rebound).toBe(true);
-    // Pressure pulls them in.
-    expect(visionTuning(50, 1).object).toBeCloseTo(visionTuning(50).object * 0.4);
   });
 
   it('plays like the normal game at 99', () => {
@@ -112,7 +110,8 @@ describe('the shot', () => {
   it('limits a starting player, but never moves the aim', () => {
     const t = shotTuning(newPlayer(), 'nine-ball');
     expect(t.maxTip).toBeLessThan(0.3);
-    expect(t.maxElevation).toBeLessThan(15);
+    // Elevation is free: Cushion craft sets the lines on those shots instead.
+    expect(t.maxElevation).toBe(FULL_ELEVATION);
     expect(t.maxPower).toBeLessThan(0.7);
     expect(t.squirt).toBeLessThan(0.2);
     const s = { ball: 'cue', aim: 0.7, elevation: 0.6, tip: { a: 0, b: -0.5 }, speed: 2 };
@@ -120,7 +119,43 @@ describe('the shot', () => {
     expect(o.aim).toBe(s.aim);
     expect(o.speed).toBe(s.speed);
     expect(Math.abs(o.tip.b)).toBeCloseTo(t.maxTip);
-    expect(o.elevation).toBeCloseTo((t.maxElevation * Math.PI) / 180);
+    expect(o.elevation).toBe(s.elevation);
+  });
+});
+
+describe('hard shots', () => {
+  it('start with no lines after contact, whatever your Vision, until their own skill grows', () => {
+    const p = newPlayer();
+    p.ratings.vision = 70;
+    const none = { object: 0, cue: 0, spinAware: false, rebound: false };
+    expect(shotTuning(p, 'snooker', { rest: true }).vision).toEqual(none);
+    expect(shotTuning(p, 'snooker', { rest: true }).lines).toBe('rest');
+    expect(shotTuning(p, 'snooker', { cushion: true }).lines).toBe('cushion');
+    expect(shotTuning(p, 'snooker', { cushion: true }).vision).toEqual(none);
+    p.ratings.rest = 40;
+    p.ratings.cushion = 20;
+    const t = shotTuning(p, 'snooker', { rest: true, cushion: true });
+    // The weaker of the two sets them.
+    expect(t.lines).toBe('cushion');
+    expect(t.vision.object).toBeGreaterThan(0);
+    expect(t.vision.object).toBeLessThan(shotTuning(p, 'snooker').vision.object);
+    // Never better than your Vision.
+    p.ratings.rest = 99;
+    expect(shotTuning(p, 'snooker', { rest: true }).lines).toBe('vision');
+  });
+
+  it('gives an old save the new skill at its start', () => {
+    const old = parseCareer(
+      JSON.stringify({
+        player: {
+          ...newPlayer(),
+          ratings: { vision: 30, nerve: 20, cueing: 30, spin: 20, cushion: 20, touch: 30 },
+        },
+      }),
+    );
+    expect(old.player.ratings.rest).toBe(1);
+    expect(old.player.xp.rest).toBe(0);
+    expect(old.player.ratings.vision).toBe(30);
   });
 });
 

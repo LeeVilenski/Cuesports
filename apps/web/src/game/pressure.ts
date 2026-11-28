@@ -5,7 +5,7 @@ import type { MatchGame } from './match';
  * 9, the 10, the black, the pot that puts a snooker frame out of reach, the last points of a
  * points game) is a pressure ball, more so when you're on the hill and most when it's for the
  * match. The stakes of the event scale it (a pub semi-final is nothing next to a final at the
- * arena), and Nerve decides how much of it you feel.
+ * arena). From a pressure ball up (attributes.ts), Composure sets your guide lines.
  */
 
 export interface PressureInput {
@@ -83,21 +83,7 @@ export function stakes(tier: number, roundsLeft: number): number {
   return Math.min(1, 0.35 + 0.2 * tier + round);
 }
 
-/** What you feel of it: Nerve 99 shrugs off most of it. */
-export function felt(pressure: number, nerve: number): number {
-  return pressure * (1 - 0.85 * ((Math.max(1, Math.min(99, nerve)) - 1) / 98));
-}
-
 /** In words, for the HUD. */
 export function pressureLabel(p: number): string | null {
   return p >= 0.6 ? 'Big pressure' : p >= 0.3 ? 'Pressure' : p >= 0.12 ? 'Nervy' : null;
-}
-
-/**
- * The aim's slow sway under pressure (radians): two slow waves, so it never looks mechanical.
- * Up to about a third of a degree at full pressure.
- */
-export function sway(t: number, p: number): number {
-  const amp = ((0.35 * Math.PI) / 180) * p;
-  return amp * (0.6 * Math.sin(1.3 * t) + 0.4 * Math.sin(3.1 * t + 1));
 }

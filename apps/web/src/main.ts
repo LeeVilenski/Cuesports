@@ -54,7 +54,7 @@ import { BallsView } from './render/balls-view';
 import { CameraRig, type CameraMode } from './render/cameras';
 import { physicsGroup, toPhysics, toWorld } from './render/coords';
 import { CueView } from './render/cue-view';
-import { Character, type StanceInput, type TableFrame, type Want } from './render/character';
+import { Character, chooseTool, type StanceInput, type TableFrame, type Want } from './render/character';
 import { lookFor, PRESETS, presetsFor } from './render/figure';
 import { ShotCamera, type ShotCameraMode } from './render/shot-camera';
 import { GuideView } from './render/guide-view';
@@ -80,18 +80,21 @@ import { openStore } from './game/store';
 import { cuesFor, due, type SoundCue } from './audio/cues';
 import { DEFAULT_SOUND, Sound, type SoundSettings } from './audio/sound';
 import { addMatch, emptyStats, percent } from './game/stats';
-import { pressureLabel, situation, stakes, sway } from './game/pressure';
+import { situation, stakes } from './game/pressure';
 import { eligibility } from './game/season';
 import { isTourEvent } from './game/tour-events';
 import { cueBonus } from './game/economy';
 import { AGENT, enterEvent, gainsText, playMatch, train } from './game/agent';
 import {
   applyTuning,
+  ATTRS,
+  PRESSURE_BALL,
   shotTuning,
   shotXp,
   sumXp,
   TRAINING,
   type Ratings,
+  type ShotSituation,
   type ShotTuning,
   type Training,
 } from './game/attributes';
@@ -459,6 +462,7 @@ function buildPlayers(): void {
     // line playing across the table; up the length, it's the rest.
     restReach: game.table.id.startsWith('snooker') ? 0.85 : 0.8,
   };
+  tableFrame = t;
   const names = viewer?.reel.players ?? (match ? match.config.players : [profile.name, 'Player 2']);
   const picks = presetsFor(names);
   // A career opponent has a look of their own.
@@ -666,12 +670,13 @@ function shoot(p: number): void {
   // and pressure sways the aim where you can see it. Nothing is random: the ball goes where you aim.
   const t = careerTuning();
   strikeFelt = t?.felt ?? 0;
+  strikeSituation = t ? shotSituation() : {};
   if (t) p = Math.min(p, t.maxPower);
   let input = {
     ...shot,
     speed: strokeSpeed(powerToSpeed(p, game.maxSpeed), shot.tip, cue.mass, DEFAULT_CUE.mass),
   };
-  if (t) input = applyTuning({ ...input, aim: input.aim + aimSway }, t);
+  if (t) input = applyTuning(input, t);
   strike(input, decl, p);
 }
 
@@ -684,9 +689,57 @@ function defaultObject(g: NonNullable<ReturnType<typeof computeGuide>>): { x: nu
 
 /** Your career ratings for this shot: in a career match on your turn, or a training session. */
 function careerTuning(): ShotTuning | null {
-  if (challenge?.training) return shotTuning(career.player, challenge.spec.table, 0, cueBonus(career));
+  if (challenge?.training)
+    return shotTuning(
+      career.player,
+      challenge.spec.table,
+      { ...shotSituation(), pressure: 0 },
+      cueBonus(career),
+    );
   if (!match?.config.career || aiTurn()) return null;
-  return shotTuning(career.player, match.config.game, careerPressure(), cueBonus(career));
+  return shotTuning(career.player, match.config.game, shotSituation(), cueBonus(career));
+}
+
+/** The table as the players see it, for choosing the bridge (set in placePlayers). */
+let tableFrame: TableFrame | null = null;
+
+/**
+ * What kind of shot this is, for the career guide: a money ball (Composure), the cue ball on the
+ * cushion or the cue raised over the rail or a ball (Cushion craft), or the rest or spider (Rest
+ * play).
+ */
+function shotSituation(): ShotSituation {
+  const cue = cueBall();
+  if (!cue || cue.state === 'pocketed') return {};
+  const R = cue.radius;
+  const hl = game.table.playfield.length / 2;
+  const hw = game.table.playfield.width / 2;
+  // Within half a ball of the cushion nose.
+  const onCushion = Math.abs(cue.pos.x) > hl - 1.5 * R || Math.abs(cue.pos.y) > hw - 1.5 * R;
+  const cleared = withClearance(shot);
+  // The butt forced up by the rail or a ball (not a jump or massé you chose).
+  const raised =
+    cleared.elevation > shot.elevation + (3 * Math.PI) / 180 && cleared.elevation > (8 * Math.PI) / 180;
+  const others = balls
+    .filter((b) => b !== cue && b.state !== 'pocketed')
+    .map((b) => ({ x: b.pos.x, y: b.pos.y }));
+  const rest = tableFrame
+    ? chooseTool({ ball: { x: cue.pos.x, y: cue.pos.y }, R, shot: cleared, gap: 0.015, others }, tableFrame)
+        .tool !== 'hand'
+    : false;
+  return { pressure: match?.config.career ? careerPressure() : 0, cushion: onCushion || raised, rest };
+}
+
+/** The badge for a hard shot: what it is, and which skill is setting your lines. */
+function situationBadge(t: ShotTuning, sit: ShotSituation): string | null {
+  const kinds = [
+    (sit.pressure ?? 0) >= PRESSURE_BALL ? 'Money ball' : '',
+    sit.rest ? 'On the rest' : '',
+    sit.cushion ? 'Off the cushion' : '',
+  ].filter(Boolean);
+  if (!kinds.length) return null;
+  const by = ATTRS.find((a) => a.id === t.lines)?.label ?? '';
+  return `${kinds.join(' · ')}${t.lines !== 'vision' ? ` · lines: ${by}` : ''}`;
 }
 
 /** The pressure on your shot in a career match: the ball and the score, times the event's stakes. */
@@ -712,8 +765,8 @@ function careerPressure(): number {
   return p * Math.min(1, stakes(e.tier, e.raceTo.length - c.round) + big);
 }
 
-/** The aim's sway under pressure, this frame (radians). */
-let aimSway = 0;
+/** The kind of shot you just played, for XP. */
+let strikeSituation: ShotSituation = {};
 /** Pressure (as felt) on the shot just played, for Nerve XP. */
 let strikeFelt = 0;
 
@@ -791,9 +844,13 @@ function endPlayback(): void {
         const rec = match.record.racks.flatMap((r) => r.shots).at(-1);
         if (rec && rec.player === 0) {
           careerXp = sumXp(careerXp, shotXp(rec, result.events));
-          // A pressure ball potted, cleanly: that's what Nerve is made of.
-          if (strikeFelt > 0.1 && rec.potted.length && !rec.fouls.length)
-            careerXp = sumXp(careerXp, { nerve: Math.round(6 + 20 * strikeFelt) });
+          // A hard ball potted, cleanly, trains the skill for that kind of shot.
+          if (rec.potted.length && !rec.fouls.length) {
+            if (strikeFelt >= PRESSURE_BALL)
+              careerXp = sumXp(careerXp, { nerve: Math.round(6 + 20 * strikeFelt) });
+            if (strikeSituation.rest) careerXp = sumXp(careerXp, { rest: 6 });
+            if (strikeSituation.cushion) careerXp = sumXp(careerXp, { cushion: 5 });
+          }
         }
       }
       saveMatch();
@@ -2431,22 +2488,19 @@ function frame(now: number): void {
       const back = 0.015 + pull * 0.22;
       const gap = phase === 'striking' ? Math.max(0, back * (1 - (Math.max(0, strikeT) / 0.09) ** 2)) : back;
       const live = phase === 'aim' ? withClearance(shot) : shot;
-      cueView.pose(
-        cue.pos.x,
-        cue.pos.y,
-        cue.radius,
-        phase === 'aim' ? { ...live, aim: live.aim + aimSway } : live,
-        gap,
-      );
+      cueView.pose(cue.pos.x, cue.pos.y, cue.radius, live, gap);
       if (phase === 'aim') hud.setForcedElevation((live.elevation * 180) / Math.PI);
     }
   }
   updatePlayers(dt, cue);
   const tuning = phase === 'aim' ? careerTuning() : null;
-  aimSway = tuning && tuning.felt > 0.02 && !calm ? sway(performance.now() / 1000, tuning.felt) : 0;
-  if (tuning && tuning.felt > 0.02) dirty = true;
-  matchHud.setPressure(tuning ? pressureLabel(tuning.felt) : null, tuning?.felt ?? 0);
-  const swayed = { ...shot, aim: shot.aim + aimSway };
+  const sit = tuning ? shotSituation() : {};
+  matchHud.setPressure(
+    tuning ? situationBadge(tuning, sit) : null,
+    sit.pressure ?? 0,
+    (sit.pressure ?? 0) >= PRESSURE_BALL,
+  );
+  const swayed = shot;
   // In the career Touch decides how much of the squirt from side the guide allows for.
   const squirtShare = tuning ? tuning.squirt : guideSquirt ? 1 : 0;
   const guide =

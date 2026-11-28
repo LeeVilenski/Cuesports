@@ -38,7 +38,7 @@ describe('the shop', () => {
     expect(equipCue(b, 'ebony')).toBe(b);
     // The cue's points reach the shot.
     const p = newPlayer();
-    expect(shotTuning(p, 'nine-ball', 0, { touch: 5 }).squirt).toBeGreaterThan(
+    expect(shotTuning(p, 'nine-ball', {}, { touch: 5 }).squirt).toBeGreaterThan(
       shotTuning(p, 'nine-ball').squirt,
     );
   });

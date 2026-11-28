@@ -2,7 +2,7 @@ import { Rng } from '@cuesports/shared';
 import type { MatchGame } from './match';
 import { tourPlayer, type TourId } from './roster';
 import { tourEventById, TOUR_VENUES } from './tour-events';
-import { migratedPlayer, newPlayer, type Attr, type CareerPlayer, type Ratings } from './attributes';
+import { migratedPlayer, newPlayer, START, type Attr, type CareerPlayer, type Ratings } from './attributes';
 
 /**
  * Career: a fictional circuit from the pub to the arena. Each venue holds events for one or two
@@ -607,6 +607,13 @@ export function parseCareer(raw: string | null): CareerState {
     const s = { ...newCareer(), ...saved };
     // A career from before ratings: start them at the level of the tiers it reached.
     if (!saved.player) s.player = migratedPlayer(topTier(s));
+    // Skills added since the save was made start where a new career's do.
+    else
+      s.player = {
+        ...s.player,
+        ratings: { ...START, ...s.player.ratings },
+        xp: { ...Object.fromEntries(Object.keys(START).map((k) => [k, 0])), ...s.player.xp } as Ratings,
+      };
     return s;
   } catch {
     return newCareer();

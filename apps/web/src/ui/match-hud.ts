@@ -59,10 +59,11 @@ export class MatchHud {
     );
   }
 
-  /** Career: a badge when the ball you're on is a pressure ball (null hides it). */
-  setPressure(label: string | null, level = 0): void {
+  /** Career: a badge for a hard shot (a money ball, the rest, the cushion), or null to hide it. */
+  setPressure(label: string | null, level = 0, heart = true): void {
     this.pressure.hidden = !label;
     if (!label) return;
+    this.pressure.classList.toggle('calm', !heart);
     if (this.pressure.textContent !== label) this.pressure.textContent = label;
     this.pressure.style.setProperty('--beat', `${Math.max(0.45, 1.1 - level * 0.6)}s`);
   }

@@ -459,6 +459,13 @@ input {
 .pressure-badge[hidden] {
   display: none;
 }
+.pressure-badge.calm {
+  background: rgba(30, 60, 110, 0.85);
+  padding-left: 12px;
+}
+.pressure-badge.calm::before {
+  content: none;
+}
 @media (orientation: portrait) {
   .pressure-badge {
     bottom: calc(152px + var(--safe-b));

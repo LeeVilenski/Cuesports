@@ -1,7 +1,6 @@
 import type { PhysicsEvent, ShotInput } from '@cuesports/physics';
 import type { MatchGame } from './match';
 import type { ShotRecord } from './record';
-import { felt } from './pressure';
 
 /**
  * Your career player: six attributes rated 1–99, the XP behind each one, a player level with skill
@@ -10,7 +9,7 @@ import { felt } from './pressure';
  * full spin and elevation range and the longest guide.
  */
 
-export type Attr = 'vision' | 'nerve' | 'cueing' | 'spin' | 'cushion' | 'touch';
+export type Attr = 'vision' | 'nerve' | 'cueing' | 'spin' | 'cushion' | 'rest' | 'touch';
 
 export const ATTRS: { id: Attr; label: string; low: string; trained: string }[] = [
   {
@@ -21,9 +20,9 @@ export const ATTRS: { id: Attr; label: string; low: string; trained: string }[] 
   },
   {
     id: 'nerve',
-    label: 'Nerve',
-    low: 'Keeps your guide and your cue steady on the big balls',
-    trained: 'Deciders and matches won',
+    label: 'Composure',
+    low: 'Your guide lines on money and frame balls: none at first',
+    trained: 'Pressure balls potted, deciders and matches won',
   },
   {
     id: 'cueing',
@@ -40,8 +39,14 @@ export const ATTRS: { id: Attr; label: string; low: string; trained: string }[] 
   {
     id: 'cushion',
     label: 'Cushion craft',
-    low: 'How high you can raise the cue',
-    trained: 'Banks, kicks and cushion-first escapes',
+    low: 'Your guide lines with the cue ball on the cushion, or the cue raised over a ball or the rail: none at first',
+    trained: 'Pots off the cushion, banks, kicks and escapes',
+  },
+  {
+    id: 'rest',
+    label: 'Rest play',
+    low: 'Your guide lines on the rest or the spider: none at first',
+    trained: 'Pots made on the rest or the spider',
   },
   {
     id: 'touch',
@@ -66,9 +71,10 @@ export interface CareerPlayer {
   familiarity: Partial<Record<MatchGame, number>>;
 }
 
-export const START: Ratings = { vision: 1, nerve: 10, cueing: 15, spin: 10, cushion: 10, touch: 15 };
+/** The situational skills (Composure, Cushion craft, Rest play) start at 1: no lines on those shots. */
+export const START: Ratings = { vision: 1, nerve: 1, cueing: 15, spin: 10, cushion: 1, rest: 1, touch: 15 };
 
-const zero = (): Ratings => ({ vision: 0, nerve: 0, cueing: 0, spin: 0, cushion: 0, touch: 0 });
+const zero = (): Ratings => ({ vision: 0, nerve: 0, cueing: 0, spin: 0, cushion: 0, rest: 0, touch: 0 });
 
 export const newPlayer = (): CareerPlayer => ({
   ratings: { ...START },
@@ -154,7 +160,7 @@ export function rust(p: CareerPlayer, except: MatchGame): CareerPlayer {
 export function effective(p: CareerPlayer, game: MatchGame): Ratings {
   const f = 0.8 + (0.2 * (p.familiarity[game] ?? 0)) / 100;
   const r = zero();
-  for (const { id } of ATTRS) r[id] = Math.max(1, Math.min(99, p.ratings[id] * f));
+  for (const { id } of ATTRS) r[id] = Math.max(1, Math.min(99, (p.ratings[id] ?? START[id]) * f));
   return r;
 }
 
@@ -187,15 +193,16 @@ export interface ShotTuning {
   maxTip: number;
   /** Highest cue elevation you can play, in degrees. */
   maxElevation: number;
-  /** The pressure you feel on this shot (0–1), after your Nerve. */
+  /** The pressure on this shot (0–1). */
   felt: number;
+  /** The skill setting the guide on this shot. */
+  lines: Attr;
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * Math.max(0, Math.min(1, t));
 
-/** The guide for a Vision rating (0 lengths are not drawn). Pressure (0–1) pulls the lines in. */
-export function visionTuning(v: number, pressure = 0): VisionTuning {
-  const shrink = 1 - 0.6 * pressure;
+/** The guide for a rating (0 lengths are not drawn). */
+export function visionTuning(v: number): VisionTuning {
   let t: VisionTuning;
   // No object-ball line at first; it grows from Vision 3 a few centimetres at a time.
   if (v < 3) t = { object: 0, cue: 0, spinAware: false, rebound: false };
@@ -221,7 +228,7 @@ export function visionTuning(v: number, pressure = 0): VisionTuning {
       spinAware: true,
       rebound: true,
     };
-  return { ...t, object: t.object * shrink, cue: t.cue * shrink };
+  return t;
 }
 
 /** The full range the normal game allows. */
@@ -229,24 +236,54 @@ export const FULL_TIP = 0.52;
 export const FULL_ELEVATION = 60;
 
 /** Everything the ratings change about a shot, for one game. */
+/** The kind of shot it is: a money ball, on the rest or spider, off the cushion or over a ball. */
+export interface ShotSituation {
+  /** Pressure on the ball (pressure.ts), 0–1. A pressure ball from 0.25. */
+  pressure?: number;
+  /** On the rest or the spider. */
+  rest?: boolean;
+  /** Cue ball on the cushion, or the cue raised to clear the rail or a ball. */
+  cushion?: boolean;
+}
+
+/** A pressure ball: from here, Composure sets your lines. */
+export const PRESSURE_BALL = 0.25;
+
+/**
+ * The skill that sets your guide on this shot: Vision normally, and on a hard shot the lower of
+ * Vision and that shot's own skill (Composure on a money ball, Cushion craft off the cushion or over
+ * a ball, Rest play on the rest), so each of those shots starts with no lines after contact.
+ */
+export function lineSkill(r: Ratings, sit: ShotSituation): { rating: number; by: Attr } {
+  let best: { rating: number; by: Attr } = { rating: r.vision, by: 'vision' };
+  const limit = (by: Attr) => {
+    if (r[by] < best.rating) best = { rating: r[by], by };
+  };
+  if ((sit.pressure ?? 0) >= PRESSURE_BALL) limit('nerve');
+  if (sit.cushion) limit('cushion');
+  if (sit.rest) limit('rest');
+  return best;
+}
+
 export function shotTuning(
   p: CareerPlayer,
   game: MatchGame,
-  pressure = 0,
+  sit: ShotSituation = {},
   /** Rating points from your cue (economy.ts). */
   bonus: Partial<Ratings> = {},
 ): ShotTuning {
   const r = effective(p, game);
   for (const k of Object.keys(bonus) as Attr[]) r[k] = Math.max(1, Math.min(99, r[k] + (bonus[k] ?? 0)));
   const x = (a: Attr) => (r[a] - 1) / 98;
-  const f = felt(pressure, r.nerve);
+  const lines = lineSkill(r, sit);
   return {
-    felt: f,
-    vision: visionTuning(r.vision, f),
+    felt: sit.pressure ?? 0,
+    lines: lines.by,
+    vision: visionTuning(lines.rating),
     maxPower: lerp(0.6, 1, x('cueing')),
     squirt: x('touch'),
     maxTip: lerp(0.22, FULL_TIP, x('spin')),
-    maxElevation: Math.round(lerp(8, FULL_ELEVATION, x('cushion')) * 2) / 2,
+    maxElevation: FULL_ELEVATION,
   };
 }
 

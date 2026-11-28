@@ -51,7 +51,7 @@ import {
   ranking,
 } from '../game/tours';
 import { cost, cut, eligibility, prize, seasonSummary, weekEvents, WEEKS } from '../game/season';
-import { ATTRS, levelCost, pointCost, shotTuning, TRAINING } from '../game/attributes';
+import { ATTRS, levelCost, pointCost, TRAINING } from '../game/attributes';
 import {
   bestText,
   careerEvent,
@@ -1930,12 +1930,11 @@ export class Menu {
           : "You've trained already. Play your next event and we'll go again after it.",
       ]),
     );
-    const t = shotTuning(s.player, 'nine-ball');
     body.append(
       h(
         'p',
         { className: 'fine-print' },
-        `You train as you play: with your own guide (Vision ${Math.round(s.player.ratings.vision)}), spin reach and elevation (up to ${t.maxElevation}°).`,
+        `You train as you play: your own guide (Vision ${Math.round(s.player.ratings.vision)}, and Cushion craft or Rest play on those shots), power and spin reach.`,
       ),
     );
     const tiles = h('div', { className: 'tiles' });
