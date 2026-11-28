@@ -1,4 +1,3 @@
-import { Rng } from '@cuesports/shared';
 import type { PhysicsEvent, ShotInput } from '@cuesports/physics';
 import type { MatchGame } from './match';
 import type { ShotRecord } from './record';
@@ -23,31 +22,31 @@ export const ATTRS: { id: Attr; label: string; low: string; trained: string }[] 
   {
     id: 'nerve',
     label: 'Nerve',
-    low: 'Holds your game together on the big balls',
+    low: 'Keeps your guide and your cue steady on the big balls',
     trained: 'Deciders and matches won',
   },
   {
     id: 'cueing',
     label: 'Cueing',
-    low: 'How close the strike goes to where you aim',
+    low: 'How much power you can put into a shot',
     trained: 'Long pots and good runs',
   },
   {
     id: 'spin',
     label: 'Spin',
-    low: 'How far from centre you can strike, and how true',
+    low: 'How far from centre you can strike',
     trained: 'Pots with screw, follow or side',
   },
   {
     id: 'cushion',
     label: 'Cushion craft',
-    low: 'Cue elevation, and shots off the cushion',
+    low: 'How high you can raise the cue',
     trained: 'Banks, kicks and cushion-first escapes',
   },
   {
     id: 'touch',
     label: 'Touch',
-    low: 'How exactly you judge the pace',
+    low: 'How well the guide allows for side pushing the cue ball off line',
     trained: 'Safeties and soft pots',
   },
 ];
@@ -173,18 +172,19 @@ export interface VisionTuning {
   rebound: boolean;
 }
 
+/**
+ * What your ratings change about a shot. Nothing here is random: the ball goes where you aim it.
+ * Low ratings show you less (the guide) and let you do less (power, spin, elevation), and those
+ * limits are always visible.
+ */
 export interface ShotTuning {
   vision: VisionTuning;
-  /** Extra aim error, one standard deviation in degrees. */
-  aimSigma: number;
-  /** Extra aim error on a cushion-first shot, in degrees. */
-  cushionSigma: number;
-  /** Power error, as a fraction of the speed. */
-  powerSigma: number;
+  /** Most power you can put into a shot, 0–1 of the power bar (Cueing). */
+  maxPower: number;
+  /** How much of the squirt from side the guide allows for, 0–1 (Touch). */
+  squirt: number;
   /** Furthest tip offset from centre, as a fraction of the radius. */
   maxTip: number;
-  /** Tip offset error, as a fraction of the radius. */
-  tipSigma: number;
   /** Highest cue elevation you can play, in degrees. */
   maxElevation: number;
   /** The pressure you feel on this shot (0–1), after your Nerve. */
@@ -197,8 +197,9 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * Math.max(0, Math
 export function visionTuning(v: number, pressure = 0): VisionTuning {
   const shrink = 1 - 0.6 * pressure;
   let t: VisionTuning;
-  if (v < 10) t = { object: 0, cue: 0, spinAware: false, rebound: false };
-  else if (v < 35) t = { object: lerp(0.08, 0.35, (v - 10) / 25), cue: 0, spinAware: false, rebound: false };
+  // No object-ball line at first; it grows from Vision 3 a few centimetres at a time.
+  if (v < 3) t = { object: 0, cue: 0, spinAware: false, rebound: false };
+  else if (v < 35) t = { object: lerp(0.03, 0.35, (v - 3) / 32), cue: 0, spinAware: false, rebound: false };
   else if (v < 60)
     t = {
       object: lerp(0.35, 0.6, (v - 35) / 25),
@@ -235,33 +236,24 @@ export function shotTuning(p: CareerPlayer, game: MatchGame, pressure = 0): Shot
   return {
     felt: f,
     vision: visionTuning(r.vision, f),
-    // Pressure adds a tremor of its own, on top of your cueing.
-    aimSigma: 0.45 * (1 - x('cueing')) ** 1.5 + 0.3 * f,
-    cushionSigma: 0.35 * (1 - x('cushion')),
-    powerSigma: 0.07 * (1 - x('touch')),
+    maxPower: lerp(0.6, 1, x('cueing')),
+    squirt: x('touch'),
     maxTip: lerp(0.22, FULL_TIP, x('spin')),
-    tipSigma: 0.06 * (1 - x('spin')),
     maxElevation: Math.round(lerp(8, FULL_ELEVATION, x('cushion')) * 2) / 2,
   };
 }
 
-/** The shot as it actually comes off your cue: your aim, pace and tip, give or take your ratings. */
-export function applyTuning(s: ShotInput, t: ShotTuning, rng: Rng, cushionFirst: boolean): ShotInput {
-  const deg = Math.PI / 180;
-  const aimErr = rng.gaussian() * t.aimSigma + (cushionFirst ? rng.gaussian() * t.cushionSigma : 0);
-  let a = Math.max(-t.maxTip, Math.min(t.maxTip, s.tip.a + rng.gaussian() * t.tipSigma));
-  let b = Math.max(-t.maxTip, Math.min(t.maxTip, s.tip.b + rng.gaussian() * t.tipSigma));
-  const l = Math.hypot(a, b);
-  if (l > FULL_TIP) {
-    a = (a / l) * FULL_TIP;
-    b = (b / l) * FULL_TIP;
-  }
+/**
+ * The shot kept inside your limits: the tip within your reach and the cue no higher than you can
+ * raise it. (The HUD already holds you there; this is the backstop.) The aim is never touched.
+ */
+export function applyTuning(s: ShotInput, t: ShotTuning): ShotInput {
+  const l = Math.hypot(s.tip.a, s.tip.b);
+  const k = l > t.maxTip ? t.maxTip / l : 1;
   return {
     ...s,
-    aim: s.aim + aimErr * deg,
-    speed: Math.max(0.05, s.speed * (1 + rng.gaussian() * t.powerSigma)),
-    tip: { a, b },
-    elevation: Math.min(s.elevation, t.maxElevation * deg),
+    tip: { a: s.tip.a * k, b: s.tip.b * k },
+    elevation: Math.min(s.elevation, (t.maxElevation * Math.PI) / 180),
   };
 }
 
@@ -354,6 +346,3 @@ export function migratedPlayer(topTier: number): CareerPlayer {
   for (const { id } of ATTRS) p.ratings[id] = Math.min(cap, START[id] + lift);
   return p;
 }
-
-/** A seeded RNG for shot error (separate from the match's). */
-export const shotRng = (seed: number): Rng => new Rng(seed);

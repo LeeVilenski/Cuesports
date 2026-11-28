@@ -208,8 +208,8 @@ and the choice to specialise matter.
   - **Hill and match ball:** extra when you're on the hill, and most when it's for the match.
   - **Stakes:** a multiplier per round and event (pub final < club final < tour ranking event < major
     final).
-- **Effect:** guide lengths ×(1 − 0.6 · pressure · (1 − nerve)), plus an aim tremor whose amplitude scales
-  with pressure × (1 − nerve). A small HUD cue (a pulse on the ball or a heartbeat icon) shows when a ball
+- **Effect:** guide lengths ×(1 − 0.6 · pressure · (1 − nerve)), plus a visible slow sway of the aim
+  whose size scales with pressure × (1 − nerve) (no hidden error). A small HUD cue (a pulse on the ball or a heartbeat icon) shows when a ball
   is a pressure ball.
 
 ### 6. Money
@@ -299,19 +299,28 @@ Each phase ships on its own and leaves the game playable.
    career matches (pots, long pots, spin pots, banks and kicks, safeties and soft pots), from deciders and
    wins (Nerve), and from training. Player levels give skill points to spend on the Profile tab. Ceilings
    of 40/60/80/99 by the highest tier open, and Joe tells you when one rises. Familiarity per game scales
-   your ratings (×0.8 to ×1). In career matches and training on your turn: the guide comes from Vision
-   (contact only below 10, then the object-ball line, the stun line, a spin-aware cue-ball path from 60,
-   one cushion rebound from 80), the strike gets aim, pace and tip error from Cueing, Touch and Spin
-   (extra on cushion-first shots from Cushion craft), and the spin widget and elevation slider are
-   limited by Spin and Cushion craft. At 99 everything is exactly as in quick play. Training: one
-   session between events, on eight of the challenges, XP by stars. Old careers start with ratings for
-   the tier they reached. Not yet: a ratings line on the pre-match card beyond familiarity.
+   your ratings (×0.8 to ×1). **Nothing is random: the ball always goes where you aim it.** Low ratings
+   show you less and let you do less, and every limit is visible:
+   - **Vision**: the guide. Contact only at first, then an object-ball line that grows a few
+     centimetres at a time from Vision 3, then the stun line from 35, a spin-aware cue-ball path from 60,
+     and one cushion rebound from 80.
+   - **Cueing**: the most power you can use (60% of the bar at first, all of it at 99). The rest of the
+     power bar is shaded.
+   - **Spin**: how far from centre you can strike (the spin widget shades the rest).
+   - **Cushion craft**: how high you can raise the cue (the elevation slider stops there).
+   - **Touch**: how much the guide allows for squirt from side (none at first, all of it at 99).
+   - **Nerve**: see pressure.
+
+   At 99 everything is exactly as in quick play. Training: one session between events, on eight of the
+   challenges, with XP by stars. Old careers start with ratings for the tier they reached. (The first
+   version also scattered the aim, pace and tip at low ratings. That was taken out after playtesting:
+   missing a pot you aimed right felt like pot luck.)
 3. **Pressure.** _Built._ `game/pressure.ts` reads the ball and the score: the money ball in 9-ball,
    10-ball and eight-ball (and a little for the last two or three balls before it), the snooker pot that
    puts the frame out of reach, and the last points of a points game. It's worth more on the hill, and a
    hill-hill decider adds a touch on every ball. The event's stakes scale it (by tier, more in the semis
    and most in the final), and Nerve takes up to 85% of it away. What you feel shrinks the Vision lines
-   (by up to 60%), adds an aim tremor and a slow sway of the aim (off with reduced motion), and shows a
+   (by up to 60%), adds a slow sway of the aim that you can see on the cue and the guide (off with reduced motion), and shows a
    heartbeat badge ("Nervy", "Pressure", "Big pressure"). Potting a pressure ball cleanly earns Nerve XP.
 4. **Calendar and money.** _Built._ `game/season.ts`: seasons of 12 weeks. Each week has three events on
    the calendar, seeded per career, so a season looks the same every time: one at your level (a tier lower

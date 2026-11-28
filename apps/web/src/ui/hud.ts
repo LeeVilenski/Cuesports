@@ -34,6 +34,9 @@ export class Hud {
   private camMode: CameraMode = 'aim';
   private powerFill = h('div', { className: 'power-fill' });
   private powerMark = h('div', { className: 'power-mark' });
+  /** Career: the power you can't reach yet, shaded at the bottom of the bar. */
+  private powerCap = h('div', { className: 'power-cap', hidden: true });
+  private maxPower = 1;
   private powerLabel = h('div', { className: 'power-label' });
   private spinMini = h('canvas', {
     className: 'spin-mini',
@@ -87,6 +90,7 @@ export class Hud {
       { className: 'power', ariaLabel: 'Power: pull down and release to shoot' },
       this.powerMark,
       this.powerFill,
+      this.powerCap,
       this.powerLabel,
     );
     let startY = 0;
@@ -109,7 +113,7 @@ export class Hud {
     power.addEventListener('pointermove', (e) => {
       if (!pulling) return;
       const range = power.getBoundingClientRect().height * 0.9;
-      p = Math.max(0, Math.min(1, (e.clientY - startY) / range));
+      p = Math.max(0, Math.min(this.maxPower, (e.clientY - startY) / range));
       if (this.strokeMode === 'pull') {
         // Forward speed in bar-heights per second, smoothed over the last few moves.
         const dt = Math.max(1, e.timeStamp - lastT);
@@ -122,7 +126,7 @@ export class Hud {
           // Pushed through to where the stroke started: strike with the forward speed, never much
           // more than the backswing allows (so a twitch can't become a full-power shot).
           pulling = false;
-          const shotPower = Math.max(0.03, Math.min(1, fwd / PULL_FULL_SPEED, back * 1.5 + 0.1));
+          const shotPower = Math.max(0.03, Math.min(this.maxPower, fwd / PULL_FULL_SPEED, back * 1.5 + 0.1));
           this.showPower(0);
           this.lastPower = shotPower;
           this.powerMark.style.setProperty('--p', String(shotPower));
@@ -327,9 +331,15 @@ export class Hud {
    * Career limits on the spin and elevation you can play (null for the full range). A tip or
    * elevation already beyond them is brought back inside.
    */
-  setLimits(l: { maxTip: number; maxElevation: number } | null): void {
+  setLimits(l: { maxTip: number; maxElevation: number; maxPower: number } | null): void {
     const reach = l ? Math.min(MAX_TIP, l.maxTip) : MAX_TIP;
     const elev = l ? Math.min(60, l.maxElevation) : 60;
+    const power = l ? Math.min(1, l.maxPower) : 1;
+    if (power !== this.maxPower) {
+      this.maxPower = power;
+      this.powerCap.hidden = power >= 1;
+      this.powerCap.style.setProperty('--cap', String(power));
+    }
     if (reach === this.reach && elev === this.maxElevation) return;
     this.reach = reach;
     this.maxElevation = elev;

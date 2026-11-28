@@ -74,13 +74,13 @@ describe('pressure balls', () => {
     expect(pressureLabel(0.8)).toBe('Big pressure');
   });
 
-  it('shrinks the guide, adds a tremor and sways the aim', () => {
+  it('shrinks the guide and sways the aim (where you can see it)', () => {
     const p = newPlayer();
     p.ratings.vision = 50;
     const calm = shotTuning(p, 'nine-ball', 0);
     const tense = shotTuning(p, 'nine-ball', 1);
     expect(tense.vision.object).toBeLessThan(calm.vision.object * 0.6);
-    expect(tense.aimSigma).toBeGreaterThan(calm.aimSigma);
+    expect(tense.felt).toBeGreaterThan(calm.felt);
     expect(sway(1, 0)).toBe(0);
     const swings = Array.from({ length: 50 }, (_, i) => Math.abs(sway(i * 0.1, 1)));
     expect(Math.max(...swings)).toBeLessThan((0.36 * Math.PI) / 180);

@@ -29,7 +29,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import { DEFAULT_CUE, Rng, type TableSpec } from '@cuesports/shared';
+import { DEFAULT_CUE, type TableSpec } from '@cuesports/shared';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { registerSW } from 'virtual:pwa-register';
 import {
@@ -627,18 +627,16 @@ function shoot(p: number): void {
       else if (call) decl = { call };
     }
   }
+  // In the career your ratings cap the power, the spin and the elevation (all shown on the HUD),
+  // and pressure sways the aim where you can see it. Nothing is random: the ball goes where you aim.
+  const t = careerTuning();
+  strikeFelt = t?.felt ?? 0;
+  if (t) p = Math.min(p, t.maxPower);
   let input = {
     ...shot,
     speed: strokeSpeed(powerToSpeed(p, game.maxSpeed), shot.tip, cue.mass, DEFAULT_CUE.mass),
   };
-  // In the career the shot comes off your cue as well as your ratings allow.
-  const t = careerTuning();
-  strikeFelt = t?.felt ?? 0;
-  if (t) {
-    input = { ...input, aim: input.aim + aimSway };
-    const g = computeGuide(game.table, balls, cueId, input.aim);
-    input = applyTuning(input, t, new Rng((Math.random() * 1e9) | 0), !g?.object);
-  }
+  if (t) input = applyTuning({ ...input, aim: input.aim + aimSway }, t);
   strike(input, decl, p);
 }
 
@@ -2410,9 +2408,16 @@ function frame(now: number): void {
   if (tuning && tuning.felt > 0.02) dirty = true;
   matchHud.setPressure(tuning ? pressureLabel(tuning.felt) : null, tuning?.felt ?? 0);
   const swayed = { ...shot, aim: shot.aim + aimSway };
+  // In the career Touch decides how much of the squirt from side the guide allows for.
+  const squirtShare = tuning ? tuning.squirt : guideSquirt ? 1 : 0;
   const guide =
     phase === 'aim' && cue
-      ? computeGuide(game.table, balls, cueId, guideSquirt ? launchDirection(cue, swayed) : swayed.aim)
+      ? computeGuide(
+          game.table,
+          balls,
+          cueId,
+          squirtShare ? swayed.aim + squirtShare * (launchDirection(cue, swayed) - swayed.aim) : swayed.aim,
+        )
       : null;
   hud.setLimits(tuning);
   const speed = powerToSpeed(hud.power, game.maxSpeed);
