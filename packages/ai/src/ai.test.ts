@@ -316,15 +316,17 @@ describe('AI plants and kicks', () => {
       '6': [0, -0.116],
       '9': [0.9, -0.4],
     });
-    const ai = chooseShot({ ...nineInput(balls, 3, 5), budgetMs: 3000 });
-    expect(ai.label).toMatch(/kick/);
     let hits = 0;
     for (const seed of [1, 2, 3]) {
-      const shot = chooseShot({ ...nineInput(balls, 3, seed), budgetMs: 3000 }).shot;
-      if (shotFacts(simulate(nineTable, balls, shot, { sampleRate: 0 })).firstContact === '1') hits++;
+      // A clock that never moves: the whole search runs, however busy the machine is, so the
+      // shot it picks doesn't depend on the machine's speed.
+      const ai = chooseShot({ ...nineInput(balls, 3, seed), budgetMs: 3000, now: () => 0 });
+      expect(ai.label).toMatch(/kick/);
+      if (shotFacts(simulate(nineTable, balls, ai.shot, { sampleRate: 0 })).firstContact === '1') hits++;
     }
     expect(hits).toBeGreaterThanOrEqual(2);
-  });
+    // Three full searches, about 1.5 s each on an idle machine; more with the suite in parallel.
+  }, 20_000);
 });
 
 describe('skill levels', () => {

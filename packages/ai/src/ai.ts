@@ -641,6 +641,8 @@ export function chooseShot(input: AiInput): AiShot {
   const picks = ranked.slice(0, 3).map((r) => r.id);
   const budget = (input.budgetMs ?? 1500) / picks.length;
   let best: AiShot | null = null;
+  // Every cue ball's search counts towards the shots considered, not just the winner's.
+  let considered = 0;
   for (const [k, id] of picks.entries()) {
     const shot = chooseShotWith({
       ...input,
@@ -648,10 +650,10 @@ export function chooseShot(input: AiInput): AiShot {
       budgetMs: budget,
       turn: { ...input.turn, cueBall: id },
     });
-    if (!best || shot.score > best.score)
-      best = { ...shot, considered: shot.considered + (best?.considered ?? 0) };
+    considered += shot.considered;
+    if (!best || shot.score > best.score) best = shot;
   }
-  return best!;
+  return { ...best!, considered };
 }
 
 function chooseShotWith(input: AiInput): AiShot {
