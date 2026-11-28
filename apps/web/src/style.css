@@ -2130,6 +2130,86 @@ body {
   color: var(--muted);
   font-size: 13px;
 }
+/* Career tours */
+.menu .tour-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 5px solid var(--yellow);
+}
+.menu .tour-card.blue {
+  border-left-color: var(--blue, #2f6fdc);
+}
+.menu .tour-card.green {
+  border-left-color: var(--green, #36a64a);
+}
+.menu .tour-card.red {
+  border-left-color: var(--red, #c83c32);
+}
+.menu .tour-card.orange {
+  border-left-color: var(--orange, #e0702a);
+}
+.menu .tour-card.purple {
+  border-left-color: var(--purple, #7a4fc4);
+}
+.menu .ranking {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menu .ranking li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.menu .ranking li:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.03);
+}
+.menu .ranking li.you {
+  background: rgba(246, 189, 22, 0.18);
+  color: var(--yellow);
+  font-weight: 700;
+}
+.menu .ranking li.cut {
+  border-bottom: 2px dashed rgba(255, 255, 255, 0.45);
+}
+.menu .ranking li.gap {
+  justify-content: center;
+  color: var(--muted);
+}
+.menu .ranking .pos {
+  width: 2em;
+  text-align: right;
+  color: var(--muted);
+}
+.menu .ranking .who {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu .ranking .who small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.menu .ranking .cash {
+  font-variant-numeric: tabular-nums;
+}
+.menu .tile.picked {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
 /* Career calendar */
 .menu .career .tiles .tile small {
   white-space: normal;

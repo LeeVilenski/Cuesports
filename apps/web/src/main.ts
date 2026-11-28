@@ -82,6 +82,7 @@ import { DEFAULT_SOUND, Sound, type SoundSettings } from './audio/sound';
 import { addMatch, emptyStats, percent } from './game/stats';
 import { pressureLabel, situation, stakes, sway } from './game/pressure';
 import { eligibility } from './game/season';
+import { isTourEvent } from './game/tour-events';
 import { AGENT, enterEvent, gainsText, playMatch, train } from './game/agent';
 import {
   applyTuning,
@@ -672,7 +673,9 @@ function careerPressure(): number {
     remaining: fp?.remaining,
     target,
   });
-  return p * stakes(e.tier, e.raceTo.length - c.round);
+  // Majors and the Tour Finals add a little of their own.
+  const big = isTourEvent(e) && (e.kind === 'major' || e.kind === 'finals') ? 0.15 : 0;
+  return p * Math.min(1, stakes(e.tier, e.raceTo.length - c.round) + big);
 }
 
 /** The aim's sway under pressure, this frame (radians). */
@@ -1392,7 +1395,7 @@ function startCareerMatch(): void {
     raceTo: e.raceTo[run.round] ?? 3,
     breaks: 'alternate',
     snooker: { ...DEFAULT_MATCH.snooker, reds: e.reds ?? 15 },
-    ...(e.target ? { billiards: { target: e.target }, caromTarget: e.target } : {}),
+    ...(e.target ? { billiards: { target: e.target }, caromTarget: e.target, straightTarget: e.target } : {}),
     ...(e.pyramid ? { pyramid: e.pyramid } : {}),
     ai: opp.level,
     aiAttack: o.attack,
@@ -1447,7 +1450,7 @@ function careerResult(m: Match, winner: string, score: string): void {
     : won
       ? `Through to the ${roundName(e, c.round + 1).toLowerCase()}`
       : `${winner} wins the ${roundName(e, c.round).toLowerCase()}`;
-  const prize = champion ? ` Unlocked: ${REWARDS[e.reward] ?? ''}.` : '';
+  const prize = champion && REWARDS[e.reward] ? ` Unlocked: ${REWARDS[e.reward]}.` : '';
   const gains = gainsText(career.lastGains);
   const said = `${joe ? ` ${AGENT.name}: “${joe}”` : ''}${gains ? ` ${gains}.` : ''}`;
   matchHud.showResult(title, `${score}.${prize}${said} ${matchSummary(m)}`, true, 'Continue');

@@ -1,5 +1,7 @@
 import { Rng } from '@cuesports/shared';
 import type { MatchGame } from './match';
+import { tourPlayer, type TourId } from './roster';
+import { tourEventById, TOUR_VENUES } from './tour-events';
 import { migratedPlayer, newPlayer, type Attr, type CareerPlayer, type Ratings } from './attributes';
 
 /**
@@ -78,7 +80,13 @@ export const ROSTER: Opponent[] = [
   { id: 'ola', name: 'Ola Nilsen', look: 6, attack: -0.1, style: 'Never gives up' },
 ];
 
-export const opponent = (id: string): Opponent => ROSTER.find((o) => o.id === id) ?? ROSTER[0]!;
+/** A computer player: one of the circuit regulars, or a tour player. */
+export function opponent(id: string): Opponent {
+  const o = ROSTER.find((x) => x.id === id);
+  if (o) return o;
+  const t = tourPlayer(id);
+  return t ? { id: t.id, name: t.name, look: t.look, attack: t.attack, style: t.style } : ROSTER[0]!;
+}
 
 export const EVENTS: CareerEvent[] = [
   // The pub: short races, weaker players.
@@ -229,7 +237,12 @@ EVENTS.push(
   },
 );
 
-export const careerEvent = (id: string): CareerEvent | undefined => EVENTS.find((e) => e.id === id);
+export const careerEvent = (id: string): CareerEvent | undefined =>
+  EVENTS.find((e) => e.id === id) ?? tourEventById(id);
+
+/** An event's venue: a circuit venue or a tour one. */
+export const venueOf = (e: CareerEvent): Venue =>
+  VENUES.find((v) => v.id === e.venue) ?? TOUR_VENUES.find((v) => v.id === e.venue) ?? VENUES[0]!;
 
 /**
  * Customiser items won in the career, keyed `kind:value`. Anything not listed here is open from
@@ -329,6 +342,21 @@ export interface CareerState {
   week: number;
   /** Money in the bank, in pounds. */
   money: number;
+  /** The tours you've joined (up to two), once you've specialised. */
+  tours: TourMembership[];
+  /**
+   * Prize money won on each tour, by ranking (tour id, or `${tour}-ch` for the Challenge Tour), then
+   * season, then player. The ranking is the last two seasons of it.
+   */
+  tourMoney: Record<string, Record<string, Record<string, number>>>;
+}
+
+export interface TourMembership {
+  tour: TourId;
+  /** Season you joined. */
+  joined: number;
+  /** Your tour card: valid from one season to another (inclusive), or none yet. */
+  card: { from: number; until: number } | null;
 }
 
 export interface CareerGains {
@@ -355,6 +383,8 @@ export const newCareer = (): CareerState => ({
   season: 1,
   week: 1,
   money: 50,
+  tours: [],
+  tourMoney: {},
 });
 
 export const rounds = (e: CareerEvent): number => e.raceTo.length;
@@ -397,6 +427,65 @@ export function enter(e: CareerEvent, seed: number): CareerRun {
   field.sort((a, b) => a.level - b.level);
   const entrants: Entrant[] = [{ id: YOU, level: 0 }, ...field, { id: e.rival, level: hi }];
   return { event: e.id, entrants, winners: [], round: 0, status: 'playing' };
+}
+
+/**
+ * Enters an event with a given field (tour events): you in the first slot, the strongest player in
+ * the last, the rest drawn at random.
+ */
+export function enterField(e: CareerEvent, field: Entrant[], seed: number): CareerRun {
+  return {
+    event: e.id,
+    entrants: draw([{ id: YOU, level: 0 }, ...field], seed),
+    winners: [],
+    round: 0,
+    status: 'playing',
+  };
+}
+
+/** A seeded draw: the first entrant first, the strongest last, the rest shuffled. */
+export function draw(entrants: Entrant[], seed: number): Entrant[] {
+  const rng = new Rng(seed);
+  const [first, ...rest] = entrants;
+  rest.sort((a, b) => b.level - a.level);
+  const [top, ...others] = rest;
+  for (let i = others.length - 1; i > 0; i--) {
+    const j = Math.floor(rng.next() * (i + 1));
+    [others[i], others[j]] = [others[j]!, others[i]!];
+  }
+  return [first!, ...others, ...(top ? [top] : [])];
+}
+
+/** Win chance for a against b in a career bracket. */
+const edge = (a: number, b: number) => Math.min(0.85, Math.max(0.15, 0.5 + 0.18 * (a - b)));
+
+/**
+ * Plays out the rest of a bracket without you (after you went out, or an event you weren't in):
+ * the stronger player usually goes through. Returns the winners for every round.
+ */
+export function playOut(run: CareerRun, total: number, seed: number): string[][] {
+  const rng = new Rng(seed);
+  const winners = run.winners.map((w) => [...w]);
+  const level = (id: string) => run.entrants.find((x) => x.id === id)?.level ?? 1;
+  while (winners.length < total) {
+    const ids = winners.length === 0 ? run.entrants.map((x) => x.id) : winners.at(-1)!;
+    const next: string[] = [];
+    for (let i = 0; i < ids.length; i += 2) {
+      const a = ids[i]!;
+      const b = ids[i + 1]!;
+      next.push(rng.next() < edge(level(a), level(b)) ? a : b);
+    }
+    winners.push(next);
+  }
+  return winners;
+}
+
+/** Rounds each entrant won, from a bracket's winners. */
+export function reachedAll(run: CareerRun, winners: string[][]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const x of run.entrants) out[x.id] = 0;
+  for (const round of winners) for (const id of round) out[id] = (out[id] ?? 0) + 1;
+  return out;
 }
 
 /** The players in round r, in bracket order (round 0: everyone). */
@@ -449,7 +538,9 @@ export function recordMatch(state: CareerState, won: boolean, seed: number): Car
     status: champion ? 'won' : won ? 'playing' : 'out',
   };
   const unlocked =
-    champion && !state.unlocked.includes(e.reward) ? [...state.unlocked, e.reward] : state.unlocked;
+    champion && e.reward && !state.unlocked.includes(e.reward)
+      ? [...state.unlocked, e.reward]
+      : state.unlocked;
   return { ...state, best, unlocked, h2h, run: next };
 }
 
